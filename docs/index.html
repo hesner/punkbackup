@@ -1,0 +1,216 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>PunkBackup</title>
+<style>
+  :root {
+    --bg: #0c0c0e;
+    --card: #19191d;
+    --card-alt: #221418;
+    --border: #2c2c32;
+    --text: #f2f2f5;
+    --muted: #9a9aa3;
+    --accent: #ff2d55;
+    --accent-hover: #c81d4a;
+    --green: #2ecc71;
+    --terminal: #39d353;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--text);
+    font-family: -apple-system, "Segoe UI", Helvetica, Arial, sans-serif;
+    line-height: 1.55;
+  }
+  .wrap { max-width: 860px; margin: 0 auto; padding: 0 20px; }
+  header.hero {
+    padding: 64px 0 40px; text-align: center;
+    border-bottom: 1px solid var(--border);
+  }
+  header.hero h1 {
+    font-size: 2.6rem; margin: 0 0 8px; letter-spacing: 1px;
+    color: var(--accent); font-weight: 800;
+  }
+  header.hero p.tagline {
+    font-size: 1.15rem; color: var(--muted); margin: 0 0 24px; font-style: italic;
+  }
+  .lang-toggle {
+    display: inline-flex; gap: 0; border: 1px solid var(--border); border-radius: 8px; overflow: hidden;
+  }
+  .lang-toggle button {
+    background: var(--card); color: var(--muted); border: none; padding: 8px 18px;
+    font-size: 0.9rem; cursor: pointer; font-weight: 600;
+  }
+  .lang-toggle button.active { background: var(--accent); color: #1a0308; }
+  .cta-row { margin-top: 26px; display: flex; gap: 12px; justify-content: center; flex-wrap: wrap; }
+  .btn {
+    display: inline-block; padding: 11px 22px; border-radius: 8px; text-decoration: none;
+    font-weight: 700; font-size: 0.95rem; border: 1px solid var(--border);
+  }
+  .btn.primary { background: var(--accent); color: #1a0308; border-color: var(--accent); }
+  .btn.primary:hover { background: var(--accent-hover); }
+  .btn.ghost { background: transparent; color: var(--text); }
+  .btn.ghost:hover { background: var(--card); }
+  section { padding: 40px 0; border-bottom: 1px solid var(--border); }
+  section:last-of-type { border-bottom: none; }
+  section h2 {
+    color: var(--text); font-size: 1.5rem; margin-top: 0; border-left: 4px solid var(--accent);
+    padding-left: 12px;
+  }
+  .steps { list-style: none; margin: 0; padding: 0; counter-reset: step; }
+  .steps li {
+    counter-increment: step; padding: 14px 0 14px 44px; position: relative;
+    border-bottom: 1px solid var(--border);
+  }
+  .steps li:last-child { border-bottom: none; }
+  .steps li::before {
+    content: counter(step); position: absolute; left: 0; top: 12px;
+    width: 28px; height: 28px; border-radius: 50%; background: var(--card-alt);
+    border: 1px solid var(--accent); color: var(--accent); font-weight: 800;
+    display: flex; align-items: center; justify-content: center; font-size: 0.85rem;
+  }
+  .manuals { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 12px; }
+  @media (max-width: 520px) { .manuals { grid-template-columns: 1fr; } }
+  .manuals a {
+    display: block; background: var(--card); border: 1px solid var(--border); border-radius: 8px;
+    padding: 12px 14px; color: var(--text); text-decoration: none; font-size: 0.9rem;
+  }
+  .manuals a:hover { border-color: var(--accent); }
+  code {
+    background: var(--card-alt); color: var(--terminal); padding: 2px 6px; border-radius: 4px;
+    font-family: Consolas, monospace; font-size: 0.85em;
+  }
+  pre {
+    background: #050505; color: var(--terminal); padding: 14px; border-radius: 8px; overflow-x: auto;
+    font-family: Consolas, monospace; font-size: 0.85rem; border: 1px solid var(--border);
+  }
+  footer { padding: 30px 0 50px; text-align: center; color: var(--muted); font-size: 0.85rem; }
+  footer a { color: var(--accent); }
+  [hidden] { display: none !important; }
+</style>
+</head>
+<body>
+
+<header class="hero">
+  <div class="wrap">
+    <h1>PUNKBACKUP 🤘</h1>
+    <p class="tagline" data-en="Your memories. Your USB. Zero cloud dependency."
+       data-es="Tus recuerdos. Tu USB. Cero dependencia de la nube.">
+       Your memories. Your USB. Zero cloud dependency.
+    </p>
+    <div class="lang-toggle">
+      <button id="btn-en" class="active" onclick="setLang('en')">English</button>
+      <button id="btn-es" onclick="setLang('es')">Español</button>
+    </div>
+    <div class="cta-row">
+      <a class="btn primary" href="https://github.com/hesner/punkbackup">GitHub</a>
+      <a class="btn ghost" href="pdf/PunkBackup - Installation Manual (EN).pdf" id="install-link">Installation Manual</a>
+    </div>
+  </div>
+</header>
+
+<div class="wrap" id="content">
+
+<section>
+  <h2 data-en="Why" data-es="Por qué">Why</h2>
+  <p data-en="Cloud photo backups are convenient and also: a recurring bill, someone else's server, and a company that can change the terms whenever it wants. PunkBackup does the boring, useful thing instead — it copies your files to a drive you own, over a network you control, using nothing but your iPhone's built-in Shortcuts app and a small server on your own PC."
+     data-es="Los backups en la nube son cómodos y también: una factura recurrente, el servidor de otra empresa, y condiciones que pueden cambiar cuando quieran. PunkBackup hace lo aburrido pero útil — copia tus archivos a un disco que es tuyo, por una red que controlas tú, usando solo la app Atajos que ya trae tu iPhone y un pequeño servidor en tu propia PC.">
+    Cloud photo backups are convenient and also: a recurring bill, someone else's server, and a company that can
+    change the terms whenever it wants. PunkBackup does the boring, useful thing instead — it copies your files to
+    a drive you own, over a network you control, using nothing but your iPhone's built-in Shortcuts app and a
+    small server on your own PC.
+  </p>
+</section>
+
+<section>
+  <h2 data-en="How it works" data-es="Cómo funciona">How it works</h2>
+  <ol class="steps">
+    <li data-en="A small server runs on your Windows PC — off by default, you turn it on when you want it."
+        data-es="Un pequeño servidor corre en tu PC Windows — apagado por defecto, tú lo enciendes cuando quieres.">
+        A small server runs on your Windows PC — off by default, you turn it on when you want it.
+    </li>
+    <li data-en="Each person/device gets its own profile: its own secret token, its own destination folder (a different USB drive per person if you want)."
+        data-es="Cada persona/dispositivo tiene su propio perfil: su propio token secreto, su propia carpeta destino (un USB distinto por persona si quieres).">
+        Each person/device gets its own profile: its own secret token, its own destination folder (a different
+        USB drive per person if you want).
+    </li>
+    <li data-en="A native iOS Shortcut (no App Store install) checks your Photos library against what's actually in your current destination folder, and uploads whatever's missing — manually, or automatically on your home WiFi."
+        data-es="Un Atajo nativo de iOS (sin instalar nada de la App Store) revisa tu Fototeca contra lo que realmente hay en tu carpeta destino actual, y sube lo que falte — manual, o automático al conectarte a tu WiFi de casa.">
+        A native iOS Shortcut (no App Store install) checks your Photos library against what's actually in your
+        current destination folder, and uploads whatever's missing — manually, or automatically on your home WiFi.
+    </li>
+    <li data-en="Nothing is ever deleted, moved, or modified on the iPhone. Nothing is ever silently overwritten at the destination."
+        data-es="Nunca se borra, mueve ni modifica nada en el iPhone. Nunca se sobrescribe nada en el destino sin avisar.">
+        Nothing is ever deleted, moved, or modified on the iPhone. Nothing is ever silently overwritten at the
+        destination.
+    </li>
+  </ol>
+</section>
+
+<section>
+  <h2 data-en="Get started" data-es="Primeros pasos">Get started</h2>
+  <div class="manuals" id="manuals"></div>
+</section>
+
+<section>
+  <h2 data-en="Development" data-es="Desarrollo">Development</h2>
+  <pre>py -m venv .venv
+.venv\Scripts\python.exe -m pip install -r requirements.txt
+.venv\Scripts\python.exe -m pytest tests -q
+.venv\Scripts\python.exe main.py</pre>
+</section>
+
+</div>
+
+<footer>
+  <p><span data-en="MIT licensed." data-es="Licencia MIT.">MIT licensed.</span>
+     · <a href="https://github.com/hesner/punkbackup">github.com/hesner/punkbackup</a></p>
+</footer>
+
+<script>
+const manuals = {
+  en: [
+    ["Installation Manual", "pdf/PunkBackup - Installation Manual (EN).pdf"],
+    ["iPhone Setup Manual", "pdf/PunkBackup - iPhone Setup Manual (EN).pdf"],
+    ["Troubleshooting Manual", "pdf/PunkBackup - Troubleshooting Manual (EN).pdf"],
+    ["Uninstallation Manual", "pdf/PunkBackup - Uninstallation Manual (EN).pdf"],
+  ],
+  es: [
+    ["Manual de instalación", "pdf/PunkBackup - Manual de Instalacion (ES).pdf"],
+    ["Configuración del iPhone", "pdf/PunkBackup - Configuracion del iPhone (ES).pdf"],
+    ["Solución de problemas", "pdf/PunkBackup - Manual de Solucion de Problemas (ES).pdf"],
+    ["Desinstalación", "pdf/PunkBackup - Manual de Desinstalacion (ES).pdf"],
+  ],
+};
+
+function setLang(lang) {
+  document.querySelectorAll('[data-en]').forEach(el => {
+    el.textContent = el.getAttribute('data-' + lang);
+  });
+  document.getElementById('btn-en').classList.toggle('active', lang === 'en');
+  document.getElementById('btn-es').classList.toggle('active', lang === 'es');
+  document.documentElement.lang = lang;
+
+  const container = document.getElementById('manuals');
+  container.innerHTML = '';
+  manuals[lang].forEach(([label, href]) => {
+    const a = document.createElement('a');
+    a.href = encodeURI(href);
+    a.textContent = label + ' (PDF)';
+    container.appendChild(a);
+  });
+  document.getElementById('install-link').href = encodeURI(manuals[lang][0][1]);
+  document.getElementById('install-link').textContent =
+    lang === 'en' ? 'Installation Manual' : 'Manual de instalación';
+
+  try { localStorage.setItem('punkbackup-lang', lang); } catch (e) {}
+}
+
+let initial = 'en';
+try { initial = localStorage.getItem('punkbackup-lang') || 'en'; } catch (e) {}
+setLang(initial);
+</script>
+
+</body>
+</html>

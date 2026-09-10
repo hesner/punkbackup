@@ -1,0 +1,197 @@
+# Configuración del iPhone — Atajo de respaldo por WiFi
+
+Este manual te guía para crear, en la app **Atajos** de tu iPhone (viene
+instalada de fábrica, no necesitas descargar nada), el atajo que envía tus
+fotos y videos nuevos a tu PC por WiFi.
+
+## Antes de empezar, ten a la mano
+
+Este sistema soporta varios dispositivos/personas (perfiles) en la misma PC.
+**Cada dispositivo necesita su propio perfil y su propio token** — así que
+si vas a configurar más de un iPhone/iPad, repite el Paso 0 de la app de PC
+por cada uno.
+
+En tu PC:
+1. Abre la app y presiona **Iniciar backup**.
+2. En la sección **"Perfiles"**, click **"+ Agregar perfil"** y ponle un
+   nombre que identifique ESTE dispositivo (ej. `iPhone de Laura`), y elige
+   su carpeta destino cuando te la pida.
+3. La app te muestra (y copia automáticamente) el **token** de ese perfil —
+   solo sirve para ese dispositivo.
+
+Anota estos datos:
+
+| Dato | Dónde lo ves en la app | Ejemplo |
+|---|---|---|
+| Dirección del servidor (igual para todos los perfiles) | Campo "Dirección" | `http://[NOMBRE_DE_TU_PC].local:8787` |
+| IP alternativa (por si la anterior no responde desde el iPhone) | Campo "IP alternativa" | `http://192.168.1.50:8787` |
+| Token de ESTE perfil | Botón "Copiar token" en la fila del perfil que acabas de crear | una cadena larga de letras/números |
+
+> Tu iPhone y tu PC deben estar conectados a la **misma red WiFi**.
+> Si luego agregas otro dispositivo, créale su propio perfil — nunca
+> reutilices el token de otro dispositivo.
+
+> **Nota de diseño**: este atajo NO usa ningún álbum de "ya respaldado" en
+> el iPhone. La decisión de qué subir la toma siempre el servidor,
+> preguntando qué existe realmente en la carpeta destino de tu perfil en
+> ese momento — así, si cambias de USB/carpeta destino en la PC, el sistema
+> se ajusta solo, en vez de "recordar" incorrectamente algo que en
+> realidad nunca llegó a esa carpeta.
+
+---
+
+## Paso 1 — Crear el Atajo principal ("Respaldo WiFi")
+
+1. Abre la app **Atajos**.
+2. Pestaña **Mis Atajos** → botón **+** → **Añadir Acción** (nuevo atajo).
+3. Toca el nombre en la parte superior y cámbialo a: `Respaldo WiFi`.
+4. Agrega las siguientes acciones **en este orden** (busca cada una por
+   nombre con la lupa):
+
+### 1) Guardar la dirección del servidor y el token como variables
+- Acción **Texto** → escribe la Dirección del servidor, ej.
+  `http://[NOMBRE_DE_TU_PC].local:8787`
+- Acción **Establecer variable** → nombre `ServidorURL` → valor: el Texto anterior.
+- Acción **Texto** → pega el Token **de este perfil/dispositivo** que copiaste de la app.
+- Acción **Establecer variable** → nombre `Token` → valor: el Texto anterior.
+
+> Estas 2 son las únicas acciones que vas a tener que editar si algún día
+> renuevas el token de este perfil desde la app (botón "Renovar token").
+
+### 2) Avisar al servidor que empieza una corrida de backup
+- Acción **Obtener contenido de URL**:
+  - URL: `ServidorURL` + `/run/start` (usa "Combinar texto" o escribe la URL
+    tocando la variable `ServidorURL` y agregando `/run/start` a continuación).
+  - Método: **POST**
+  - Encabezados (Headers): agrega uno → Clave `X-Backup-Token` → Valor: variable `Token`.
+- Acción **Obtener valor de diccionario** → Clave: `run_id` → (aplicado al
+  resultado del paso anterior).
+- Acción **Establecer variable** → nombre `RunID` → valor: el resultado anterior.
+
+### 3) Buscar TODAS las fotos/videos
+- Acción **Buscar fotos** (o "Filtrar fotos" según tu versión de iOS):
+  - Sin filtro de álbum — queremos **todas** las fotos/videos; el servidor
+    decide cuáles ya tiene.
+  - Ordenar por: **Fecha de captura**, **Más antiguo primero**.
+  - (Opcional) Límite: si tienes una biblioteca enorme (varios miles), puedes
+    poner un límite (ej. 300) para que cada corrida sea más corta — como el
+    chequeo es liviano y el sistema es incremental, puedes correr el atajo
+    varias veces seguidas y cada vez seguirá avanzando.
+
+### 4) Recorrer cada foto/video: preguntar primero, subir solo si falta
+- Acción **Repetir con cada elemento** (Repeat with Each) sobre el resultado
+  del paso anterior. Dentro del bloque "Repetir":
+
+  a. Acción **Formatear fecha**:
+     - Fecha: toca el "Elemento de repetición" (Repeat Item) y elige el
+       atributo **Fecha de captura** (Date Taken).
+     - Formato: **Personalizado** → escribe: `yyyy-MM-dd'T'HH:mm:ss`
+     - Establece esto como variable `TomadaEn` (acción **Establecer variable**).
+
+  b. Acción **Obtener contenido de URL** — el chequeo liviano, SIN el archivo:
+     - URL: `ServidorURL` + `/check`
+     - Método: **POST**
+     - Tipo de solicitud: **Formulario** (Form)
+     - Campos del formulario:
+       - `filename` → valor: **Elemento de repetición** → atributo **Nombre de archivo**.
+       - `taken_at` → valor: variable `TomadaEn`.
+     > No hace falta mandar el tamaño del archivo — Shortcuts no tiene forma
+     > confiable de dar el tamaño en bytes puros (siempre da algo como
+     > "1,2 MB"), así que el chequeo solo usa nombre + fecha. La verificación
+     > exacta por contenido pasa después, en el `/upload`.
+     - Encabezados: `X-Backup-Token` → variable `Token`.
+     - Acción **Obtener valor de diccionario** → clave `missing` → sobre ese resultado.
+
+  c. Acción **Si** (If): condición = el valor anterior **has any value**
+     ("tiene algún valor" — así es como el servidor te dice "falta, súbela";
+     si ya está respaldada, el servidor no manda el campo `missing` en
+     absoluto, así que esta condición da falso automáticamente y se salta
+     el "Si" — no necesitas elegir "is equal to" ni escribir `false` en
+     ningún lado, "has any value" ya es la opción correcta):
+
+     - **Obtener contenido de URL** (dentro del "Si"):
+       - URL: toca el campo e inserta, EN ESTE ORDEN, dentro del mismo campo
+         de texto: chip **ServidorURL** → escribe `/upload?filename=` → toca
+         **Elemento de repetición** y elige el atributo **Nombre de archivo**
+         (igual que hiciste para el `/check`) → escribe `&taken_at=` → chip
+         **TomadaEn** → escribe `&run_id=` → chip **RunID**.
+         > Insertando los chips directamente en el campo de URL (no armando
+         > el texto aparte con "Combinar texto"), Shortcuts los codifica
+         > automáticamente para que la URL quede válida.
+       - Método: **POST**
+       - **Request Body** → cámbialo a **File** (ya NO es Formulario).
+       - En el campo de valor que aparece, toca la barra de variables e
+         inserta **Elemento de repetición** — **una sola vez, sin volver a
+         tocar el chip después**. (Si lo tocas de nuevo, se abre un menú de
+         atributos tipo "Name/Album/Width..." — si eso pasa y terminas con
+         algo distinto de "Repeat Item" a secas, bórralo con "Clear
+         Variable" y vuelve a insertarlo desde cero sin tocarlo otra vez).
+       - Encabezados: `X-Backup-Token` → variable `Token`.
+
+     - (No hace falta ninguna acción en el "Si no" — si ya estaba
+       respaldada, simplemente no se hace nada y se sigue con la siguiente foto).
+
+### 5) Cerrar la corrida y mostrarte el resultado
+- Acción **Obtener contenido de URL**:
+  - URL: `ServidorURL` + `/run/finish`
+  - Método: **POST**, Formulario con campo `run_id` = variable `RunID`.
+  - Encabezado `X-Backup-Token` → variable `Token`.
+- Acciones **Obtener valor de diccionario** (una por cada dato: `files_new`,
+  `files_skipped`, `files_conflict`) sobre ese resultado.
+- Acción **Combinar texto** para armar un mensaje, ej.:
+  `Backup completo ✅\nNuevos: [files_new]\nYa existían: [files_skipped]\nConflictos: [files_conflict]`
+- Acción **Mostrar notificación** (o **Mostrar resultado**) con ese texto.
+
+Guarda el atajo (listo, ya puedes tocarlo manualmente para probarlo).
+
+> **Sobre la duración de cada corrida**: la primera vez que corras esto con
+> una biblioteca grande, va a revisar TODAS tus fotos (el chequeo `/check`
+> es liviano — solo nombre/tamaño/fecha, no manda el archivo — así que es
+> rápido incluso para miles de fotos). Las corridas siguientes son igual de
+> completas pero mucho más rápidas en la práctica porque casi todo ya
+> estará respaldado y el `/check` responde al instante para esos casos.
+
+---
+
+## Paso 2 — Atajo corto para consultar el estado ("Estado del Backup")
+
+Opcional pero recomendado — te deja ver el estado sin correr un backup completo.
+
+1. Crea un nuevo atajo llamado `Estado del Backup`.
+2. Repite las 2 acciones de "Texto" + "Establecer variable" del Paso 1.1
+   (`ServidorURL`, `Token`).
+3. Acción **Obtener contenido de URL**: URL = `ServidorURL` + `/status`,
+   Método **GET**, encabezado `X-Backup-Token` → `Token`.
+4. Acciones **Obtener valor de diccionario** para `last_backup_at` y
+   `total_files_backed_up`.
+5. Acción **Mostrar notificación** con esos valores.
+
+---
+
+## Paso 3 — Automatizar: que se dispare solo al llegar a casa
+
+1. Abre **Atajos** → pestaña **Automatización** → **+** → **Crear automatización personal**.
+2. Elige **Wi-Fi** → selecciona tu red de casa: `[TU_RED_WIFI]`.
+3. Deja marcado **Al conectar**.
+4. Toca **Siguiente** → **Añadir acción** → busca y elige tu atajo `Respaldo WiFi`.
+5. Toca **Siguiente** → **Listo**.
+6. Muy importante: cuando el sistema te pregunte, o en la pantalla de la
+   automatización, **desactiva "Preguntar antes de ejecutar"**. La primera
+   vez que corra puede pedirte un permiso único de seguridad — acéptalo. A
+   partir de ahí correrá sola, en silencio, cada vez que llegues a esa WiFi.
+
+> También puedes correr `Respaldo WiFi` manualmente en cualquier momento
+> tocándolo en la app Atajos, o diciendo "Oye Siri, Respaldo WiFi".
+
+---
+
+## Notas
+- El sistema **nunca borra ni modifica nada en tu iPhone** — solo lee fotos
+  y las sube.
+- La verdad de "qué ya está respaldado" vive **solo en la carpeta destino de
+  la PC**, nunca en el iPhone. Si en la PC cambias la carpeta/USB de tu
+  perfil, el atajo automáticamente vuelve a enviar lo que falte en la
+  carpeta nueva — no necesitas hacer nada distinto en el iPhone.
+- Los nombres exactos de las acciones pueden variar levemente entre
+  versiones de iOS; si no encuentras una acción con el nombre exacto, busca
+  por una palabra clave (ej. "diccionario", "URL", "repetir").

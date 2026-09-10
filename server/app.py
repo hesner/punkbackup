@@ -1,0 +1,188 @@
+"""FastAPI application exposed to iPhone/iPad Shortcuts on the local network.
+
+Multi-profile, each with its OWN destination folder: the ``X-Backup-Token``
+header identifies WHICH profile (person/device) is talking, and that
+profile's own ``destination_dir`` (its own folder — possibly on its own USB
+drive) decides where its files land. There is no shared destination root
+anymore; one profile's disk being unplugged doesn't affect any other
+profile — see profiles.py for why.
+
+Endpoints:
+    GET  /health        -- liveness + whether any profiles are registered
+    POST /run/start      -- begin a backup run for the caller's profile
+    POST /check           -- cheap pre-check (filename+date, no bytes): already backed up?
+    POST /upload          -- upload one photo/video; filename/taken_at/run_id as URL query
+                              params, the file itself as the raw POST body (see upload())
+    POST /run/finish     -- close out a run, returns its summary
+    GET  /status         -- last backup time, file counts, current state (for the caller's profile)
+
+Profile management (create/rename/delete/regenerate token/set destination)
+is done locally by the GUI via profiles.ProfileStore directly — intentionally
+NOT exposed over HTTP, so a device on the network can never mint itself a
+new identity or redirect where files get written.
+"""
+from __future__ import annotations
+
+import hashlib
+import uuid
+from pathlib import Path
+from typing import Optional
+
+from fastapi import Depends, FastAPI, Form, Header, HTTPException, Query, Request
+from starlette.concurrency import run_in_threadpool
+
+from .manifest_db import ManifestDB
+from .profiles import Profile, ProfileStore
+from .storage import BackupEngine
+
+app = FastAPI(title="PunkBackup")
+
+_state: dict = {"profile_store": None, "engines": {}}
+
+
+def configure(profile_store: ProfileStore) -> None:
+    """Called by the GUI right before the server starts listening."""
+    _state["profile_store"] = profile_store
+    _state["engines"] = {}
+
+
+def is_configured() -> bool:
+    return _state["profile_store"] is not None
+
+
+def _engine_for(profile: Profile) -> BackupEngine:
+    engines = _state["engines"]
+    if profile.id not in engines:
+        if not profile.destination_dir:
+            raise HTTPException(409, f'Profile "{profile.name}" has no destination folder configured yet.')
+        dest_path = Path(profile.destination_dir)
+        try:
+            dest_path.mkdir(parents=True, exist_ok=True)
+        except OSError as exc:
+            raise HTTPException(503, f"Destination folder is not reachable (is the drive connected?): {exc}")
+        engines[profile.id] = BackupEngine(dest_path, ManifestDB(dest_path))
+    return engines[profile.id]
+
+
+def forget_profile(profile_id: str) -> None:
+    """Drops any cached engine for a profile — call this whenever a
+    profile's destination_dir changes, or it was just deleted, so a stale
+    reference to the old folder isn't kept around. Files on disk untouched."""
+    _state["engines"].pop(profile_id, None)
+
+
+def get_status_for_profile(profile: Profile) -> dict:
+    """Used directly by the GUI (same process, no HTTP round-trip needed)."""
+    return _engine_for(profile).db.get_status()
+
+
+def get_aggregate_status() -> dict:
+    if not is_configured():
+        return {"total_files_backed_up": 0, "last_backup_at": None}
+    store: ProfileStore = _state["profile_store"]
+    total = 0
+    last: Optional[str] = None
+    for p in store.list():
+        if not p.destination_dir:
+            continue
+        try:
+            st = get_status_for_profile(p)
+        except HTTPException:
+            continue
+        total += st["total_files_backed_up"]
+        if st["last_backup_at"] and (last is None or st["last_backup_at"] > last):
+            last = st["last_backup_at"]
+    return {"total_files_backed_up": total, "last_backup_at": last}
+
+
+async def verify_token(x_backup_token: Optional[str] = Header(None)) -> Profile:
+    if not is_configured():
+        raise HTTPException(503, "Server has no profiles configured yet.")
+    store: ProfileStore = _state["profile_store"]
+    profile = store.find_by_token(x_backup_token) if x_backup_token else None
+    if profile is None:
+        raise HTTPException(401, "Missing or invalid X-Backup-Token header.")
+    if not profile.enabled:
+        raise HTTPException(403, "This profile is paused on the PC.")
+    return profile
+
+
+@app.get("/health")
+async def health():
+    profile_count = len(_state["profile_store"].list()) if is_configured() else 0
+    return {"status": "ok", "configured": is_configured(), "profiles": profile_count}
+
+
+@app.post("/run/start")
+async def run_start(profile: Profile = Depends(verify_token)):
+    run_id = _engine_for(profile).db.start_run()
+    return {"run_id": run_id, "profile": profile.name}
+
+
+@app.post("/run/finish")
+async def run_finish(run_id: str = Form(...), profile: Profile = Depends(verify_token)):
+    return _engine_for(profile).db.finish_run(run_id)
+
+
+@app.post("/check")
+async def check(
+    filename: str = Form(...),
+    taken_at: Optional[str] = Form(None),
+    profile: Profile = Depends(verify_token),
+):
+    """Cheap pre-flight check — no file bytes — so the Shortcut only spends
+    bandwidth uploading what this profile's CURRENT destination is actually
+    missing right now. See storage.BackupEngine.check_exists.
+
+    Response shape is deliberately presence/absence of a key, not a JSON
+    boolean: iOS Shortcuts' "Get Dictionary Value" + "If" combo only offers
+    "has any value" / "does not have any value" as comparison operators for
+    this kind of result (no reliable "is true/false" equality in practice),
+    so the API meets the client where it is instead of fighting it."""
+    engine = _engine_for(profile)
+    already = await run_in_threadpool(engine.check_exists, filename, taken_at)
+    return {} if already else {"missing": True}
+
+
+@app.post("/upload")
+async def upload(
+    request: Request,
+    filename: str = Query(...),
+    taken_at: Optional[str] = Query(None),
+    run_id: Optional[str] = Query(None),
+    profile: Profile = Depends(verify_token),
+):
+    """The photo/video is the RAW POST body (not a multipart form field).
+
+    iOS Shortcuts has no reliable way to attach a Photos item as a genuine
+    multipart file part — inserting "Repeat Item" into a Form field always
+    resolves to a specific text attribute (its Name, by default) rather
+    than the binary content, which this API would reject as a plain
+    string. Sending the file as the whole body and the metadata as URL
+    query parameters sidesteps that entirely; it's also the pattern
+    Shortcuts' own documentation and most third-party tutorials use for
+    uploading a Photos item to an HTTP API."""
+    engine = _engine_for(profile)
+    staging_path = engine.staging_dir / f"{uuid.uuid4().hex}.part"
+    hasher = hashlib.sha256()
+    size = 0
+    try:
+        with open(staging_path, "wb") as out:
+            async for chunk in request.stream():
+                hasher.update(chunk)
+                out.write(chunk)
+                size += len(chunk)
+    except Exception:
+        staging_path.unlink(missing_ok=True)
+        engine.db.bump_run(run_id, "files_error")
+        raise
+
+    result = await run_in_threadpool(
+        engine.finalize_upload, filename, staging_path, hasher.hexdigest(), size, taken_at, run_id
+    )
+    return result
+
+
+@app.get("/status")
+async def status_endpoint(profile: Profile = Depends(verify_token)):
+    return _engine_for(profile).db.get_status()

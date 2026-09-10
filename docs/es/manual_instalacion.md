@@ -31,7 +31,7 @@ persona/dispositivo tiene su propio perfil con su propia carpeta destino.
 ## Paso 2 — Copiar el proyecto a tu PC
 
 1. Copia la carpeta completa del proyecto (la que te compartieron) a una
-   ubicación permanente, por ejemplo: `C:\Backup Fotos y Videos`.
+   ubicación permanente, por ejemplo: `C:\PunkBackup`.
 2. Abre PowerShell **dentro de esa carpeta** (clic derecho en la carpeta →
    "Abrir en Terminal", o navega con `cd`).
 
@@ -50,9 +50,10 @@ py -m venv .venv
 Ejecuta en PowerShell (ajusta la ruta si copiaste el proyecto a otro lugar):
 
 ```powershell
-$projectDir = "C:\Backup Fotos y Videos"
+$projectDir = "C:\PunkBackup"
 $target = Join-Path $projectDir ".venv\Scripts\pythonw.exe"
 $script = Join-Path $projectDir "main.py"
+$icon = Join-Path $projectDir "assets\punkbackup.ico"
 $desktop = [Environment]::GetFolderPath('Desktop')
 $shortcutPath = Join-Path $desktop "PunkBackup.lnk"
 
@@ -61,7 +62,7 @@ $Shortcut = $WshShell.CreateShortcut($shortcutPath)
 $Shortcut.TargetPath = $target
 $Shortcut.Arguments = '"' + $script + '"'
 $Shortcut.WorkingDirectory = $projectDir
-$Shortcut.IconLocation = $target + ",0"
+$Shortcut.IconLocation = $icon + ",0"
 $Shortcut.Save()
 ```
 

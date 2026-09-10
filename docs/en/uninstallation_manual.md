@@ -7,7 +7,7 @@ folders (on your disk or USB) stay exactly where they were.
 ## Step 1 — Stop the server
 
 1. Open the app (Desktop icon) if it isn't open.
-2. If it says "Escuchando en el puerto...", click **"Detener backup"**.
+2. If it says "Status: Listening on port...", click **"Stop backup"**.
 3. Close the window.
 
 ## Step 2 — Remove the Firewall rule (optional)
@@ -25,8 +25,8 @@ like any other shortcut.
 
 ## Step 4 — Delete the program folder
 
-Delete the folder where you installed the project (e.g. `C:\Backup Photos
-and Videos`). This removes the program, its configuration, and the list of
+Delete the folder where you installed the project (e.g. `C:\PunkBackup`).
+This removes the program, its configuration, and the list of
 profiles/tokens — it does **not** touch your already-backed-up photo
 folders, which live in a different location (the destination folder you
 chose per profile).

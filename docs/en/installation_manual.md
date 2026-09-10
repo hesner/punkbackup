@@ -1,11 +1,9 @@
 # PunkBackup — Installation Manual
 
-> **Note on language**: the app opens in Spanish by default. Once it's
-> open, go to **"⚙ Configuración"** and tap **"English"** — the whole
-> interface switches instantly, no restart needed, and it's remembered
-> next time. Screenshots and quoted button text below show the Spanish
-> labels (what you'll see before switching), with the English meaning in
-> parentheses.
+> This manual shows the app in **English**. It opens in Spanish by
+> default the very first time — go to **"⚙ Settings" → "English"** and
+> everything switches instantly (no restart). Your choice is remembered
+> after that.
 
 ## What this system does
 
@@ -36,7 +34,7 @@ person/device gets its own profile with its own destination folder.
 ## Step 2 — Copy the project to your PC
 
 1. Copy the whole project folder (the one shared with you) to a permanent
-   location, e.g. `C:\Backup Photos and Videos`.
+   location, e.g. `C:\PunkBackup`.
 2. Open PowerShell **inside that folder** (right-click the folder → "Open
    in Terminal", or navigate there with `cd`).
 
@@ -55,9 +53,10 @@ py -m venv .venv
 Run in PowerShell (adjust the path if you copied the project elsewhere):
 
 ```powershell
-$projectDir = "C:\Backup Photos and Videos"
+$projectDir = "C:\PunkBackup"
 $target = Join-Path $projectDir ".venv\Scripts\pythonw.exe"
 $script = Join-Path $projectDir "main.py"
+$icon = Join-Path $projectDir "assets\punkbackup.ico"
 $desktop = [Environment]::GetFolderPath('Desktop')
 $shortcutPath = Join-Path $desktop "PunkBackup.lnk"
 
@@ -66,7 +65,7 @@ $Shortcut = $WshShell.CreateShortcut($shortcutPath)
 $Shortcut.TargetPath = $target
 $Shortcut.Arguments = '"' + $script + '"'
 $Shortcut.WorkingDirectory = $projectDir
-$Shortcut.IconLocation = $target + ",0"
+$Shortcut.IconLocation = $icon + ",0"
 $Shortcut.Save()
 ```
 
@@ -74,18 +73,17 @@ You should now see a new **"PunkBackup"** icon on your Desktop.
 
 ## Step 5 — First launch and Firewall rule
 
-1. Double-click the Desktop icon — the app opens (dark window, two screens:
-   "Principal" (Main) and "⚙ Configuración" (Settings)).
-   > If you'd rather read the rest of this in English on-screen too, go to
-   > "⚙ Configuración" now and tap "English".
-2. Go to **"⚙ Configuración"** (Settings) → **"+ Agregar perfil"** (+ Add
-   profile) → name your device (e.g. "iPhone de [your name]") → pick the
-   folder where you want your photos saved.
-3. Go to **"Principal"** (Main) → click **"🤘 Iniciar backup"** (Start backup).
-4. The first time, Windows may show a **Firewall** prompt asking to allow
+1. Double-click the Desktop icon — the app opens (dark window, two
+   screens: "Main" and "⚙ Settings").
+2. Go to **"⚙ Settings"** → tap **"English"** at the top (if it isn't
+   already selected).
+3. Still in **"⚙ Settings"**, click **"+ Add profile"** → name your device
+   (e.g. "iPhone de [your name]") → pick the folder where you want your
+   photos saved.
+4. Go to **"Main"** → click **"🤘 Start backup"**.
+5. The first time, Windows may show a **Firewall** prompt asking to allow
    the connection — accept it, checking at least **"Private networks"**.
-5. It should say **"Estado: Escuchando en el puerto 8787"** (Status:
-   Listening on port 8787).
+6. It should say **"Status: Listening on port 8787 🤘"**.
 
 ## Step 6 — Set up your iPhone
 
@@ -94,7 +92,7 @@ optionally, the WiFi automation.
 
 ## Is it working?
 
-- Check "⚙ Configuración" shows your profile with its destination folder.
+- Check **"⚙ Settings"** shows your profile with its destination folder.
 - Run the Shortcut once on your iPhone as a test.
 - Check the folder you chose — you should see Year/Month subfolders with
   your photos inside.

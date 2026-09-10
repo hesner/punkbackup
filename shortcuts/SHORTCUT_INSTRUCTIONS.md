@@ -1,9 +1,7 @@
 # PunkBackup — iPhone Setup (WiFi Backup Shortcut)
 
-> **Note on language**: the PC app opens in Spanish by default — go to
-> **"⚙ Configuración" → "English"** to switch the whole interface
-> instantly (no restart). This manual shows the Spanish labels you'll see
-> before switching, with the English meaning in parentheses.
+> This manual shows the PC app in **English** — go to **"⚙ Settings" →
+> "English"** if it isn't already switched (instant, no restart).
 
 This guide walks you through creating, in the iPhone's built-in **Shortcuts**
 app (no extra download needed), the shortcut that sends your new photos and
@@ -17,10 +15,10 @@ setting up more than one iPhone/iPad, repeat these steps in the PC app for
 each one.
 
 On your PC:
-1. Open the app and click **"🤘 Iniciar backup"** (Start backup).
-2. In **"⚙ Configuración"** (Settings), click **"+ Agregar perfil"** (+ Add
-   profile) and name it after THIS device (e.g. `iPhone de Laura`), then
-   choose its destination folder when prompted.
+1. Open the app and click **"🤘 Start backup"**.
+2. In **"⚙ Settings"**, click **"+ Add profile"** and name it after THIS
+   device (e.g. `iPhone de Laura`), then choose its destination folder
+   when prompted.
 3. The app shows you (and auto-copies) that profile's **token** — it only
    works for this one device.
 
@@ -28,9 +26,9 @@ Note down these values:
 
 | Value | Where to find it in the app | Example |
 |---|---|---|
-| Server address (same for every profile) | "Dirección" field | `http://[YOUR_PC_NAME].local:8787` |
-| Fallback IP (in case the address above doesn't resolve from the iPhone) | "IP alternativa" field | `http://192.168.1.50:8787` |
-| This profile's token | "Copiar token" button on the profile row you just created | a long string of letters/numbers |
+| Server address (same for every profile) | "Address" field | `http://[YOUR_PC_NAME].local:8787` |
+| Fallback IP (in case the address above doesn't resolve from the iPhone) | "Fallback IP" field | `http://192.168.1.50:8787` |
+| This profile's token | "Copy token" button on the profile row you just created | a long string of letters/numbers |
 
 > Your iPhone and your PC must be on the **same WiFi network**.
 > If you add another device later, create its own profile — never reuse
@@ -61,8 +59,8 @@ Note down these values:
 - **Set Variable** action → name it `Token` → value: the Text above.
 
 > These are the only two actions you'll ever need to edit again — for
-> example if you regenerate this profile's token from the app ("Renovar
-> token" / "Regenerate token" button).
+> example if you regenerate this profile's token from the app
+> ("Regenerate token" button).
 
 ### 2) Tell the server a backup run is starting
 - **Get Contents of URL** action:
@@ -212,11 +210,3 @@ Optional but recommended — lets you check status without running a full backup
 - Exact action names can vary slightly between iOS versions; if you can't
   find an action with the exact name above, search by a keyword instead
   (e.g. "dictionary", "URL", "repeat").
-
----
-
-## Prefer an all-English screen?
-
-Open the PC app → **"⚙ Configuración"** → tap **"English"**. Every label
-in this manual switches too — instantly, no restart, and it's remembered
-next time you open the app.

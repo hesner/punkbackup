@@ -1,11 +1,9 @@
 # PunkBackup — Troubleshooting Manual
 
-> **Note on language**: the app opens in Spanish by default — switch to
-> English anytime via **"⚙ Configuración" → "English"** (instant, no
-> restart). Quoted button/status text below shows the Spanish labels, with
-> the English meaning in parentheses.
+> This manual shows the app in **English** — go to **"⚙ Settings" →
+> "English"** if it isn't already switched (instant, no restart).
 
-## "Iniciar backup" does nothing / doesn't change state
+## "Start backup" does nothing / doesn't change state
 
 - Fully close the app (not just minimize it) and reopen it from the
   Desktop icon.
@@ -21,8 +19,8 @@
    2.4GHz/5GHz networks with similar-looking names).
 2. From Safari on the iPhone, try opening the address the app shows you
    (e.g. `http://PC-NAME.local:8787/health`). If it doesn't load, try the
-   "IP alternativa" the app also shows.
-3. Confirm the server is on in the PC app ("Escuchando en el puerto...").
+   "Fallback IP" the app also shows.
+3. Confirm the server is on in the PC app ("Status: Listening on port...").
 4. Check the Firewall rule exists: PowerShell (as administrator) →
    `Get-NetFirewallRule -DisplayName "iPhone WiFi Backup"`.
 
@@ -32,18 +30,18 @@
 - In the Shortcut, check **every** action with an `X-Backup-Token` header —
   the value must be the `Token` variable **chip** (colored background),
   never the literal word "Token" typed as plain text.
-- Copy the token again from the app ("Copiar token" button on the profile)
+- Copy the token again from the app ("Copy token" button on the profile)
   and paste it into the corresponding **Text** action in the Shortcut.
 
 ## 403 error "This profile is paused"
 
-- The profile is **Pausado**. Open the app → Principal or ⚙ Configuración
-  screen → switch it to **Activo**.
+- The profile is **Paused**. Open the app → "Main" or "⚙ Settings" →
+  switch it to **Active**.
 
 ## 409 error "no destination folder configured"
 
-- That profile has no destination folder. Go to ⚙ Configuración → "Elegir
-  carpeta..." for that profile.
+- That profile has no destination folder. Go to **"⚙ Settings"** →
+  "Choose folder..." for that profile.
 
 ## The Shortcut runs but doesn't upload any new photo
 
@@ -54,8 +52,8 @@
 - If "Find Photos" has a low **Limit** and you've run it several times, it
   may keep checking the same oldest photos over and over — raise the Limit
   to make progress.
-- Confirm under Settings → Privacy & Security → Photos that the Shortcuts
-  app has access ("All Photos" / "Always Allow").
+- Confirm under **iPhone Settings → Privacy & Security → Photos** that the
+  Shortcuts app has access ("All Photos" / "Always Allow").
 
 ## My library is huge (thousands of photos) and the full backup fails or freezes
 
@@ -73,7 +71,7 @@
 
 ## The phone freezes while the Shortcut runs
 
-- Go to Settings → Display & Brightness → Auto-Lock → **Never**
+- Go to **iPhone Settings → Display & Brightness → Auto-Lock → Never**
   (temporarily, while running a large backup).
 - Runs with thousands of photos can take several minutes — that's normal,
   not a freeze.

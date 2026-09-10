@@ -25,6 +25,7 @@ import logging
 import logging.handlers
 import queue
 import socket
+from pathlib import Path
 from tkinter import filedialog, messagebox
 
 import customtkinter as ctk
@@ -57,6 +58,8 @@ GREEN_HOVER = "#1e9e58"
 RED = "#ff3b30"
 RED_HOVER = "#c62828"
 TERMINAL_GREEN = "#39d353"  # log text — CRT/hacker-terminal touch
+
+ICON_PATH = Path(__file__).resolve().parent.parent / "assets" / "punkbackup.ico"
 
 
 def get_local_ip() -> str:
@@ -202,6 +205,11 @@ class MainWindow(ctk.CTk):
         super().__init__()
         self.configure(fg_color=BG)
         self.title(APP_TITLE)
+        if ICON_PATH.exists():
+            try:
+                self.iconbitmap(str(ICON_PATH))
+            except Exception:
+                pass  # icon is cosmetic — never let a bad .ico stop the app from opening
         self.geometry("860x700")
         self.minsize(760, 540)
 

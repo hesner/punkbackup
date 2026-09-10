@@ -1,4 +1,4 @@
-# Manual de solución de problemas
+# PunkBackup — Manual de solución de problemas
 
 ## "Iniciar backup" no hace nada / no cambia de estado
 
@@ -44,12 +44,30 @@
 ## El Atajo corre pero no sube ninguna foto nueva
 
 - Revisa que **"Find Photos"** no tenga ningún filtro raro (debe decir
-  "Find Photos" sin condiciones adicionales, salvo Sort/Order/Limit).
+  "Find Photos" sin condiciones adicionales, salvo Sort/Order/Limit) — un
+  filtro que se cuele por accidente hace que dé 0 resultados en silencio,
+  sin ningún error visible.
 - Si tienes un **Limit** bajo en "Find Photos" y ya llevas varias corridas,
   puede que siempre esté revisando las mismas fotos más viejas — sube el
-  Limit o desactívalo para un respaldo completo de tu biblioteca.
+  Limit para avanzar.
 - Confirma en Configuración → Privacidad y seguridad → Fotos que la app
   Atajos tenga acceso ("Todas las fotos" / "Always Allow").
+
+## Mi biblioteca es enorme (miles de fotos) y el respaldo completo falla o se congela
+
+- "Find Photos" **sin límite** revisa toda tu biblioteca de una sola vez —
+  con bibliotecas muy grandes (miles de fotos) esto puede tardar mucho o
+  hacer que iOS interrumpa el Atajo con un error genérico ("There was a
+  problem running the shortcut"). Esto es una **limitación conocida**,
+  todavía sin una solución definitiva.
+- Mientras tanto: usa un **Limit moderado** (ej. 300-500) y corre el Atajo
+  varias veces manualmente — cada corrida avanza mientras haya fotos
+  nuevas sin respaldar más recientes que las ya cubiertas, aunque con un
+  límite fijo puede que no llegue nunca a las fotos más antiguas de una
+  biblioteca muy grande. Para el respaldo inicial completo de una biblioteca
+  grande, ten paciencia, mantén el teléfono con auto-bloqueo desactivado y
+  conectado a corriente, y si falla, vuelve a correrlo — el sistema es
+  incremental, así que no se pierde el progreso ya logrado.
 
 ## El teléfono se traba mientras corre el Atajo
 
@@ -59,6 +77,14 @@
   es que se haya "colgado".
 - Si de verdad no responde: reinicio forzado del iPhone es seguro, no se
   pierde nada (la corrida en el servidor queda "a medias" sin daño).
+
+## La notificación final del Atajo sale con los números vacíos (Nuevos/Ya existían/Conflictos)
+
+Es un problema cosmético conocido — el paso final que cierra la corrida
+(`/run/finish`) a veces no completa, así que el resumen no siempre trae los
+números. **No afecta el respaldo real**: las fotos se siguen subiendo y
+guardando correctamente. Para confirmar que sí se guardó algo, revisa la
+carpeta destino directamente (ver siguiente sección).
 
 ## Cómo revisar si de verdad se están guardando archivos
 

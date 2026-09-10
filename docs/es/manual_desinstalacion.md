@@ -1,4 +1,4 @@
-# Manual de desinstalación
+# PunkBackup — Manual de desinstalación
 
 Desinstalar este sistema es seguro y **no borra ninguna de tus fotos ya
 respaldadas** — solo se elimina el programa en sí; tus carpetas de backup
@@ -20,7 +20,7 @@ Remove-NetFirewallRule -DisplayName "iPhone WiFi Backup"
 
 ## Paso 3 — Borrar el acceso directo del Escritorio
 
-Borra el ícono **"Backup Fotos y Videos"** de tu Escritorio (clic derecho →
+Borra el ícono **"PunkBackup"** de tu Escritorio (clic derecho →
 Eliminar), igual que cualquier otro acceso directo.
 
 ## Paso 4 — Borrar la carpeta del programa
@@ -33,7 +33,7 @@ viven en otra ubicación (la carpeta destino que elegiste para cada perfil).
 ## Paso 5 — (Opcional) Quitar el Atajo del iPhone
 
 1. En el iPhone, abre **Atajos**.
-2. Mantén presionado el atajo (ej. "Backup Fotos y Videos") → **Delete**.
+2. Mantén presionado el atajo (`PunkBackup`) → **Delete**.
 3. Si creaste una automatización de WiFi, ve a la pestaña **Automation** →
    mantén presionada la automatización → **Delete**.
 4. Si creaste el álbum "Respaldado" en versiones anteriores del sistema

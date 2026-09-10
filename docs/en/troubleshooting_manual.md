@@ -1,4 +1,8 @@
-# Troubleshooting Manual
+# PunkBackup — Troubleshooting Manual
+
+> **Note on language**: the app's interface is currently **Spanish-only**.
+> Quoted button/status text below is in Spanish, with an English
+> translation in parentheses the first time each one appears.
 
 ## "Iniciar backup" does nothing / doesn't change state
 
@@ -43,12 +47,28 @@
 ## The Shortcut runs but doesn't upload any new photo
 
 - Check **"Find Photos"** has no stray filter (it should just say "Find
-  Photos" with no extra conditions, only Sort/Order/Limit).
+  Photos" with no extra conditions, only Sort/Order/Limit) — a filter that
+  sneaks in by accident makes it return 0 results silently, with no visible
+  error.
 - If "Find Photos" has a low **Limit** and you've run it several times, it
-  may keep checking the same oldest photos over and over — raise the
-  Limit or turn it off for a full library backup.
+  may keep checking the same oldest photos over and over — raise the Limit
+  to make progress.
 - Confirm under Settings → Privacy & Security → Photos that the Shortcuts
   app has access ("All Photos" / "Always Allow").
+
+## My library is huge (thousands of photos) and the full backup fails or freezes
+
+- "Find Photos" with **no limit** scans your entire library at once — with
+  very large libraries (thousands of photos) this can take a long time or
+  cause iOS to interrupt the Shortcut with a generic error ("There was a
+  problem running the shortcut"). This is a **known limitation**, without a
+  definitive fix yet.
+- In the meantime: use a **moderate Limit** (e.g. 300-500) and run the
+  Shortcut several times manually — with a fixed limit it may never reach
+  the oldest photos in a very large library, though. For the initial full
+  backup of a large library, be patient, disable Auto-Lock and keep the
+  phone plugged in, and if it fails, just run it again — the system is
+  incremental, so progress already made isn't lost.
 
 ## The phone freezes while the Shortcut runs
 
@@ -58,6 +78,14 @@
   not a freeze.
 - If it truly stops responding: a forced restart of the iPhone is safe,
   nothing is lost (the server-side run is just left unfinished, harmlessly).
+
+## The Shortcut's final notification shows blank numbers (New/Already had/Conflicts)
+
+Known cosmetic issue — the step that closes out the run (`/run/finish`)
+sometimes doesn't complete, so the summary doesn't always carry the
+numbers. **This doesn't affect the actual backup**: files still upload and
+save correctly. To confirm something was really saved, check the
+destination folder directly (see next section).
 
 ## How to check files are really being saved
 

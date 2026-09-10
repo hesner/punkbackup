@@ -1,4 +1,4 @@
-# Configuración del iPhone — Atajo de respaldo por WiFi
+# PunkBackup — Configuración del iPhone (Atajo de respaldo por WiFi)
 
 Este manual te guía para crear, en la app **Atajos** de tu iPhone (viene
 instalada de fábrica, no necesitas descargar nada), el atajo que envía tus
@@ -8,8 +8,8 @@ fotos y videos nuevos a tu PC por WiFi.
 
 Este sistema soporta varios dispositivos/personas (perfiles) en la misma PC.
 **Cada dispositivo necesita su propio perfil y su propio token** — así que
-si vas a configurar más de un iPhone/iPad, repite el Paso 0 de la app de PC
-por cada uno.
+si vas a configurar más de un iPhone/iPad, repite estos pasos en la app de
+PC por cada uno.
 
 En tu PC:
 1. Abre la app y presiona **Iniciar backup**.
@@ -40,11 +40,11 @@ Anota estos datos:
 
 ---
 
-## Paso 1 — Crear el Atajo principal ("Respaldo WiFi")
+## Paso 1 — Crear el Atajo principal ("PunkBackup")
 
 1. Abre la app **Atajos**.
 2. Pestaña **Mis Atajos** → botón **+** → **Añadir Acción** (nuevo atajo).
-3. Toca el nombre en la parte superior y cámbialo a: `Respaldo WiFi`.
+3. Toca el nombre en la parte superior y cámbialo a: `PunkBackup`.
 4. Agrega las siguientes acciones **en este orden** (busca cada una por
    nombre con la lupa):
 
@@ -88,12 +88,24 @@ Anota estos datos:
      - Formato: **Personalizado** → escribe: `yyyy-MM-dd'T'HH:mm:ss`
      - Establece esto como variable `TomadaEn` (acción **Establecer variable**).
 
+  a.2. Acción **Texto** — arma el nombre completo, **con extensión**
+     (⚠️ paso importante: el atributo "Nombre de archivo" de Shortcuts, por
+     sí solo, **no incluye la extensión** — sin este paso vas a terminar con
+     archivos como `IMG_1234` en vez de `IMG_1234.HEIC`):
+     - En el campo de texto, inserta: **Elemento de repetición** → elige el
+       atributo **Nombre de archivo** → escribe un punto `.` (sin espacios)
+       → inserta **Elemento de repetición** otra vez → elige el atributo
+       **Extensión de archivo** (File Extension).
+     - Debe quedar algo como: `[Nombre de archivo].[Extensión de archivo]`
+     - Establece esto como variable `NombreArchivo` (acción **Establecer variable**).
+
   b. Acción **Obtener contenido de URL** — el chequeo liviano, SIN el archivo:
      - URL: `ServidorURL` + `/check`
      - Método: **POST**
      - Tipo de solicitud: **Formulario** (Form)
      - Campos del formulario:
-       - `filename` → valor: **Elemento de repetición** → atributo **Nombre de archivo**.
+       - `filename` → valor: variable **NombreArchivo** (la del paso a.2 —
+         NO uses el atributo "Nombre de archivo" directo, le falta la extensión).
        - `taken_at` → valor: variable `TomadaEn`.
      > No hace falta mandar el tamaño del archivo — Shortcuts no tiene forma
      > confiable de dar el tamaño en bytes puros (siempre da algo como
@@ -111,10 +123,11 @@ Anota estos datos:
 
      - **Obtener contenido de URL** (dentro del "Si"):
        - URL: toca el campo e inserta, EN ESTE ORDEN, dentro del mismo campo
-         de texto: chip **ServidorURL** → escribe `/upload?filename=` → toca
-         **Elemento de repetición** y elige el atributo **Nombre de archivo**
-         (igual que hiciste para el `/check`) → escribe `&taken_at=` → chip
-         **TomadaEn** → escribe `&run_id=` → chip **RunID**.
+         de texto: chip **ServidorURL** → escribe `/upload?filename=` →
+         inserta el chip de la variable **NombreArchivo** (la misma del paso
+         a.2 — NO el atributo "Nombre de archivo" suelto, le falta la
+         extensión) → escribe `&taken_at=` → chip **TomadaEn** → escribe
+         `&run_id=` → chip **RunID**.
          > Insertando los chips directamente en el campo de URL (no armando
          > el texto aparte con "Combinar texto"), Shortcuts los codifica
          > automáticamente para que la URL quede válida.
@@ -173,15 +186,15 @@ Opcional pero recomendado — te deja ver el estado sin correr un backup complet
 1. Abre **Atajos** → pestaña **Automatización** → **+** → **Crear automatización personal**.
 2. Elige **Wi-Fi** → selecciona tu red de casa: `[TU_RED_WIFI]`.
 3. Deja marcado **Al conectar**.
-4. Toca **Siguiente** → **Añadir acción** → busca y elige tu atajo `Respaldo WiFi`.
+4. Toca **Siguiente** → **Añadir acción** → busca y elige tu atajo `PunkBackup`.
 5. Toca **Siguiente** → **Listo**.
 6. Muy importante: cuando el sistema te pregunte, o en la pantalla de la
    automatización, **desactiva "Preguntar antes de ejecutar"**. La primera
    vez que corra puede pedirte un permiso único de seguridad — acéptalo. A
    partir de ahí correrá sola, en silencio, cada vez que llegues a esa WiFi.
 
-> También puedes correr `Respaldo WiFi` manualmente en cualquier momento
-> tocándolo en la app Atajos, o diciendo "Oye Siri, Respaldo WiFi".
+> También puedes correr `PunkBackup` manualmente en cualquier momento
+> tocándolo en la app Atajos, o diciendo "Oye Siri, PunkBackup".
 
 ---
 

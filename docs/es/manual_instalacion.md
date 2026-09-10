@@ -1,4 +1,4 @@
-# Manual de instalación — Backup de fotos y videos desde iPhone
+# PunkBackup — Manual de instalación
 
 ## Qué es este sistema
 
@@ -54,7 +54,7 @@ $projectDir = "C:\Backup Fotos y Videos"
 $target = Join-Path $projectDir ".venv\Scripts\pythonw.exe"
 $script = Join-Path $projectDir "main.py"
 $desktop = [Environment]::GetFolderPath('Desktop')
-$shortcutPath = Join-Path $desktop "Backup Fotos y Videos.lnk"
+$shortcutPath = Join-Path $desktop "PunkBackup.lnk"
 
 $WshShell = New-Object -ComObject WScript.Shell
 $Shortcut = $WshShell.CreateShortcut($shortcutPath)
@@ -65,12 +65,12 @@ $Shortcut.IconLocation = $target + ",0"
 $Shortcut.Save()
 ```
 
-Deberías ver un nuevo ícono **"Backup Fotos y Videos"** en tu Escritorio.
+Deberías ver un nuevo ícono **"PunkBackup"** en tu Escritorio.
 
 ## Paso 5 — Primer arranque y regla de Firewall
 
 1. Haz doble clic en el ícono del Escritorio — se abre la app (ventana
-   blanca, dos pestañas: "Principal" y "Perfiles").
+   oscura, dos pestañas: "Principal" y "Perfiles").
 2. Ve a la pestaña **Perfiles** → **"+ Agregar perfil"** → ponle un nombre
    a tu dispositivo (ej. "iPhone de [tu nombre]") → elige la carpeta donde
    quieres guardar tus fotos.

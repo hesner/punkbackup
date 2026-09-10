@@ -1,4 +1,8 @@
-# Installation Manual — iPhone Photo & Video Backup
+# PunkBackup — Installation Manual
+
+> **Note on language**: the app's interface is currently **Spanish-only**.
+> Screenshots and quoted button text below are in Spanish, with an English
+> translation in parentheses the first time each one appears.
 
 ## What this system does
 
@@ -52,7 +56,7 @@ $projectDir = "C:\Backup Photos and Videos"
 $target = Join-Path $projectDir ".venv\Scripts\pythonw.exe"
 $script = Join-Path $projectDir "main.py"
 $desktop = [Environment]::GetFolderPath('Desktop')
-$shortcutPath = Join-Path $desktop "Backup Fotos y Videos.lnk"
+$shortcutPath = Join-Path $desktop "PunkBackup.lnk"
 
 $WshShell = New-Object -ComObject WScript.Shell
 $Shortcut = $WshShell.CreateShortcut($shortcutPath)
@@ -63,19 +67,20 @@ $Shortcut.IconLocation = $target + ",0"
 $Shortcut.Save()
 ```
 
-You should now see a new **"Backup Fotos y Videos"** icon on your Desktop.
+You should now see a new **"PunkBackup"** icon on your Desktop.
 
 ## Step 5 — First launch and Firewall rule
 
-1. Double-click the Desktop icon — the app opens (white window, two tabs:
-   "Principal" and "Perfiles").
-2. Go to the **Perfiles** tab → **"+ Agregar perfil"** → name your device
-   (e.g. "iPhone de [your name]") → pick the folder where you want your
-   photos saved.
-3. Go to **Principal** → click **"Iniciar backup"**.
+1. Double-click the Desktop icon — the app opens (dark window, two tabs:
+   "Principal" (Main) and "Perfiles" (Profiles)).
+2. Go to the **"Perfiles"** (Profiles) tab → **"+ Agregar perfil"** (+ Add
+   profile) → name your device (e.g. "iPhone de [your name]") → pick the
+   folder where you want your photos saved.
+3. Go to **"Principal"** (Main) → click **"🤘 Iniciar backup"** (Start backup).
 4. The first time, Windows may show a **Firewall** prompt asking to allow
    the connection — accept it, checking at least **"Private networks"**.
-5. It should say **"Estado: Escuchando en el puerto 8787"**.
+5. It should say **"Estado: Escuchando en el puerto 8787"** (Status:
+   Listening on port 8787).
 
 ## Step 6 — Set up your iPhone
 

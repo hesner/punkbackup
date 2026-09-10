@@ -1,4 +1,10 @@
-# iPhone Setup — WiFi Backup Shortcut
+# PunkBackup — iPhone Setup (WiFi Backup Shortcut)
+
+> **Note on language**: the PC app's interface is currently **Spanish-only**
+> (no English UI yet). This manual is in English, but any on-screen text
+> from the PC app quoted below (button labels, status text) will actually
+> appear in Spanish on your screen. See the glossary at the end of this
+> document for a translation of every Spanish UI label used here.
 
 This guide walks you through creating, in the iPhone's built-in **Shortcuts**
 app (no extra download needed), the shortcut that sends your new photos and
@@ -8,13 +14,14 @@ videos to your PC over WiFi.
 
 This system supports several devices/people (profiles) on the same PC.
 **Each device needs its own profile and its own token** — so if you're
-setting up more than one iPhone/iPad, repeat Step 0 in the PC app for each one.
+setting up more than one iPhone/iPad, repeat these steps in the PC app for
+each one.
 
 On your PC:
-1. Open the app and click **Start backup**.
-2. In the **"Perfiles" (Profiles)** section, click **"+ Agregar perfil" ("+ Add profile")**
-   and name it after THIS device (e.g. `iPhone de Laura`), then choose its
-   destination folder when prompted.
+1. Open the app and click **"🤘 Iniciar backup"** (Start backup).
+2. In the **"Perfiles"** (Profiles) tab, click **"+ Agregar perfil"** (+ Add
+   profile) and name it after THIS device (e.g. `iPhone de Laura`), then
+   choose its destination folder when prompted.
 3. The app shows you (and auto-copies) that profile's **token** — it only
    works for this one device.
 
@@ -39,11 +46,11 @@ Note down these values:
 
 ---
 
-## Step 1 — Create the main Shortcut ("WiFi Backup")
+## Step 1 — Create the main Shortcut ("PunkBackup")
 
 1. Open the **Shortcuts** app.
 2. **My Shortcuts** tab → **+** button → **Add Action** (new shortcut).
-3. Tap the name at the top and rename it to: `WiFi Backup`.
+3. Tap the name at the top and rename it to: `PunkBackup`.
 4. Add the following actions **in this order** (search each by name using
    the magnifying glass):
 
@@ -87,12 +94,23 @@ Note down these values:
      - Format: **Custom** → type: `yyyy-MM-dd'T'HH:mm:ss`
      - Store this as a variable named `TakenAt` (**Set Variable** action).
 
+  a.2. **Text** action — build the full filename, **with extension**
+     (⚠️ important: Shortcuts' "File Name" attribute on its own does **not**
+     include the extension — skip this step and you'll end up with files
+     like `IMG_1234` instead of `IMG_1234.HEIC`):
+     - In the text field, insert: **Repeat Item** → choose the **File Name**
+       attribute → type a period `.` (no spaces) → insert **Repeat Item**
+       again → choose the **File Extension** attribute.
+     - It should read something like: `[File Name].[File Extension]`
+     - Store this as a variable named `FileName` (**Set Variable** action).
+
   b. **Get Contents of URL** action — the lightweight check, WITHOUT the file:
      - URL: `ServerURL` + `/check`
      - Method: **POST**
      - Request Body: **Form**
      - Form fields:
-       - `filename` → value: **Repeat Item** → **File Name** attribute.
+       - `filename` → value: the **FileName** variable (from step a.2 —
+         NOT the bare "File Name" attribute, which is missing the extension).
        - `taken_at` → value: `TakenAt` variable.
      > No need to send the file size — Shortcuts has no reliable way to give
      > a plain byte count (it always formats it as something like "1.2 MB"),
@@ -110,10 +128,11 @@ Note down these values:
 
      - **Get Contents of URL** (inside the "If"):
        - URL: tap the field and insert, IN THIS ORDER, inside the same text
-         field: the **ServerURL** chip → type `/upload?filename=` → tap
-         **Repeat Item** and choose the **File Name** attribute (same as you
-         did for `/check`) → type `&taken_at=` → the **TakenAt** chip →
-         type `&run_id=` → the **RunID** chip.
+         field: the **ServerURL** chip → type `/upload?filename=` → insert
+         the **FileName** variable chip (the same one from step a.2 — NOT
+         the bare "File Name" attribute, which is missing the extension) →
+         type `&taken_at=` → the **TakenAt** chip → type `&run_id=` → the
+         **RunID** chip.
          > Inserting the chips directly into the URL field (instead of
          > building the text separately with "Combine Text") makes
          > Shortcuts URL-encode them automatically.
@@ -172,14 +191,14 @@ Optional but recommended — lets you check status without running a full backup
 1. Open **Shortcuts** → **Automation** tab → **+** → **Create Personal Automation**.
 2. Choose **Wi-Fi** → select your home network: `[YOUR_WIFI_NETWORK]`.
 3. Leave **Connects** checked.
-4. Tap **Next** → **Add Action** → search for and choose your `WiFi Backup` shortcut.
+4. Tap **Next** → **Add Action** → search for and choose your `PunkBackup` shortcut.
 5. Tap **Next** → **Done**.
 6. Important: turn off **"Ask Before Running"** for this automation. The
    first time it runs it may ask for a one-time security confirmation —
    accept it. After that it will run silently every time you join that WiFi.
 
-> You can also run `WiFi Backup` manually anytime by tapping it in the
-> Shortcuts app, or saying "Hey Siri, WiFi Backup".
+> You can also run `PunkBackup` manually anytime by tapping it in the
+> Shortcuts app, or saying "Hey Siri, PunkBackup".
 
 ---
 
@@ -194,3 +213,30 @@ Optional but recommended — lets you check status without running a full backup
 - Exact action names can vary slightly between iOS versions; if you can't
   find an action with the exact name above, search by a keyword instead
   (e.g. "dictionary", "URL", "repeat").
+
+---
+
+## Glossary — Spanish PC app UI → English
+
+The PC app's interface is Spanish-only for now. Here's what each label
+referenced in this manual means:
+
+| Spanish (what you'll see) | English meaning |
+|---|---|
+| Principal | Main (tab name) |
+| Perfiles | Profiles (tab name) |
+| 🤘 Iniciar backup | Start backup (button) |
+| Detener backup | Stop backup (button) |
+| Estado: Detenido | Status: Stopped |
+| Estado: Escuchando en el puerto... | Status: Listening on port... |
+| + Agregar perfil | + Add profile |
+| Elegir carpeta... | Choose folder... |
+| Copiar token | Copy token |
+| Renombrar | Rename |
+| Renovar token | Regenerate token |
+| Eliminar | Delete |
+| Historial USB | USB history |
+| Activo / Pausado | Active / Paused |
+| Dirección | Address |
+| IP alternativa | Fallback IP |
+| Mostrar / Ocultar actividad | Show / Hide activity (log) |

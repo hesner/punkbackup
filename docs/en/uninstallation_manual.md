@@ -1,4 +1,4 @@
-# Uninstallation Manual
+# PunkBackup — Uninstallation Manual
 
 Uninstalling this system is safe and **does not delete any of your already
 backed-up photos** — only the program itself is removed; your backup
@@ -20,8 +20,8 @@ Remove-NetFirewallRule -DisplayName "iPhone WiFi Backup"
 
 ## Step 3 — Delete the Desktop shortcut
 
-Delete the **"Backup Fotos y Videos"** icon from your Desktop (right-click
-→ Delete), like any other shortcut.
+Delete the **"PunkBackup"** icon from your Desktop (right-click → Delete),
+like any other shortcut.
 
 ## Step 4 — Delete the program folder
 
@@ -34,7 +34,7 @@ chose per profile).
 ## Step 5 — (Optional) Remove the Shortcut from the iPhone
 
 1. On the iPhone, open **Shortcuts**.
-2. Long-press the shortcut (e.g. "Backup Fotos y Videos") → **Delete**.
+2. Long-press the shortcut (`PunkBackup`) → **Delete**.
 3. If you created a WiFi automation, go to the **Automation** tab →
    long-press it → **Delete**.
 4. If you created a "Respaldado" album in an older version of this system

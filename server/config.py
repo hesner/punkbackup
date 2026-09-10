@@ -22,6 +22,7 @@ DEFAULT_PORT = 8787
 class AppConfig:
     port: int = DEFAULT_PORT
     last_destination_dir: str | None = None
+    language: str = "es"  # "es" or "en" — GUI display language, switchable live
 
     @staticmethod
     def load() -> "AppConfig":

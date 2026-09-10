@@ -242,23 +242,29 @@ Tabla `runs` (una corrida de backup, para `/status`):
   revocado a mitad de una corrida.
 - Al final de las pruebas: reporte de hallazgos + propuestas concretas de mejora.
 
-## 11. Nombre del proyecto: **PunkBackup** ✅ (decidido)
+## 11. Nombre del proyecto: **PunkBackup** ✅ (decidido y aplicado)
 - Concepto: "Tus recuerdos. Tu USB. Cero dependencia de la nube." — actitud
   deliberadamente rebelde/independiente (nada de nube, nada de suscripción).
-- Dirección visual: **tema oscuro** con estética punk/industrial, mensajes
-  con personalidad. Esto **reemplaza** el tema claro forzado que se había
-  implementado — pendiente de aplicar (ver sección 13, al final del proyecto,
-  para no interrumpir la app mientras hace un backup real en curso).
-- Pendiente de renombrar en el código: `APP_TITLE` en `gui/main_window.py`,
-  `title=` de FastAPI en `server/app.py`, nombre del repo en GitHub, título
-  de manuales/README.
+- Dirección visual: **tema oscuro** con estética punk/industrial — aplicado
+  en `gui/main_window.py` (reemplazó el tema claro forzado inicial).
+- Ícono real de la app: una nube enojada con cresta punk fusionada a un
+  conector USB (a partir de arte de referencia del usuario, procesado con
+  Pillow — fondo recortado a transparencia, compuesto sobre una base
+  oscura redondeada, exportado como `.ico` multi-resolución en
+  `assets/punkbackup.ico`). Aplicado como ícono de la ventana
+  (`iconbitmap`) y del acceso directo del Escritorio.
+- Renombrado en el código: `APP_TITLE` en `gui/main_window.py`, `title=` de
+  FastAPI en `server/app.py`. Repo en GitHub: `hesner/punkbackup`.
 
 ## 12. Estado de aprobaciones
 - [x] Arquitectura general aprobada (incluye multi-perfil).
 - [x] Licencia: MIT.
 - [x] Regla de Firewall agregada y verificada (puerto 8787, red privada).
-- [x] Carpeta destino: independiente por perfil, se elige desde la pestaña "Perfiles".
-- [x] Interfaz: tema claro forzado (fondo blanco), 2 pestañas (Principal / Perfiles).
+- [x] Carpeta destino: independiente por perfil, se elige desde "⚙ Configuración".
+- [x] Interfaz: tema oscuro/punk, 2 pantallas (Principal / ⚙ Configuración —
+      esta última agrupa Idioma + gestión de Perfiles).
+- [x] Selector de idioma ES/EN en vivo (sin reiniciar), persistido en
+      `config/config.json` (`language`), vía `gui/i18n.py`.
 - [x] Switch Activo/Pausado por perfil (independiente del encendido general del servidor).
 - [x] Puerto: **8787**.
 - [x] Sin álbum de iOS — el Atajo pregunta al servidor vía `/check` (la

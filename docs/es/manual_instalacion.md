@@ -70,8 +70,10 @@ Deberías ver un nuevo ícono **"PunkBackup"** en tu Escritorio.
 ## Paso 5 — Primer arranque y regla de Firewall
 
 1. Haz doble clic en el ícono del Escritorio — se abre la app (ventana
-   oscura, dos pestañas: "Principal" y "Perfiles").
-2. Ve a la pestaña **Perfiles** → **"+ Agregar perfil"** → ponle un nombre
+   oscura, dos pantallas: "Principal" y "⚙ Configuración").
+   > La app abre en español por defecto. Si prefieres inglés, entra a
+   > "⚙ Configuración" y toca "English" — cambia al instante, sin reiniciar.
+2. Ve a **"⚙ Configuración"** → **"+ Agregar perfil"** → ponle un nombre
    a tu dispositivo (ej. "iPhone de [tu nombre]") → elige la carpeta donde
    quieres guardar tus fotos.
 3. Ve a **Principal** → click **"Iniciar backup"**.
@@ -86,7 +88,7 @@ crear el Atajo de Shortcuts y, opcionalmente, la automatización por WiFi.
 
 ## ¿Ya quedó funcionando?
 
-- Verifica en la pestaña Perfiles que tu perfil muestre su carpeta destino.
+- Verifica en "⚙ Configuración" que tu perfil muestre su carpeta destino.
 - Corre el Atajo en tu iPhone una vez de prueba.
 - Revisa la carpeta que elegiste — deberían aparecer subcarpetas por Año/Mes
   con tus fotos.

@@ -8,6 +8,7 @@ Windows. Output goes to docs/pdf/.
 """
 from __future__ import annotations
 
+import base64
 from pathlib import Path
 
 import markdown
@@ -15,6 +16,13 @@ from xhtml2pdf import pisa
 
 ROOT = Path(__file__).resolve().parent.parent
 PDF_DIR = ROOT / "docs" / "pdf"
+LOGO_PATH = ROOT / "assets" / "punkbackup.png"
+
+
+def _logo_data_uri() -> str:
+    """Embedded as base64 so xhtml2pdf never has to resolve a file path."""
+    data = base64.b64encode(LOGO_PATH.read_bytes()).decode("ascii")
+    return f"data:image/png;base64,{data}"
 
 CSS = """
 @page {
@@ -38,6 +46,7 @@ th, td { border: 1px solid #ccc; padding: 5px 8px; font-size: 9.5pt; text-align:
 th { background: #f2f2f2; }
 a { color: #c81d4a; }
 .brand { color: #888; font-size: 8.5pt; }
+.pdf-logo { width: 56pt; height: 56pt; float: left; margin: 0 12pt 4pt 0; }
 """
 
 FOOTER = """<div id="footerContent" class="brand">PunkBackup — Tus recuerdos. Tu USB. Cero dependencia de la nube.</div>"""
@@ -57,10 +66,11 @@ MANUALS = [
 ]
 
 
-def build_pdf(md_path: Path, out_name: str) -> None:
+def build_pdf(md_path: Path, out_name: str, logo_uri: str) -> None:
     md_text = md_path.read_text(encoding="utf-8")
     body_html = markdown.markdown(md_text, extensions=["tables", "fenced_code", "sane_lists"])
-    html = f"<html><head><style>{CSS}</style></head><body>{FOOTER}{body_html}</body></html>"
+    logo_tag = f'<img class="pdf-logo" src="{logo_uri}"/>'
+    html = f"<html><head><style>{CSS}</style></head><body>{FOOTER}{logo_tag}{body_html}</body></html>"
 
     PDF_DIR.mkdir(parents=True, exist_ok=True)
     out_path = PDF_DIR / out_name
@@ -71,11 +81,12 @@ def build_pdf(md_path: Path, out_name: str) -> None:
 
 
 def main() -> None:
+    logo_uri = _logo_data_uri()
     for md_path, out_name in MANUALS:
         if not md_path.exists():
             print(f"MISSING SOURCE: {md_path}")
             continue
-        build_pdf(md_path, out_name)
+        build_pdf(md_path, out_name, logo_uri)
 
 
 if __name__ == "__main__":

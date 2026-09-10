@@ -4,6 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>PunkBackup</title>
+<link rel="icon" type="image/png" href="assets/punkbackup.png">
 <style>
   :root {
     --bg: #0c0c0e;
@@ -27,6 +28,9 @@
   header.hero {
     padding: 64px 0 40px; text-align: center;
     border-bottom: 1px solid var(--border);
+  }
+  header.hero img.logo {
+    width: 108px; height: 108px; display: block; margin: 0 auto 14px;
   }
   header.hero h1 {
     font-size: 2.6rem; margin: 0 0 8px; letter-spacing: 1px;
@@ -94,7 +98,8 @@
 
 <header class="hero">
   <div class="wrap">
-    <h1>PUNKBACKUP 🤘</h1>
+    <img class="logo" src="assets/punkbackup.png" alt="PunkBackup logo">
+    <h1>PUNKBACKUP</h1>
     <p class="tagline" data-en="Your memories. Your USB. Zero cloud dependency."
        data-es="Tus recuerdos. Tu USB. Cero dependencia de la nube.">
        Your memories. Your USB. Zero cloud dependency.

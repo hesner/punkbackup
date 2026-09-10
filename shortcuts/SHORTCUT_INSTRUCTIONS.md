@@ -1,10 +1,9 @@
 # PunkBackup — iPhone Setup (WiFi Backup Shortcut)
 
-> **Note on language**: the PC app's interface is currently **Spanish-only**
-> (no English UI yet). This manual is in English, but any on-screen text
-> from the PC app quoted below (button labels, status text) will actually
-> appear in Spanish on your screen. See the glossary at the end of this
-> document for a translation of every Spanish UI label used here.
+> **Note on language**: the PC app opens in Spanish by default — go to
+> **"⚙ Configuración" → "English"** to switch the whole interface
+> instantly (no restart). This manual shows the Spanish labels you'll see
+> before switching, with the English meaning in parentheses.
 
 This guide walks you through creating, in the iPhone's built-in **Shortcuts**
 app (no extra download needed), the shortcut that sends your new photos and
@@ -19,7 +18,7 @@ each one.
 
 On your PC:
 1. Open the app and click **"🤘 Iniciar backup"** (Start backup).
-2. In the **"Perfiles"** (Profiles) tab, click **"+ Agregar perfil"** (+ Add
+2. In **"⚙ Configuración"** (Settings), click **"+ Agregar perfil"** (+ Add
    profile) and name it after THIS device (e.g. `iPhone de Laura`), then
    choose its destination folder when prompted.
 3. The app shows you (and auto-copies) that profile's **token** — it only
@@ -216,27 +215,8 @@ Optional but recommended — lets you check status without running a full backup
 
 ---
 
-## Glossary — Spanish PC app UI → English
+## Prefer an all-English screen?
 
-The PC app's interface is Spanish-only for now. Here's what each label
-referenced in this manual means:
-
-| Spanish (what you'll see) | English meaning |
-|---|---|
-| Principal | Main (tab name) |
-| Perfiles | Profiles (tab name) |
-| 🤘 Iniciar backup | Start backup (button) |
-| Detener backup | Stop backup (button) |
-| Estado: Detenido | Status: Stopped |
-| Estado: Escuchando en el puerto... | Status: Listening on port... |
-| + Agregar perfil | + Add profile |
-| Elegir carpeta... | Choose folder... |
-| Copiar token | Copy token |
-| Renombrar | Rename |
-| Renovar token | Regenerate token |
-| Eliminar | Delete |
-| Historial USB | USB history |
-| Activo / Pausado | Active / Paused |
-| Dirección | Address |
-| IP alternativa | Fallback IP |
-| Mostrar / Ocultar actividad | Show / Hide activity (log) |
+Open the PC app → **"⚙ Configuración"** → tap **"English"**. Every label
+in this manual switches too — instantly, no restart, and it's remembered
+next time you open the app.

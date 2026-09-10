@@ -1,8 +1,11 @@
 # PunkBackup — Installation Manual
 
-> **Note on language**: the app's interface is currently **Spanish-only**.
-> Screenshots and quoted button text below are in Spanish, with an English
-> translation in parentheses the first time each one appears.
+> **Note on language**: the app opens in Spanish by default. Once it's
+> open, go to **"⚙ Configuración"** and tap **"English"** — the whole
+> interface switches instantly, no restart needed, and it's remembered
+> next time. Screenshots and quoted button text below show the Spanish
+> labels (what you'll see before switching), with the English meaning in
+> parentheses.
 
 ## What this system does
 
@@ -71,9 +74,11 @@ You should now see a new **"PunkBackup"** icon on your Desktop.
 
 ## Step 5 — First launch and Firewall rule
 
-1. Double-click the Desktop icon — the app opens (dark window, two tabs:
-   "Principal" (Main) and "Perfiles" (Profiles)).
-2. Go to the **"Perfiles"** (Profiles) tab → **"+ Agregar perfil"** (+ Add
+1. Double-click the Desktop icon — the app opens (dark window, two screens:
+   "Principal" (Main) and "⚙ Configuración" (Settings)).
+   > If you'd rather read the rest of this in English on-screen too, go to
+   > "⚙ Configuración" now and tap "English".
+2. Go to **"⚙ Configuración"** (Settings) → **"+ Agregar perfil"** (+ Add
    profile) → name your device (e.g. "iPhone de [your name]") → pick the
    folder where you want your photos saved.
 3. Go to **"Principal"** (Main) → click **"🤘 Iniciar backup"** (Start backup).
@@ -89,7 +94,7 @@ optionally, the WiFi automation.
 
 ## Is it working?
 
-- Check the Perfiles tab shows your profile with its destination folder.
+- Check "⚙ Configuración" shows your profile with its destination folder.
 - Run the Shortcut once on your iPhone as a test.
 - Check the folder you chose — you should see Year/Month subfolders with
   your photos inside.

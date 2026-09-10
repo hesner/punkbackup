@@ -49,9 +49,15 @@ A one-directional (iPhone/iPad → PC) photo/video backup system:
 3. **HTTP API** (`server/app.py`, FastAPI). See section 4 for the exact
    contract — it looks simple but every field shape here was chosen to
    work around a real iOS Shortcuts limitation (section 5).
-4. **GUI** (`gui/main_window.py`, CustomTkinter) — two tabs ("Principal":
-   server on/off + profile status + connection info + collapsible log;
-   "Perfiles": full profile CRUD). Two independent controls, not one: a
+4. **GUI** (`gui/main_window.py`, CustomTkinter, PunkBackup dark theme) —
+   a custom nav bar (not `CTkTabview` — its tab identity is tied to its
+   display text, which breaks live language switching) toggles two
+   screens: "Principal" (server on/off + profile status + connection info
+   + collapsible log) and "⚙ Configuración" (a language switch, ES/EN,
+   applied instantly via `gui/i18n.py`'s `t(key, lang)` — every
+   translatable widget is stored as a `self.xxx` attribute so
+   `_apply_language()` can reconfigure its text in place — plus full
+   profile CRUD below it). Two independent controls, not one: a
    server-wide on/off switch, and a per-profile Activo/Pausado switch —
    because the server has no notion of "the active profile"; any number of
    enabled profiles can upload concurrently, each isolated to its own

@@ -1,3 +1,5 @@
+<img src="assets/punkbackup.png" alt="PunkBackup" width="120" />
+
 # PunkBackup 🤘
 
 **Tus recuerdos. Tu USB. Cero dependencia de la nube.**

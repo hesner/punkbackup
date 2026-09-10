@@ -1,23 +1,30 @@
 # PunkBackup — Desktop App Usage Manual
 
-> **Note on language**: the app's interface is currently **Spanish-only**.
-> Every Spanish label below is followed by its English meaning in
-> parentheses the first time it appears.
-
 This guide explains what each screen and button does. For first-time setup,
 see the **Installation Manual**; for problems, see the **Troubleshooting
 Manual**.
 
-## The window has 2 tabs
+## The window has 2 screens
 
 - **"Principal"** (Main): turn the backup server on/off, see the address
   your devices should connect to, and each profile's status.
-- **"Perfiles"** (Profiles): create, configure, and manage each
-  person/device.
+- **"⚙ Configuración"** (Settings): switch the app's language, and
+  create/manage each person or device (profiles).
+
+Switch between them with the two buttons at the top, right under the app name.
 
 ---
 
-## "Principal" (Main) tab
+## "⚙ Configuración" (Settings) → Language
+
+At the very top of Settings there are two buttons: **Español** / **English**.
+Tap one and **the whole app switches language instantly** — buttons,
+titles, messages, everything — no closing or restarting needed. Your
+choice is remembered the next time you open the app.
+
+---
+
+## "Principal" (Main) screen
 
 ### "🤘 Iniciar backup" (Start backup) / "Detener backup" (Stop backup) button
 
@@ -87,9 +94,10 @@ happening in real time while you run the Shortcut on your iPhone.
 
 ---
 
-## "Perfiles" (Profiles) tab
+## "⚙ Configuración" (Settings) → Profiles
 
-This is where identities are managed — one per person or device.
+Below the language switch is where identities are managed — one per
+person or device.
 
 ### "+ Agregar perfil" (+ Add profile)
 
@@ -120,8 +128,8 @@ This is where identities are managed — one per person or device.
 2. Click **"🤘 Iniciar backup"**.
 3. Run the Shortcut on your iPhone (manually, or automatically if you set
    up the WiFi automation).
-4. Watch it upload on the "Principal" tab (expand "Mostrar actividad" for
-   live detail).
+4. Watch it upload on the "Principal" screen (expand "Mostrar actividad"
+   for live detail).
 5. When you're done, you can close the app or leave it — it does nothing
    on its own unless you clicked "Iniciar backup".
 

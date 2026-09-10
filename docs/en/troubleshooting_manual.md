@@ -1,8 +1,9 @@
 # PunkBackup — Troubleshooting Manual
 
-> **Note on language**: the app's interface is currently **Spanish-only**.
-> Quoted button/status text below is in Spanish, with an English
-> translation in parentheses the first time each one appears.
+> **Note on language**: the app opens in Spanish by default — switch to
+> English anytime via **"⚙ Configuración" → "English"** (instant, no
+> restart). Quoted button/status text below shows the Spanish labels, with
+> the English meaning in parentheses.
 
 ## "Iniciar backup" does nothing / doesn't change state
 
@@ -36,12 +37,12 @@
 
 ## 403 error "This profile is paused"
 
-- The profile is **Pausado**. Open the app → Principal or Perfiles tab →
-  switch it to **Activo**.
+- The profile is **Pausado**. Open the app → Principal or ⚙ Configuración
+  screen → switch it to **Activo**.
 
 ## 409 error "no destination folder configured"
 
-- That profile has no destination folder. Go to Perfiles → "Elegir
+- That profile has no destination folder. Go to ⚙ Configuración → "Elegir
   carpeta..." for that profile.
 
 ## The Shortcut runs but doesn't upload any new photo

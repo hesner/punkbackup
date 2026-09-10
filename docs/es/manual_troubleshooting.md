@@ -33,13 +33,13 @@
 
 ## Error 403 "This profile is paused"
 
-- El perfil está **Pausado**. Ve a la app → pestaña Principal o Perfiles →
-  activa el interruptor a **Activo**.
+- El perfil está **Pausado**. Ve a la app → pantalla Principal o
+  ⚙ Configuración → activa el interruptor a **Activo**.
 
 ## Error 409 "no destination folder configured"
 
-- Ese perfil no tiene carpeta destino. Ve a Perfiles → "Elegir carpeta..."
-  para ese perfil.
+- Ese perfil no tiene carpeta destino. Ve a ⚙ Configuración → "Elegir
+  carpeta..." para ese perfil.
 
 ## El Atajo corre pero no sube ninguna foto nueva
 

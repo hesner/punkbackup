@@ -1,4 +1,4 @@
-"""Dashboard GUI — PunkBackup dark/industrial theme, two screens.
+"""Dashboard GUI — PunkBackup dark/industrial theme, live ES/EN switching.
 
 Opens fully idle: the destination folder is whatever was last used (editable),
 and the backup server is OFF until the user clicks "Iniciar backup" — the app
@@ -14,10 +14,14 @@ of that instead:
   - one Activo/Pausado switch PER profile, to temporarily block a
     specific device without deleting its history.
 
-Two tabs:
-  - "Principal": destination, server switch, connection info, live profile
-    status (with the enable/pause switch), aggregate stats, collapsible log.
-  - "Perfiles": full profile management (create/rename/regenerate/delete).
+Two screens, switched by a custom nav bar (not CTkTabview — we need to
+rename the tab labels live when the language changes, and CTkTabview ties
+a tab's internal identity to its display text):
+  - "Principal": server switch, connection info, live profile status (with
+    the enable/pause switch), aggregate stats, collapsible log.
+  - "⚙ Configuración" (Settings): language toggle (ES/EN, applied
+    instantly, no restart) + full profile management (create/rename/
+    regenerate/delete).
 """
 from __future__ import annotations
 
@@ -36,14 +40,15 @@ from server.diskinfo import format_bytes
 from server.profiles import Profile, ProfileStore
 from server.runner import ServerController
 
+from .i18n import LANGUAGES, LANGUAGE_NAMES, t as _t
+
 # PunkBackup: dark, industrial, deliberately rebellious. "Tus recuerdos. Tu
 # USB. Cero dependencia de la nube." No cloud, no subscription, no light
 # corporate dashboard vibes.
 ctk.set_appearance_mode("dark")
 ctk.set_default_color_theme("blue")
 
-APP_TITLE = "PunkBackup"
-TAGLINE = "🤘 Tus recuerdos. Tu USB. Cero dependencia de la nube."
+APP_TITLE = "PunkBackup"  # brand name — stays the same in every language
 
 BG = "#0c0c0e"            # near-black window background
 CARD_BG = "#19191d"        # card/panel background
@@ -51,8 +56,9 @@ CARD_BG_ALT = "#221418"    # subtle warm-dark variant for the log panel
 BORDER = "#2c2c32"
 TEXT_MAIN = "#f2f2f5"
 TEXT_MUTED = "#9a9aa3"
-ACCENT = "#ff2d55"         # punk pink/red — headers, selected tab, highlights
+ACCENT = "#ff2d55"         # punk pink/red — headers, selected nav, highlights
 ACCENT_HOVER = "#c81d4a"
+ACCENT_INK = "#1a0308"      # text color used ON TOP of the accent color
 GREEN = "#2ecc71"
 GREEN_HOVER = "#1e9e58"
 RED = "#ff3b30"
@@ -75,31 +81,31 @@ def get_local_ip() -> str:
         s.close()
 
 
-def _volume_text(profile: Profile) -> str:
+def _volume_text(profile: Profile, lang: str) -> str:
     vol = profile.current_volume
     if not vol:
         return ""
-    label = vol.get("volume_label") or "Sin etiqueta"
+    label = vol.get("volume_label") or _t("no_label", lang)
     free = format_bytes(vol.get("free_bytes"))
     total = format_bytes(vol.get("total_bytes"))
-    return f'"{label}"  ({free} libres de {total})'
+    return _t("free_of_total", lang, label=label, free=free, total=total)
 
 
-def _profile_stats_text(profile: Profile) -> str:
+def _profile_stats_text(profile: Profile, lang: str) -> str:
     if not profile.destination_dir:
-        return "Sin carpeta destino configurada"
+        return _t("stats_no_dest", lang)
 
-    lines = [f"Carpeta: {profile.destination_dir}"]
-    volume = _volume_text(profile)
+    lines = [_t("stats_folder", lang, path=profile.destination_dir)]
+    volume = _volume_text(profile, lang)
     if volume:
-        lines.append(f"USB: {volume}")
+        lines.append(_t("stats_usb", lang, info=volume))
 
-    stats_line = "Última copia: nunca   |   Archivos: 0"
+    stats_line = _t("stats_line", lang, last=_t("never", lang), count=0)
     if app_module.is_configured():
         try:
             st = app_module.get_status_for_profile(profile)
-            last = st["last_backup_at"] or "nunca"
-            stats_line = f"Última copia: {last}   |   Archivos: {st['total_files_backed_up']}"
+            last = st["last_backup_at"] or _t("never", lang)
+            stats_line = _t("stats_line", lang, last=last, count=st["total_files_backed_up"])
         except Exception:
             pass
     return "\n".join([stats_line] + lines)
@@ -108,21 +114,25 @@ def _profile_stats_text(profile: Profile) -> str:
 class ProfileStatusRow(ctk.CTkFrame):
     """Used on the "Principal" screen: name, stats, and the enable/pause switch."""
 
-    def __init__(self, master, profile: Profile, on_toggle):
+    def __init__(self, master, profile: Profile, lang: str, on_toggle):
         super().__init__(master, fg_color=CARD_BG, border_width=1, border_color=BORDER, corner_radius=8)
         self.grid_columnconfigure(0, weight=1)
         self.profile = profile
+        self.lang = lang
         self._on_toggle = on_toggle
 
         self.name_label = ctk.CTkLabel(self, text=profile.name, font=ctk.CTkFont(weight="bold"), text_color=TEXT_MAIN)
         self.name_label.grid(row=0, column=0, sticky="w", padx=12, pady=(10, 0))
-        self.stats_label = ctk.CTkLabel(self, text=_profile_stats_text(profile), text_color=TEXT_MUTED, justify="left")
+        self.stats_label = ctk.CTkLabel(
+            self, text=_profile_stats_text(profile, lang), text_color=TEXT_MUTED, justify="left"
+        )
         self.stats_label.grid(row=1, column=0, sticky="w", padx=12, pady=(0, 10))
 
         switch_frame = ctk.CTkFrame(self, fg_color="transparent")
         switch_frame.grid(row=0, column=1, rowspan=2, padx=12, pady=8, sticky="e")
-        state_text = "Activo" if profile.enabled else "Pausado"
-        self.state_label = ctk.CTkLabel(switch_frame, text=state_text, text_color=TEXT_MUTED, width=80)
+        self.state_label = ctk.CTkLabel(
+            switch_frame, text=self._state_text(), text_color=TEXT_MUTED, width=80
+        )
         self.state_label.pack(side="left", padx=(0, 6))
         self.switch_var = ctk.BooleanVar(value=profile.enabled)
         self.switch = ctk.CTkSwitch(
@@ -131,78 +141,102 @@ class ProfileStatusRow(ctk.CTkFrame):
         )
         self.switch.pack(side="left")
 
-    def update_data(self, profile: Profile) -> None:
+    def _state_text(self) -> str:
+        return _t("profile_active", self.lang) if self.profile.enabled else _t("profile_paused", self.lang)
+
+    def update_data(self, profile: Profile, lang: str) -> None:
         """Refresh in place instead of destroying/recreating — avoids the
         visible flicker a full rebuild causes on every periodic status poll."""
         self.profile = profile
+        self.lang = lang
         self.name_label.configure(text=profile.name)
-        self.stats_label.configure(text=_profile_stats_text(profile))
-        self.state_label.configure(text="Activo" if profile.enabled else "Pausado")
+        self.stats_label.configure(text=_profile_stats_text(profile, lang))
+        self.state_label.configure(text=self._state_text())
         if self.switch_var.get() != profile.enabled:
             self.switch_var.set(profile.enabled)
 
 
 class ProfileManageRow(ctk.CTkFrame):
-    """Used on the "Perfiles" screen: full CRUD controls."""
+    """Used on the "⚙ Configuración" screen: full CRUD controls."""
 
-    def __init__(self, master, profile: Profile, callbacks: dict):
+    def __init__(self, master, profile: Profile, lang: str, callbacks: dict):
         super().__init__(master, fg_color=CARD_BG, border_width=1, border_color=BORDER, corner_radius=8)
         self.grid_columnconfigure(0, weight=1)
         self.profile = profile
+        self.lang = lang
 
         self.name_label = ctk.CTkLabel(self, text=profile.name, font=ctk.CTkFont(weight="bold"), text_color=TEXT_MAIN)
         self.name_label.grid(row=0, column=0, sticky="w", padx=12, pady=(10, 0))
-        status = "Activo" if profile.enabled else "Pausado"
-        self.status_label = ctk.CTkLabel(
-            self, text=f"{status}\n{_profile_stats_text(profile)}", text_color=TEXT_MUTED, justify="left"
-        )
+        self.status_label = ctk.CTkLabel(self, text=self._status_text(), text_color=TEXT_MUTED, justify="left")
         self.status_label.grid(row=1, column=0, sticky="w", padx=12, pady=(0, 10))
 
         btns = ctk.CTkFrame(self, fg_color="transparent")
         btns.grid(row=0, column=1, rowspan=2, padx=8, pady=6, sticky="e")
-        ctk.CTkButton(
-            btns, text="Elegir carpeta...", width=120, fg_color=ACCENT, hover_color=ACCENT_HOVER,
+        self.btn_choose_dest = ctk.CTkButton(
+            btns, width=120, fg_color=ACCENT, hover_color=ACCENT_HOVER,
             command=lambda: callbacks["choose_dest"](self.profile),
-        ).pack(side="left", padx=2)
-        ctk.CTkButton(
-            btns, text="Historial USB", width=100, fg_color="transparent", border_width=1,
+        )
+        self.btn_choose_dest.pack(side="left", padx=2)
+        self.btn_history = ctk.CTkButton(
+            btns, width=100, fg_color="transparent", border_width=1,
             border_color=BORDER, text_color=TEXT_MAIN, hover_color=CARD_BG_ALT,
             command=lambda: callbacks["history"](self.profile),
-        ).pack(side="left", padx=2)
-        ctk.CTkButton(
-            btns, text="Copiar token", width=104, fg_color="transparent", border_width=1,
+        )
+        self.btn_history.pack(side="left", padx=2)
+        self.btn_copy = ctk.CTkButton(
+            btns, width=104, fg_color="transparent", border_width=1,
             border_color=BORDER, text_color=TEXT_MAIN, hover_color=CARD_BG_ALT,
             command=lambda: callbacks["copy"](self.profile),
-        ).pack(side="left", padx=2)
-        ctk.CTkButton(
-            btns, text="Renombrar", width=90, fg_color="transparent", border_width=1,
+        )
+        self.btn_copy.pack(side="left", padx=2)
+        self.btn_rename = ctk.CTkButton(
+            btns, width=90, fg_color="transparent", border_width=1,
             border_color=BORDER, text_color=TEXT_MAIN, hover_color=CARD_BG_ALT,
             command=lambda: callbacks["rename"](self.profile),
-        ).pack(side="left", padx=2)
-        ctk.CTkButton(
-            btns, text="Renovar token", width=110, fg_color="transparent", border_width=1,
+        )
+        self.btn_rename.pack(side="left", padx=2)
+        self.btn_regenerate = ctk.CTkButton(
+            btns, width=110, fg_color="transparent", border_width=1,
             border_color=BORDER, text_color=TEXT_MAIN, hover_color=CARD_BG_ALT,
             command=lambda: callbacks["regenerate"](self.profile),
-        ).pack(side="left", padx=2)
-        ctk.CTkButton(
-            btns,
-            text="Eliminar",
-            width=80,
-            fg_color=RED,
-            hover_color=RED_HOVER,
+        )
+        self.btn_regenerate.pack(side="left", padx=2)
+        self.btn_delete = ctk.CTkButton(
+            btns, width=80, fg_color=RED, hover_color=RED_HOVER,
             command=lambda: callbacks["delete"](self.profile),
-        ).pack(side="left", padx=2)
+        )
+        self.btn_delete.pack(side="left", padx=2)
 
-    def update_data(self, profile: Profile) -> None:
+        self._apply_button_text()
+
+    def _status_text(self) -> str:
+        status = _t("profile_active", self.lang) if self.profile.enabled else _t("profile_paused", self.lang)
+        return f"{status}\n{_profile_stats_text(self.profile, self.lang)}"
+
+    def _apply_button_text(self) -> None:
+        self.btn_choose_dest.configure(text=_t("btn_choose_folder", self.lang))
+        self.btn_history.configure(text=_t("btn_usb_history", self.lang))
+        self.btn_copy.configure(text=_t("btn_copy_token", self.lang))
+        self.btn_rename.configure(text=_t("btn_rename", self.lang))
+        self.btn_regenerate.configure(text=_t("btn_regenerate_token", self.lang))
+        self.btn_delete.configure(text=_t("btn_delete", self.lang))
+
+    def update_data(self, profile: Profile, lang: str) -> None:
+        lang_changed = lang != self.lang
         self.profile = profile
+        self.lang = lang
         self.name_label.configure(text=profile.name)
-        status = "Activo" if profile.enabled else "Pausado"
-        self.status_label.configure(text=f"{status}\n{_profile_stats_text(profile)}")
+        self.status_label.configure(text=self._status_text())
+        if lang_changed:
+            self._apply_button_text()
 
 
 class MainWindow(ctk.CTk):
     def __init__(self):
         super().__init__()
+        self.cfg = AppConfig.load()
+        self.lang = self.cfg.language if self.cfg.language in LANGUAGES else "es"
+
         self.configure(fg_color=BG)
         self.title(APP_TITLE)
         if ICON_PATH.exists():
@@ -210,52 +244,84 @@ class MainWindow(ctk.CTk):
                 self.iconbitmap(str(ICON_PATH))
             except Exception:
                 pass  # icon is cosmetic — never let a bad .ico stop the app from opening
-        self.geometry("860x700")
+        self.geometry("860x720")
         self.minsize(760, 540)
 
-        self.cfg = AppConfig.load()
         self.profile_store = ProfileStore()
         self.controller: ServerController | None = None
         self.log_queue: "queue.Queue[str]" = queue.Queue()
         self.log_visible = False
+        self.current_screen = "main"
         self._principal_rows: dict[str, ProfileStatusRow] = {}
         self._principal_empty_label: ctk.CTkLabel | None = None
-        self._perfiles_rows: dict[str, ProfileManageRow] = {}
-        self._perfiles_empty_label: ctk.CTkLabel | None = None
+        self._settings_rows: dict[str, ProfileManageRow] = {}
+        self._settings_empty_label: ctk.CTkLabel | None = None
 
-        header = ctk.CTkFrame(self, fg_color="transparent")
-        header.pack(fill="x", padx=16, pady=(14, 0))
-        ctk.CTkLabel(
-            header, text="PUNKBACKUP", font=ctk.CTkFont(size=20, weight="bold"), text_color=ACCENT,
-        ).pack(anchor="w")
-        ctk.CTkLabel(
-            header, text=TAGLINE, font=ctk.CTkFont(size=11, slant="italic"), text_color=TEXT_MUTED,
-        ).pack(anchor="w", pady=(0, 4))
+        self._build_header()
+        self._build_nav()
 
-        self.tabs = ctk.CTkTabview(
-            self, fg_color=BG, segmented_button_fg_color=CARD_BG,
-            segmented_button_selected_color=ACCENT, segmented_button_selected_hover_color=ACCENT_HOVER,
-            text_color=TEXT_MAIN,
-        )
-        self.tabs.pack(fill="both", expand=True, padx=12, pady=12)
-        self.tab_principal = self.tabs.add("Principal")
-        self.tab_perfiles = self.tabs.add("Perfiles")
-        self.tab_principal.configure(fg_color=BG)
-        self.tab_perfiles.configure(fg_color=BG)
+        self.content_area = ctk.CTkFrame(self, fg_color=BG)
+        self.content_area.pack(fill="both", expand=True, padx=12, pady=(0, 12))
+        self.tab_principal = ctk.CTkFrame(self.content_area, fg_color=BG)
+        self.tab_settings = ctk.CTkFrame(self.content_area, fg_color=BG)
 
         self._build_principal_tab()
-        self._build_perfiles_tab()
+        self._build_settings_tab()
+        self._show_screen("main")
+
         self._setup_log_handler()
         self._update_connection_info()
         self._refresh_principal_profiles()
-        self._refresh_perfiles_tab()
+        self._refresh_settings_profiles()
 
         self.protocol("WM_DELETE_WINDOW", self._on_close)
         self.after(300, self._drain_log_queue)
         self.after(1500, self._refresh_status_loop)
 
+    def t(self, key: str, **kwargs) -> str:
+        return _t(key, self.lang, **kwargs)
+
     # ------------------------------------------------------------------
-    # "Principal" tab
+    # Header / nav
+    # ------------------------------------------------------------------
+    def _build_header(self) -> None:
+        header = ctk.CTkFrame(self, fg_color="transparent")
+        header.pack(fill="x", padx=16, pady=(14, 0))
+        ctk.CTkLabel(
+            header, text="PUNKBACKUP", font=ctk.CTkFont(size=20, weight="bold"), text_color=ACCENT,
+        ).pack(anchor="w")
+        self.tagline_label = ctk.CTkLabel(
+            header, text=self.t("tagline"), font=ctk.CTkFont(size=11, slant="italic"), text_color=TEXT_MUTED,
+        )
+        self.tagline_label.pack(anchor="w", pady=(0, 4))
+
+    def _build_nav(self) -> None:
+        nav = ctk.CTkFrame(self, fg_color=CARD_BG, corner_radius=10)
+        nav.pack(padx=16, pady=(8, 4), anchor="w")
+        self.nav_main_btn = ctk.CTkButton(
+            nav, text=self.t("nav_main"), corner_radius=8, command=lambda: self._show_screen("main"),
+        )
+        self.nav_main_btn.pack(side="left", padx=4, pady=4)
+        self.nav_settings_btn = ctk.CTkButton(
+            nav, text=self.t("nav_settings"), corner_radius=8, command=lambda: self._show_screen("settings"),
+        )
+        self.nav_settings_btn.pack(side="left", padx=4, pady=4)
+
+    def _show_screen(self, screen: str) -> None:
+        self.current_screen = screen
+        self.tab_principal.pack_forget()
+        self.tab_settings.pack_forget()
+        if screen == "main":
+            self.tab_principal.pack(fill="both", expand=True)
+            self.nav_main_btn.configure(fg_color=ACCENT, text_color=ACCENT_INK, hover_color=ACCENT_HOVER)
+            self.nav_settings_btn.configure(fg_color="transparent", text_color=TEXT_MAIN, hover_color=CARD_BG_ALT)
+        else:
+            self.tab_settings.pack(fill="both", expand=True)
+            self.nav_settings_btn.configure(fg_color=ACCENT, text_color=ACCENT_INK, hover_color=ACCENT_HOVER)
+            self.nav_main_btn.configure(fg_color="transparent", text_color=TEXT_MAIN, hover_color=CARD_BG_ALT)
+
+    # ------------------------------------------------------------------
+    # "Principal" screen
     # ------------------------------------------------------------------
     def _build_principal_tab(self) -> None:
         pad = {"padx": 12, "pady": 8}
@@ -264,30 +330,31 @@ class MainWindow(ctk.CTk):
         ctrl_frame = ctk.CTkFrame(parent, fg_color=CARD_BG, border_width=1, border_color=BORDER)
         ctrl_frame.pack(fill="x", **pad)
         self.start_btn = ctk.CTkButton(
-            ctrl_frame, text="🤘 Iniciar backup", command=self._toggle_server, fg_color=GREEN, hover_color=GREEN_HOVER,
-            text_color="#08120b", font=ctk.CTkFont(weight="bold"),
+            ctrl_frame, text=self.t("btn_start"), command=self._toggle_server, fg_color=GREEN,
+            hover_color=GREEN_HOVER, text_color="#08120b", font=ctk.CTkFont(weight="bold"),
         )
         self.start_btn.pack(side="left", padx=10, pady=10)
-        self.status_label = ctk.CTkLabel(ctrl_frame, text="Estado: Detenido", text_color=TEXT_MUTED)
+        self.status_label = ctk.CTkLabel(ctrl_frame, text=self.t("status_stopped"), text_color=TEXT_MUTED)
         self.status_label.pack(side="left", padx=12)
 
         info_frame = ctk.CTkFrame(parent, fg_color=CARD_BG, border_width=1, border_color=BORDER)
         info_frame.pack(fill="x", **pad)
-        ctk.CTkLabel(
-            info_frame, text="Dirección del servidor (igual para todos los perfiles):",
-            font=ctk.CTkFont(weight="bold"), text_color=TEXT_MAIN,
-        ).pack(anchor="w", padx=10, pady=(8, 0))
-        self.address_label = ctk.CTkLabel(info_frame, text="Dirección: -", text_color=TEXT_MUTED)
+        self.server_address_title_label = ctk.CTkLabel(
+            info_frame, text=self.t("server_address_title"), font=ctk.CTkFont(weight="bold"), text_color=TEXT_MAIN,
+        )
+        self.server_address_title_label.pack(anchor="w", padx=10, pady=(8, 0))
+        self.address_label = ctk.CTkLabel(info_frame, text=self.t("address_placeholder"), text_color=TEXT_MUTED)
         self.address_label.pack(anchor="w", padx=10, pady=2)
-        self.ip_label = ctk.CTkLabel(info_frame, text="IP alternativa: -", text_color=TEXT_MUTED)
+        self.ip_label = ctk.CTkLabel(info_frame, text=self.t("ip_placeholder"), text_color=TEXT_MUTED)
         self.ip_label.pack(anchor="w", padx=10, pady=(2, 10))
 
         profiles_frame = ctk.CTkFrame(parent, fg_color=CARD_BG, border_width=1, border_color=BORDER)
         profiles_frame.pack(fill="both", expand=True, **pad)
-        ctk.CTkLabel(
-            profiles_frame, text="Perfiles conectados a este backup:",
+        self.profiles_connected_title_label = ctk.CTkLabel(
+            profiles_frame, text=self.t("profiles_connected_title"),
             font=ctk.CTkFont(weight="bold"), text_color=TEXT_MAIN,
-        ).pack(anchor="w", padx=10, pady=(8, 4))
+        )
+        self.profiles_connected_title_label.pack(anchor="w", padx=10, pady=(8, 4))
         self.principal_profiles_container = ctk.CTkScrollableFrame(profiles_frame, fg_color=BG)
         self.principal_profiles_container.pack(fill="both", expand=True, padx=8, pady=(0, 10))
         self.principal_profiles_container.grid_columnconfigure(0, weight=1)
@@ -295,12 +362,12 @@ class MainWindow(ctk.CTk):
         stats_frame = ctk.CTkFrame(parent, fg_color=CARD_BG, border_width=1, border_color=BORDER)
         stats_frame.pack(fill="x", **pad)
         self.stats_label = ctk.CTkLabel(
-            stats_frame, text="Última copia (todos los perfiles): nunca   |   Total archivos: 0", text_color=TEXT_MAIN
+            stats_frame, text=self.t("aggregate_stats", last=self.t("never"), total=0), text_color=TEXT_MAIN
         )
         self.stats_label.pack(anchor="w", padx=10, pady=8)
 
         self.log_toggle_btn = ctk.CTkButton(
-            parent, text="▼  Mostrar actividad", command=self._toggle_log, anchor="w",
+            parent, text=self.t("show_activity"), command=self._toggle_log, anchor="w",
             fg_color=CARD_BG, hover_color=CARD_BG_ALT, border_width=1, border_color=BORDER, text_color=TEXT_MAIN,
         )
         self.log_toggle_btn.pack(fill="x", padx=12, pady=(0, 4))
@@ -315,31 +382,95 @@ class MainWindow(ctk.CTk):
         self.log_box.configure(state="disabled")
 
     # ------------------------------------------------------------------
-    # "Perfiles" tab
+    # "⚙ Configuración" (Settings) screen — language + profile management
     # ------------------------------------------------------------------
-    def _build_perfiles_tab(self) -> None:
-        parent = self.tab_perfiles
-        header_row = ctk.CTkFrame(parent, fg_color="transparent")
-        header_row.pack(fill="x", padx=12, pady=(12, 4))
-        ctk.CTkLabel(
-            header_row, text="Perfiles (personas o dispositivos)", font=ctk.CTkFont(size=16, weight="bold"),
-            text_color=TEXT_MAIN,
-        ).pack(side="left")
-        ctk.CTkButton(
-            header_row, text="+ Agregar perfil", width=140, fg_color=ACCENT, hover_color=ACCENT_HOVER,
-            command=self._add_profile,
-        ).pack(side="right")
+    def _build_settings_tab(self) -> None:
+        parent = self.tab_settings
 
-        ctk.CTkLabel(
-            parent,
-            text="Crea un perfil por cada iPhone/iPad. Cada uno tiene su propio token y su propia carpeta —"
-            " nunca se mezclan.",
-            text_color=TEXT_MUTED, wraplength=760, justify="left",
-        ).pack(fill="x", padx=12, pady=(0, 8))
+        lang_frame = ctk.CTkFrame(parent, fg_color=CARD_BG, border_width=1, border_color=BORDER)
+        lang_frame.pack(fill="x", padx=12, pady=(12, 8))
+        self.language_title_label = ctk.CTkLabel(
+            lang_frame, text=self.t("language_title"), font=ctk.CTkFont(weight="bold"), text_color=TEXT_MAIN,
+        )
+        self.language_title_label.pack(anchor="w", padx=10, pady=(10, 4))
+        lang_btns = ctk.CTkFrame(lang_frame, fg_color="transparent")
+        lang_btns.pack(anchor="w", padx=10, pady=(0, 10))
+        self.lang_buttons: dict[str, ctk.CTkButton] = {}
+        for code in LANGUAGES:
+            btn = ctk.CTkButton(
+                lang_btns, text=LANGUAGE_NAMES[code], width=110, command=lambda c=code: self._set_language(c)
+            )
+            btn.pack(side="left", padx=(0, 8))
+            self.lang_buttons[code] = btn
+        self._refresh_language_buttons()
+
+        header_row = ctk.CTkFrame(parent, fg_color="transparent")
+        header_row.pack(fill="x", padx=12, pady=(8, 4))
+        self.profiles_title_label = ctk.CTkLabel(
+            header_row, text=self.t("profiles_title"), font=ctk.CTkFont(size=16, weight="bold"), text_color=TEXT_MAIN,
+        )
+        self.profiles_title_label.pack(side="left")
+        self.add_profile_btn = ctk.CTkButton(
+            header_row, text=self.t("add_profile"), width=140, fg_color=ACCENT, hover_color=ACCENT_HOVER,
+            command=self._add_profile,
+        )
+        self.add_profile_btn.pack(side="right")
+
+        self.profiles_hint_label = ctk.CTkLabel(
+            parent, text=self.t("profiles_hint"), text_color=TEXT_MUTED, wraplength=760, justify="left",
+        )
+        self.profiles_hint_label.pack(fill="x", padx=12, pady=(0, 8))
 
         self.perfiles_container = ctk.CTkScrollableFrame(parent, fg_color=BG)
         self.perfiles_container.pack(fill="both", expand=True, padx=12, pady=(0, 12))
         self.perfiles_container.grid_columnconfigure(0, weight=1)
+
+    def _refresh_language_buttons(self) -> None:
+        for code, btn in self.lang_buttons.items():
+            if code == self.lang:
+                btn.configure(fg_color=ACCENT, text_color=ACCENT_INK, hover_color=ACCENT_HOVER, border_width=0)
+            else:
+                btn.configure(
+                    fg_color="transparent", text_color=TEXT_MAIN, hover_color=CARD_BG_ALT,
+                    border_width=1, border_color=BORDER,
+                )
+
+    def _set_language(self, code: str) -> None:
+        if code == self.lang or code not in LANGUAGES:
+            return
+        self.lang = code
+        self.cfg.language = code
+        self.cfg.save()
+        self._apply_language()
+
+    def _apply_language(self) -> None:
+        """Re-applies every translatable widget's text in place — no restart."""
+        self.tagline_label.configure(text=self.t("tagline"))
+        self.nav_main_btn.configure(text=self.t("nav_main"))
+        self.nav_settings_btn.configure(text=self.t("nav_settings"))
+
+        running = bool(self.controller and self.controller.running)
+        self.start_btn.configure(text=self.t("btn_stop") if running else self.t("btn_start"))
+        self.status_label.configure(
+            text=self.t("status_listening", port=self.cfg.port) if running else self.t("status_stopped")
+        )
+
+        self.server_address_title_label.configure(text=self.t("server_address_title"))
+        self._update_connection_info()
+        self.profiles_connected_title_label.configure(text=self.t("profiles_connected_title"))
+
+        self.log_toggle_btn.configure(text=self.t("hide_activity") if self.log_visible else self.t("show_activity"))
+
+        self.language_title_label.configure(text=self.t("language_title"))
+        self._refresh_language_buttons()
+        self.profiles_title_label.configure(text=self.t("profiles_title"))
+        self.add_profile_btn.configure(text=self.t("add_profile"))
+        self.profiles_hint_label.configure(text=self.t("profiles_hint"))
+
+        self._refresh_aggregate_stats()
+        self._refresh_principal_profiles()
+        self._refresh_settings_profiles()
+        self._show_screen(self.current_screen)  # re-apply selected/unselected nav styling
 
     # ------------------------------------------------------------------
     # Log setup
@@ -355,8 +486,12 @@ class MainWindow(ctk.CTk):
     # ------------------------------------------------------------------
     def _update_connection_info(self) -> None:
         hostname = socket.gethostname()
-        self.address_label.configure(text=f"Dirección: http://{hostname}.local:{self.cfg.port}")
-        self.ip_label.configure(text=f"IP alternativa: http://{get_local_ip()}:{self.cfg.port}")
+        self.address_label.configure(
+            text=self.t("address_value", url=f"http://{hostname}.local:{self.cfg.port}")
+        )
+        self.ip_label.configure(
+            text=self.t("ip_value", url=f"http://{get_local_ip()}:{self.cfg.port}")
+        )
 
     def _toggle_server(self) -> None:
         try:
@@ -368,45 +503,37 @@ class MainWindow(ctk.CTk):
             import traceback
 
             details = traceback.format_exc()
-            self._log_local(f"ERROR al iniciar/detener el servidor:\n{details}")
-            messagebox.showerror(
-                APP_TITLE, f"Ocurrió un error al iniciar/detener el servidor:\n\n{details}"
-            )
+            self._log_local(f"ERROR:\n{details}")
+            messagebox.showerror(APP_TITLE, self.t("err_toggle_server", details=details))
 
     def _start_server(self) -> None:
         profiles = self.profile_store.list()
         if not profiles:
-            messagebox.showwarning(
-                APP_TITLE, 'Agrega al menos un perfil (pestaña "Perfiles") antes de iniciar.'
-            )
+            messagebox.showwarning(APP_TITLE, self.t("warn_no_profiles"))
             return
         if not any(p.destination_dir for p in profiles):
-            messagebox.showwarning(
-                APP_TITLE,
-                'Ningún perfil tiene carpeta destino configurada. Ve a "Perfiles" y usa '
-                '"Elegir carpeta..." en al menos uno.',
-            )
+            messagebox.showwarning(APP_TITLE, self.t("warn_no_destination"))
             return
 
         app_module.configure(self.profile_store)
         self.controller = ServerController(app_module.app, host="0.0.0.0", port=self.cfg.port)
         self.controller.start()
 
-        self.start_btn.configure(text="Detener backup", fg_color=RED, hover_color=RED_HOVER, text_color=TEXT_MAIN)
-        self.status_label.configure(text=f"Estado: Escuchando en el puerto {self.cfg.port} 🤘", text_color=GREEN)
-        self._log_local("Servidor iniciado. A darle.")
+        self.start_btn.configure(text=self.t("btn_stop"), fg_color=RED, hover_color=RED_HOVER, text_color=TEXT_MAIN)
+        self.status_label.configure(text=self.t("status_listening", port=self.cfg.port), text_color=GREEN)
+        self._log_local(self.t("log_server_started"))
 
     def _stop_server(self) -> None:
         if self.controller:
             self.controller.stop()
         self.start_btn.configure(
-            text="🤘 Iniciar backup", fg_color=GREEN, hover_color=GREEN_HOVER, text_color="#08120b"
+            text=self.t("btn_start"), fg_color=GREEN, hover_color=GREEN_HOVER, text_color="#08120b"
         )
-        self.status_label.configure(text="Estado: Detenido", text_color=TEXT_MUTED)
-        self._log_local("Servidor detenido.")
+        self.status_label.configure(text=self.t("status_stopped"), text_color=TEXT_MUTED)
+        self._log_local(self.t("log_server_stopped"))
 
     # ------------------------------------------------------------------
-    # Profiles — "Principal" tab (status + enable/pause only)
+    # Profiles — "Principal" screen (status + enable/pause only)
     # ------------------------------------------------------------------
     def _refresh_principal_profiles(self) -> None:
         profiles = self.profile_store.list()
@@ -422,11 +549,11 @@ class MainWindow(ctk.CTk):
             self._principal_rows.clear()
             if self._principal_empty_label is None or not self._principal_empty_label.winfo_exists():
                 self._principal_empty_label = ctk.CTkLabel(
-                    self.principal_profiles_container,
-                    text='Aún no hay perfiles. Ve a la pestaña "Perfiles" y arranca la banda.',
-                    text_color=TEXT_MUTED,
+                    self.principal_profiles_container, text=self.t("empty_profiles_main"), text_color=TEXT_MUTED,
                 )
                 self._principal_empty_label.grid(row=0, column=0, sticky="w", padx=8, pady=8)
+            else:
+                self._principal_empty_label.configure(text=self.t("empty_profiles_main"))
             return
 
         if self._principal_empty_label is not None and self._principal_empty_label.winfo_exists():
@@ -436,22 +563,23 @@ class MainWindow(ctk.CTk):
         for i, profile in enumerate(profiles):
             row = self._principal_rows.get(profile.id)
             if row is None:
-                row = ProfileStatusRow(self.principal_profiles_container, profile, self._on_toggle_profile)
+                row = ProfileStatusRow(self.principal_profiles_container, profile, self.lang, self._on_toggle_profile)
                 self._principal_rows[profile.id] = row
             else:
-                row.update_data(profile)
+                row.update_data(profile, self.lang)
             row.grid(row=i, column=0, sticky="ew", padx=4, pady=4)
 
     def _on_toggle_profile(self, profile: Profile, enabled: bool) -> None:
         self.profile_store.set_enabled(profile.id, enabled)
-        self._log_local(f"Perfil \"{profile.name}\" {'activado' if enabled else 'pausado'}.")
+        key = "log_profile_activated" if enabled else "log_profile_paused"
+        self._log_local(self.t(key, name=profile.name))
         self._refresh_principal_profiles()
-        self._refresh_perfiles_tab()
+        self._refresh_settings_profiles()
 
     # ------------------------------------------------------------------
-    # Profiles — "Perfiles" tab (full management)
+    # Profiles — "⚙ Configuración" screen (full management)
     # ------------------------------------------------------------------
-    def _refresh_perfiles_tab(self) -> None:
+    def _refresh_settings_profiles(self) -> None:
         callbacks = {
             "choose_dest": self._choose_profile_destination,
             "history": self._show_destination_history,
@@ -464,38 +592,38 @@ class MainWindow(ctk.CTk):
         profiles = self.profile_store.list()
         current_ids = {p.id for p in profiles}
 
-        for pid in list(self._perfiles_rows.keys()):
+        for pid in list(self._settings_rows.keys()):
             if pid not in current_ids:
-                self._perfiles_rows.pop(pid).destroy()
+                self._settings_rows.pop(pid).destroy()
 
         if not profiles:
-            for row in self._perfiles_rows.values():
+            for row in self._settings_rows.values():
                 row.destroy()
-            self._perfiles_rows.clear()
-            if self._perfiles_empty_label is None or not self._perfiles_empty_label.winfo_exists():
-                self._perfiles_empty_label = ctk.CTkLabel(
-                    self.perfiles_container,
-                    text='Aún no hay perfiles. Usa "+ Agregar perfil" para registrar un iPhone o iPad.',
-                    text_color=TEXT_MUTED,
+            self._settings_rows.clear()
+            if self._settings_empty_label is None or not self._settings_empty_label.winfo_exists():
+                self._settings_empty_label = ctk.CTkLabel(
+                    self.perfiles_container, text=self.t("empty_profiles_settings"), text_color=TEXT_MUTED,
                 )
-                self._perfiles_empty_label.grid(row=0, column=0, sticky="w", padx=8, pady=8)
+                self._settings_empty_label.grid(row=0, column=0, sticky="w", padx=8, pady=8)
+            else:
+                self._settings_empty_label.configure(text=self.t("empty_profiles_settings"))
             return
 
-        if self._perfiles_empty_label is not None and self._perfiles_empty_label.winfo_exists():
-            self._perfiles_empty_label.destroy()
-            self._perfiles_empty_label = None
+        if self._settings_empty_label is not None and self._settings_empty_label.winfo_exists():
+            self._settings_empty_label.destroy()
+            self._settings_empty_label = None
 
         for i, profile in enumerate(profiles):
-            row = self._perfiles_rows.get(profile.id)
+            row = self._settings_rows.get(profile.id)
             if row is None:
-                row = ProfileManageRow(self.perfiles_container, profile, callbacks)
-                self._perfiles_rows[profile.id] = row
+                row = ProfileManageRow(self.perfiles_container, profile, self.lang, callbacks)
+                self._settings_rows[profile.id] = row
             else:
-                row.update_data(profile)
+                row.update_data(profile, self.lang)
             row.grid(row=i, column=0, sticky="ew", padx=4, pady=4)
 
     def _add_profile(self) -> None:
-        dialog = ctk.CTkInputDialog(text='Nombre del perfil (ej. "iPhone de Laura"):', title="Agregar perfil")
+        dialog = ctk.CTkInputDialog(text=self.t("dlg_add_profile_text"), title=self.t("dlg_add_profile_title"))
         name = dialog.get_input()
         if not name:
             return
@@ -506,20 +634,15 @@ class MainWindow(ctk.CTk):
             return
         self.clipboard_clear()
         self.clipboard_append(profile.token)
-        messagebox.showinfo(
-            APP_TITLE,
-            f'Perfil "{profile.name}" creado.\n\nToken (ya copiado al portapapeles):\n{profile.token}\n\n'
-            "Pégalo en el Atajo de ese dispositivo siguiendo el manual de configuración del iPhone.\n\n"
-            "Ahora elige la carpeta destino de este perfil.",
-        )
+        messagebox.showinfo(APP_TITLE, self.t("msg_profile_created", name=profile.name, token=profile.token))
         self._choose_profile_destination(profile)
-        self._refresh_perfiles_tab()
+        self._refresh_settings_profiles()
         self._refresh_principal_profiles()
 
     def _choose_profile_destination(self, profile: Profile) -> None:
         current = self.profile_store.get(profile.id) or profile
         chosen = filedialog.askdirectory(
-            title=f'Carpeta destino para "{current.name}"',
+            title=self.t("dlg_choose_dest_title", name=current.name),
             initialdir=current.destination_dir or self.cfg.last_destination_dir or None,
         )
         if not chosen:
@@ -528,36 +651,39 @@ class MainWindow(ctk.CTk):
         app_module.forget_profile(profile.id)  # drop any cached engine pointing at the old folder
         self.cfg.last_destination_dir = chosen  # convenience default for the next profile's picker
         self.cfg.save()
-        self._refresh_perfiles_tab()
+        self._refresh_settings_profiles()
         self._refresh_principal_profiles()
 
     def _show_destination_history(self, profile: Profile) -> None:
         current = self.profile_store.get(profile.id) or profile
         history = list(reversed(current.destination_history))  # most recent first
         if not history:
-            messagebox.showinfo(APP_TITLE, f'"{current.name}" todavía no tiene historial de carpetas/USB.')
+            messagebox.showinfo(APP_TITLE, self.t("msg_no_history", name=current.name))
             return
         lines = []
         for snap in history:
-            label = snap.get("volume_label") or "Sin etiqueta"
+            label = snap.get("volume_label") or self.t("no_label")
             free = format_bytes(snap.get("free_bytes"))
             total = format_bytes(snap.get("total_bytes"))
             serial = snap.get("volume_serial") or "?"
             when = snap.get("recorded_at", "")[:19].replace("T", " ")
-            marker = " (actual)" if snap.get("path") == current.destination_dir else ""
+            marker = self.t("history_current") if snap.get("path") == current.destination_dir else ""
             lines.append(
-                f'{when}{marker}\n  "{label}"  ·  serie {serial}  ·  {free} libres de {total}\n  {snap.get("path")}'
+                f'{when}{marker}\n  "{label}"  ·  {self.t("history_serial", serial=serial)}  ·  '
+                f'{free} / {total}\n  {snap.get("path")}'
             )
-        messagebox.showinfo(APP_TITLE, f'Historial de carpetas/USB para "{current.name}":\n\n' + "\n\n".join(lines))
+        messagebox.showinfo(APP_TITLE, self.t("history_title", name=current.name, lines="\n\n".join(lines)))
 
     def _copy_profile_token(self, profile: Profile) -> None:
         current = self.profile_store.get(profile.id) or profile
         self.clipboard_clear()
         self.clipboard_append(current.token)
-        messagebox.showinfo(APP_TITLE, f'Token de "{current.name}" copiado al portapapeles.')
+        messagebox.showinfo(APP_TITLE, self.t("msg_token_copied", name=current.name))
 
     def _rename_profile(self, profile: Profile) -> None:
-        dialog = ctk.CTkInputDialog(text=f'Nuevo nombre para "{profile.name}":', title="Renombrar perfil")
+        dialog = ctk.CTkInputDialog(
+            text=self.t("dlg_rename_text", name=profile.name), title=self.t("dlg_rename_title")
+        )
         new_name = dialog.get_input()
         if not new_name:
             return
@@ -566,32 +692,24 @@ class MainWindow(ctk.CTk):
         except ValueError as exc:
             messagebox.showerror(APP_TITLE, str(exc))
             return
-        self._refresh_perfiles_tab()
+        self._refresh_settings_profiles()
         self._refresh_principal_profiles()
 
     def _regenerate_profile_token(self, profile: Profile) -> None:
-        if not messagebox.askyesno(
-            APP_TITLE,
-            f'¿Renovar el token de "{profile.name}"?\n\nEl Atajo de ese dispositivo dejará de funcionar hasta '
-            "que pegues el nuevo token ahí.",
-        ):
+        if not messagebox.askyesno(APP_TITLE, self.t("confirm_regenerate", name=profile.name)):
             return
         new_token = self.profile_store.regenerate_token(profile.id)
         self.clipboard_clear()
         self.clipboard_append(new_token)
-        messagebox.showinfo(APP_TITLE, f"Nuevo token (copiado al portapapeles):\n{new_token}")
-        self._refresh_perfiles_tab()
+        messagebox.showinfo(APP_TITLE, self.t("msg_new_token", token=new_token))
+        self._refresh_settings_profiles()
 
     def _delete_profile(self, profile: Profile) -> None:
-        if not messagebox.askyesno(
-            APP_TITLE,
-            f'¿Eliminar el perfil "{profile.name}"?\n\nSus archivos YA respaldados no se borran — solo se '
-            "revoca su acceso (su token dejará de funcionar).",
-        ):
+        if not messagebox.askyesno(APP_TITLE, self.t("confirm_delete", name=profile.name)):
             return
         self.profile_store.remove(profile.id)
         app_module.forget_profile(profile.id)
-        self._refresh_perfiles_tab()
+        self._refresh_settings_profiles()
         self._refresh_principal_profiles()
 
     # ------------------------------------------------------------------
@@ -601,10 +719,10 @@ class MainWindow(ctk.CTk):
         self.log_visible = not self.log_visible
         if self.log_visible:
             self.log_frame.pack(fill="both", expand=True, padx=12, pady=(0, 12))
-            self.log_toggle_btn.configure(text="▲  Ocultar actividad")
+            self.log_toggle_btn.configure(text=self.t("hide_activity"))
         else:
             self.log_frame.pack_forget()
-            self.log_toggle_btn.configure(text="▼  Mostrar actividad")
+            self.log_toggle_btn.configure(text=self.t("show_activity"))
 
     # ------------------------------------------------------------------
     # Live updates
@@ -625,16 +743,23 @@ class MainWindow(ctk.CTk):
             self.log_box.configure(state="disabled")
         self.after(300, self._drain_log_queue)
 
-    def _refresh_status_loop(self) -> None:
+    def _refresh_aggregate_stats(self) -> None:
         if app_module.is_configured():
             try:
                 agg = app_module.get_aggregate_status()
-                last = agg["last_backup_at"] or "nunca"
-                self.stats_label.configure(
-                    text=f"Última copia (todos los perfiles): {last}   |   Total archivos: {agg['total_files_backed_up']}"
-                )
+                last = agg["last_backup_at"] or self.t("never")
+                self.stats_label.configure(text=self.t("aggregate_stats", last=last, total=agg["total_files_backed_up"]))
+            except Exception:
+                pass
+        else:
+            self.stats_label.configure(text=self.t("aggregate_stats", last=self.t("never"), total=0))
+
+    def _refresh_status_loop(self) -> None:
+        if app_module.is_configured():
+            try:
+                self._refresh_aggregate_stats()
                 self._refresh_principal_profiles()
-                self._refresh_perfiles_tab()
+                self._refresh_settings_profiles()
             except Exception:
                 pass
         self.after(1500, self._refresh_status_loop)
@@ -647,8 +772,8 @@ class MainWindow(ctk.CTk):
         import traceback
 
         details = "".join(traceback.format_exception(exc, val, tb))
-        self._log_local(f"ERROR inesperado:\n{details}")
-        messagebox.showerror(APP_TITLE, f"Ocurrió un error inesperado:\n\n{val}")
+        self._log_local(f"ERROR:\n{details}")
+        messagebox.showerror(APP_TITLE, self.t("err_unexpected", val=val))
 
     def _on_close(self) -> None:
         if self.controller and self.controller.running:

@@ -4,15 +4,28 @@ Esta guía explica qué hace cada pantalla y cada botón de la app. Para
 instalarla por primera vez, usa el **Manual de instalación**; para
 problemas, el **Manual de solución de problemas**.
 
-## La ventana tiene 2 pestañas
+## La ventana tiene 2 pantallas
 
 - **Principal**: encender/apagar el backup, ver a qué dirección deben
   conectarse tus dispositivos, y el estado de cada perfil.
-- **Perfiles**: crear, configurar y administrar cada persona/dispositivo.
+- **⚙ Configuración**: cambiar el idioma de la app, y crear/administrar
+  cada persona o dispositivo (perfiles).
+
+Se cambia entre ellas con los dos botones de arriba, justo debajo del
+nombre de la app.
 
 ---
 
-## Pestaña "Principal"
+## Pantalla "⚙ Configuración" → Idioma
+
+Arriba de todo en Configuración hay dos botones: **Español** / **English**.
+Tócalo y **toda la app cambia de idioma al instante** — botones, títulos,
+mensajes, todo — sin cerrar ni reiniciar nada. Tu elección se recuerda la
+próxima vez que abras la app.
+
+---
+
+## Pantalla "Principal"
 
 ### Botón "🤘 Iniciar backup" / "Detener backup"
 
@@ -80,9 +93,10 @@ algo está pasando en tiempo real mientras corres un Atajo desde el iPhone.
 
 ---
 
-## Pestaña "Perfiles"
+## Pantalla "⚙ Configuración" → Perfiles
 
-Aquí se gestionan las identidades — una por cada persona o dispositivo.
+Debajo del selector de idioma es donde se gestionan las identidades — una
+por cada persona o dispositivo.
 
 ### "+ Agregar perfil"
 
@@ -114,7 +128,7 @@ Aquí se gestionan las identidades — una por cada persona o dispositivo.
 2. Presionas **"🤘 Iniciar backup"**.
 3. Corres el Atajo en tu iPhone (manual, o automático si configuraste la
    automatización de WiFi).
-4. Ves en la pestaña Principal cómo va subiendo (despliega "Mostrar
+4. Ves en la pantalla Principal cómo va subiendo (despliega "Mostrar
    actividad" si quieres el detalle en vivo).
 5. Cuando termines, puedes cerrar la app o dejarla — no hace nada por su
    cuenta mientras no le des "Iniciar backup".

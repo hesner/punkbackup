@@ -45,10 +45,12 @@ FOOTER = """<div id="footerContent" class="brand">PunkBackup — Tus recuerdos. 
 # (markdown source, output pdf filename)
 MANUALS = [
     (ROOT / "docs" / "es" / "manual_instalacion.md", "PunkBackup - Manual de Instalacion (ES).pdf"),
+    (ROOT / "docs" / "es" / "manual_de_uso.md", "PunkBackup - Manual de Uso (ES).pdf"),
     (ROOT / "docs" / "es" / "manual_troubleshooting.md", "PunkBackup - Manual de Solucion de Problemas (ES).pdf"),
     (ROOT / "docs" / "es" / "manual_desinstalacion.md", "PunkBackup - Manual de Desinstalacion (ES).pdf"),
     (ROOT / "shortcuts" / "INSTRUCCIONES_ATAJO.md", "PunkBackup - Configuracion del iPhone (ES).pdf"),
     (ROOT / "docs" / "en" / "installation_manual.md", "PunkBackup - Installation Manual (EN).pdf"),
+    (ROOT / "docs" / "en" / "usage_manual.md", "PunkBackup - Usage Manual (EN).pdf"),
     (ROOT / "docs" / "en" / "troubleshooting_manual.md", "PunkBackup - Troubleshooting Manual (EN).pdf"),
     (ROOT / "docs" / "en" / "uninstallation_manual.md", "PunkBackup - Uninstallation Manual (EN).pdf"),
     (ROOT / "shortcuts" / "SHORTCUT_INSTRUCTIONS.md", "PunkBackup - iPhone Setup Manual (EN).pdf"),

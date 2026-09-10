@@ -37,6 +37,7 @@ them the hard way.
 ## Getting started
 
 - [Installation Manual (PDF, EN)](docs/pdf/PunkBackup%20-%20Installation%20Manual%20(EN).pdf) · [Manual de instalación (PDF, ES)](<docs/pdf/PunkBackup - Manual de Instalacion (ES).pdf>)
+- [Usage Manual (PDF, EN)](<docs/pdf/PunkBackup - Usage Manual (EN).pdf>) · [Manual de uso (PDF, ES)](<docs/pdf/PunkBackup - Manual de Uso (ES).pdf>)
 - [iPhone Setup Manual (PDF, EN)](<docs/pdf/PunkBackup - iPhone Setup Manual (EN).pdf>) · [Configuración del iPhone (PDF, ES)](<docs/pdf/PunkBackup - Configuracion del iPhone (ES).pdf>)
 - [Troubleshooting Manual (PDF, EN)](<docs/pdf/PunkBackup - Troubleshooting Manual (EN).pdf>) · [Solución de problemas (PDF, ES)](<docs/pdf/PunkBackup - Manual de Solucion de Problemas (ES).pdf>)
 - [Uninstallation Manual (PDF, EN)](<docs/pdf/PunkBackup - Uninstallation Manual (EN).pdf>) · [Desinstalación (PDF, ES)](<docs/pdf/PunkBackup - Manual de Desinstalacion (ES).pdf>)

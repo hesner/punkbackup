@@ -29,7 +29,6 @@ import logging
 import logging.handlers
 import queue
 import socket
-from pathlib import Path
 from tkinter import filedialog, messagebox
 
 import customtkinter as ctk
@@ -37,9 +36,11 @@ import customtkinter as ctk
 from server import app as app_module
 from server.config import AppConfig
 from server.diskinfo import format_bytes
+from server.paths import app_root
 from server.profiles import Profile, ProfileStore
 from server.runner import ServerController
 
+from .dialogs import ask_input, ask_yes_no, show_error, show_info, show_warning
 from .i18n import LANGUAGES, LANGUAGE_NAMES, t as _t
 
 # PunkBackup: dark, industrial, deliberately rebellious. "Tus recuerdos. Tu
@@ -65,7 +66,7 @@ RED = "#ff3b30"
 RED_HOVER = "#c62828"
 TERMINAL_GREEN = "#39d353"  # log text — CRT/hacker-terminal touch
 
-ICON_PATH = Path(__file__).resolve().parent.parent / "assets" / "punkbackup.ico"
+ICON_PATH = app_root() / "assets" / "punkbackup.ico"
 
 
 def get_local_ip() -> str:
@@ -504,15 +505,15 @@ class MainWindow(ctk.CTk):
 
             details = traceback.format_exc()
             self._log_local(f"ERROR:\n{details}")
-            messagebox.showerror(APP_TITLE, self.t("err_toggle_server", details=details))
+            show_error(self, self.lang, self.t("dlg_title_error"), self.t("err_toggle_server", details=details))
 
     def _start_server(self) -> None:
         profiles = self.profile_store.list()
         if not profiles:
-            messagebox.showwarning(APP_TITLE, self.t("warn_no_profiles"))
+            show_warning(self, self.lang, self.t("dlg_title_warning"), self.t("warn_no_profiles"))
             return
         if not any(p.destination_dir for p in profiles):
-            messagebox.showwarning(APP_TITLE, self.t("warn_no_destination"))
+            show_warning(self, self.lang, self.t("dlg_title_warning"), self.t("warn_no_destination"))
             return
 
         app_module.configure(self.profile_store)
@@ -623,18 +624,20 @@ class MainWindow(ctk.CTk):
             row.grid(row=i, column=0, sticky="ew", padx=4, pady=4)
 
     def _add_profile(self) -> None:
-        dialog = ctk.CTkInputDialog(text=self.t("dlg_add_profile_text"), title=self.t("dlg_add_profile_title"))
-        name = dialog.get_input()
+        name = ask_input(self, self.lang, self.t("dlg_add_profile_title"), self.t("dlg_add_profile_text"))
         if not name:
             return
         try:
             profile = self.profile_store.add(name)
         except ValueError as exc:
-            messagebox.showerror(APP_TITLE, str(exc))
+            show_error(self, self.lang, self.t("dlg_title_error"), str(exc))
             return
         self.clipboard_clear()
         self.clipboard_append(profile.token)
-        messagebox.showinfo(APP_TITLE, self.t("msg_profile_created", name=profile.name, token=profile.token))
+        show_info(
+            self, self.lang, self.t("dlg_title_profile_created"),
+            self.t("msg_profile_created", name=profile.name, token=profile.token), copy_value=profile.token,
+        )
         self._choose_profile_destination(profile)
         self._refresh_settings_profiles()
         self._refresh_principal_profiles()
@@ -658,7 +661,7 @@ class MainWindow(ctk.CTk):
         current = self.profile_store.get(profile.id) or profile
         history = list(reversed(current.destination_history))  # most recent first
         if not history:
-            messagebox.showinfo(APP_TITLE, self.t("msg_no_history", name=current.name))
+            show_info(self, self.lang, self.t("dlg_title_history"), self.t("msg_no_history", name=current.name))
             return
         lines = []
         for snap in history:
@@ -672,40 +675,50 @@ class MainWindow(ctk.CTk):
                 f'{when}{marker}\n  "{label}"  ·  {self.t("history_serial", serial=serial)}  ·  '
                 f'{free} / {total}\n  {snap.get("path")}'
             )
-        messagebox.showinfo(APP_TITLE, self.t("history_title", name=current.name, lines="\n\n".join(lines)))
+        show_info(
+            self, self.lang, self.t("dlg_title_history"),
+            self.t("history_title", name=current.name, lines="\n\n".join(lines)),
+        )
 
     def _copy_profile_token(self, profile: Profile) -> None:
         current = self.profile_store.get(profile.id) or profile
         self.clipboard_clear()
         self.clipboard_append(current.token)
-        messagebox.showinfo(APP_TITLE, self.t("msg_token_copied", name=current.name))
+        show_info(
+            self, self.lang, self.t("dlg_title_token_copied"),
+            self.t("msg_token_copied", name=current.name), copy_value=current.token,
+        )
 
     def _rename_profile(self, profile: Profile) -> None:
-        dialog = ctk.CTkInputDialog(
-            text=self.t("dlg_rename_text", name=profile.name), title=self.t("dlg_rename_title")
+        new_name = ask_input(
+            self, self.lang, self.t("dlg_rename_title"), self.t("dlg_rename_text", name=profile.name)
         )
-        new_name = dialog.get_input()
         if not new_name:
             return
         try:
             self.profile_store.rename(profile.id, new_name)
         except ValueError as exc:
-            messagebox.showerror(APP_TITLE, str(exc))
+            show_error(self, self.lang, self.t("dlg_title_error"), str(exc))
             return
         self._refresh_settings_profiles()
         self._refresh_principal_profiles()
 
     def _regenerate_profile_token(self, profile: Profile) -> None:
-        if not messagebox.askyesno(APP_TITLE, self.t("confirm_regenerate", name=profile.name)):
+        if not ask_yes_no(self, self.lang, self.t("dlg_title_confirm"), self.t("confirm_regenerate", name=profile.name)):
             return
         new_token = self.profile_store.regenerate_token(profile.id)
         self.clipboard_clear()
         self.clipboard_append(new_token)
-        messagebox.showinfo(APP_TITLE, self.t("msg_new_token", token=new_token))
+        show_info(
+            self, self.lang, self.t("dlg_title_new_token"), self.t("msg_new_token", token=new_token),
+            copy_value=new_token,
+        )
         self._refresh_settings_profiles()
 
     def _delete_profile(self, profile: Profile) -> None:
-        if not messagebox.askyesno(APP_TITLE, self.t("confirm_delete", name=profile.name)):
+        if not ask_yes_no(
+            self, self.lang, self.t("dlg_title_confirm"), self.t("confirm_delete", name=profile.name), danger=True
+        ):
             return
         self.profile_store.remove(profile.id)
         app_module.forget_profile(profile.id)
@@ -773,7 +786,14 @@ class MainWindow(ctk.CTk):
 
         details = "".join(traceback.format_exception(exc, val, tb))
         self._log_local(f"ERROR:\n{details}")
-        messagebox.showerror(APP_TITLE, self.t("err_unexpected", val=val))
+        message = self.t("err_unexpected", val=val)
+        try:
+            show_error(self, self.lang, self.t("dlg_title_error"), message)
+        except Exception:
+            # Last-resort fallback: if the custom dialog itself errors while
+            # we're already handling an uncaught exception, fall back to the
+            # plain native messagebox rather than risk masking the error.
+            messagebox.showerror(APP_TITLE, message)
 
     def _on_close(self) -> None:
         if self.controller and self.controller.running:

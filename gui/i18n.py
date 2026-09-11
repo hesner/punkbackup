@@ -179,6 +179,16 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "es": "Ocurrió un error inesperado:\n\n{val}",
         "en": "An unexpected error occurred:\n\n{val}",
     },
+
+    # Titles for the custom dark dialogs in gui/dialogs.py (bodies reuse the
+    # message keys above — these are just the short header line).
+    "dlg_title_error": {"es": "Error", "en": "Error"},
+    "dlg_title_warning": {"es": "Atención", "en": "Heads up"},
+    "dlg_title_profile_created": {"es": "Perfil creado", "en": "Profile created"},
+    "dlg_title_history": {"es": "Historial de carpetas/USB", "en": "Folder/USB history"},
+    "dlg_title_token_copied": {"es": "Token copiado", "en": "Token copied"},
+    "dlg_title_new_token": {"es": "Nuevo token", "en": "New token"},
+    "dlg_title_confirm": {"es": "Confirmar", "en": "Confirm"},
 }
 
 

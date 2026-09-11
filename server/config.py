@@ -10,9 +10,10 @@ from __future__ import annotations
 
 import json
 from dataclasses import asdict, dataclass
-from pathlib import Path
 
-CONFIG_DIR = Path(__file__).resolve().parent.parent / "config"
+from .paths import user_data_dir
+
+CONFIG_DIR = user_data_dir()
 CONFIG_PATH = CONFIG_DIR / "config.json"
 
 DEFAULT_PORT = 8787

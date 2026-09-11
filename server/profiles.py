@@ -22,8 +22,9 @@ from pathlib import Path
 from typing import Optional
 
 from .diskinfo import get_volume_info
+from .paths import user_data_dir
 
-PROFILES_PATH = Path(__file__).resolve().parent.parent / "config" / "profiles.json"
+PROFILES_PATH = user_data_dir() / "profiles.json"
 
 MAX_DESTINATION_HISTORY = 20  # per profile — oldest entries drop off
 

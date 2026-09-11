@@ -20,7 +20,10 @@
 3. Confirma que el servidor esté encendido en la PC ("Escuchando en el
    puerto...").
 4. Revisa que la regla de Firewall exista: PowerShell (como administrador) →
-   `Get-NetFirewallRule -DisplayName "iPhone WiFi Backup"`.
+   `Get-NetFirewallRule -DisplayName "PunkBackup"`. Si no aparece (por
+   ejemplo, si no marcaste esa casilla durante la instalación), agrégala
+   con `New-NetFirewallRule -DisplayName "PunkBackup" -Direction Inbound
+   -Protocol TCP -LocalPort 8787 -Profile Private -Action Allow`.
 
 ## Error 401 "Missing or invalid X-Backup-Token header"
 

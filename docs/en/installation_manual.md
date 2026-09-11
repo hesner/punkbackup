@@ -14,78 +14,55 @@ person/device gets its own profile with its own destination folder.
 ## Requirements
 
 - **Windows 10 or 11** PC.
-- **Internet** connection (only for the initial install).
+- **Internet** connection (only to download the installer).
 - The iPhone/iPad and the PC must be able to reach the **same WiFi
   network** at backup time.
-- **Administrator** rights on the PC (asked once, for the Firewall rule).
+- **Administrator** rights on the PC (asked once, during install — to
+  copy the program and add the Firewall rule).
 
-> This version requires a few Terminal (PowerShell) steps to install
-> Python. A future double-click installer will remove this requirement.
+## Step 1 — Download the installer
 
-## Step 1 — Install Python
+Download `PunkBackupSetup.exe` from the project's release page:
 
-1. Open **PowerShell** (search it in the Start menu).
-2. Run:
-   ```
-   winget install --id Python.Python.3.12 --source winget --accept-package-agreements --accept-source-agreements
-   ```
-3. Wait for it to finish (a few minutes).
+**https://github.com/hesner/punkbackup/releases/latest**
 
-## Step 2 — Copy the project to your PC
+## Step 2 — Run the installer
 
-1. Copy the whole project folder (the one shared with you) to a permanent
-   location, e.g. `C:\PunkBackup`.
-2. Open PowerShell **inside that folder** (right-click the folder → "Open
-   in Terminal", or navigate there with `cd`).
+1. Double-click `PunkBackupSetup.exe`.
+2. Windows may show a **SmartScreen** warning ("Windows protected your PC")
+   since this is a new program without a paid code-signing certificate —
+   click **"More info"** → **"Run anyway"**.
+3. Accept the **User Account Control (UAC)** prompt — the installer needs
+   admin rights to copy the program into `Program Files` and to add the
+   Firewall rule.
+4. If your antivirus scans the file (e.g. Avast, "Suspicious file
+   detected" / reputation scan), that's normal for a brand-new installer —
+   let it finish, it shouldn't find anything.
+5. Follow the wizard:
+   - Pick the setup language (this does **not** set the app's language —
+     the app has its own ES/EN switch in "⚙ Settings").
+   - Keep **"Create a desktop icon"** checked to get the Desktop shortcut.
+   - Keep the **Firewall rule** task checked (recommended — if you skip
+     it, you'll need to add it manually later for your iPhone to connect).
+   - Click **Install** and wait for it to finish.
+6. At the end, leave "Launch PunkBackup" checked and click **Finish** —
+   the app opens on its own.
 
-## Step 3 — Set up the environment
+## Step 3 — First launch
 
-Run these one at a time, inside the project folder:
-
-```
-py -m venv .venv
-.venv\Scripts\python.exe -m pip install --upgrade pip
-.venv\Scripts\python.exe -m pip install -r requirements.txt
-```
-
-## Step 4 — Create the Desktop shortcut
-
-Run in PowerShell (adjust the path if you copied the project elsewhere):
-
-```powershell
-$projectDir = "C:\PunkBackup"
-$target = Join-Path $projectDir ".venv\Scripts\pythonw.exe"
-$script = Join-Path $projectDir "main.py"
-$icon = Join-Path $projectDir "assets\punkbackup.ico"
-$desktop = [Environment]::GetFolderPath('Desktop')
-$shortcutPath = Join-Path $desktop "PunkBackup.lnk"
-
-$WshShell = New-Object -ComObject WScript.Shell
-$Shortcut = $WshShell.CreateShortcut($shortcutPath)
-$Shortcut.TargetPath = $target
-$Shortcut.Arguments = '"' + $script + '"'
-$Shortcut.WorkingDirectory = $projectDir
-$Shortcut.IconLocation = $icon + ",0"
-$Shortcut.Save()
-```
-
-You should now see a new **"PunkBackup"** icon on your Desktop.
-
-## Step 5 — First launch and Firewall rule
-
-1. Double-click the Desktop icon — the app opens (dark window, two
-   screens: "Main" and "⚙ Settings").
-2. Go to **"⚙ Settings"** → tap **"English"** at the top (if it isn't
-   already selected).
-3. Still in **"⚙ Settings"**, click **"+ Add profile"** → name your device
+1. The app opens (dark window, two screens: "Main" and "⚙ Settings"),
+   in Spanish by default — switch it to English per the note at the top
+   of this manual, if you haven't already.
+2. Go to **"⚙ Settings"** → click **"+ Add profile"** → name your device
    (e.g. "iPhone de [your name]") → pick the folder where you want your
    photos saved.
-4. Go to **"Main"** → click **"🤘 Start backup"**.
-5. The first time, Windows may show a **Firewall** prompt asking to allow
-   the connection — accept it, checking at least **"Private networks"**.
-6. It should say **"Status: Listening on port 8787 🤘"**.
+3. Go to **"Main"** → click **"🤘 Start backup"**.
+4. If you didn't check the Firewall task during install, Windows may show
+   the prompt here instead asking to allow the connection — accept it,
+   checking at least **"Private networks"**.
+5. It should say **"Status: Listening on port 8787 🤘"**.
 
-## Step 6 — Set up your iPhone
+## Step 4 — Set up your iPhone
 
 Follow the separate **iPhone Setup Manual** to create the Shortcut and,
 optionally, the WiFi automation.

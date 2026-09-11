@@ -22,7 +22,10 @@
    "Fallback IP" the app also shows.
 3. Confirm the server is on in the PC app ("Status: Listening on port...").
 4. Check the Firewall rule exists: PowerShell (as administrator) →
-   `Get-NetFirewallRule -DisplayName "iPhone WiFi Backup"`.
+   `Get-NetFirewallRule -DisplayName "PunkBackup"`. If it's missing (e.g.
+   you skipped that checkbox during install), add it with
+   `New-NetFirewallRule -DisplayName "PunkBackup" -Direction Inbound
+   -Protocol TCP -LocalPort 8787 -Profile Private -Action Allow`.
 
 ## 401 error "Missing or invalid X-Backup-Token header"
 

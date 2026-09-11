@@ -4,42 +4,44 @@ Uninstalling this system is safe and **does not delete any of your already
 backed-up photos** — only the program itself is removed; your backup
 folders (on your disk or USB) stay exactly where they were.
 
-## Step 1 — Stop the server
+## Step 1 — Stop the server (optional)
 
-1. Open the app (Desktop icon) if it isn't open.
-2. If it says "Status: Listening on port...", click **"Stop backup"**.
-3. Close the window.
+If the app is open and says "Status: Listening on port...", click
+**"Stop backup"** and close the window. Not required — the uninstaller can
+close the app for you — but it's tidier to do it by hand first.
 
-## Step 2 — Remove the Firewall rule (optional)
+## Step 2 — Uninstall from Windows
 
-Open PowerShell **as administrator** and run:
+1. Open **Settings** → **Apps** → **Installed apps** (or search
+   "Add or remove programs" in the Start menu).
+2. Find **"PunkBackup"** in the list.
+3. Click the three dots (or right-click) → **Uninstall**.
+4. Accept the **User Account Control (UAC)** prompt.
+5. Follow the wizard and click **Finish** when it's done.
 
-```powershell
-Remove-NetFirewallRule -DisplayName "iPhone WiFi Backup"
-```
+This automatically removes:
 
-## Step 3 — Delete the Desktop shortcut
+- The program (`Program Files\PunkBackup`).
+- The Desktop and Start Menu shortcuts.
+- The Firewall rule added during install.
 
-Delete the **"PunkBackup"** icon from your Desktop (right-click → Delete),
-like any other shortcut.
+And **intentionally keeps**:
 
-## Step 4 — Delete the program folder
+- Your profiles and tokens (`%APPDATA%\PunkBackup`) — so if you reinstall
+  later, you don't have to recreate every profile or re-paste tokens into
+  each iPhone's Shortcut.
+- Your already-backed-up photo folders (on whichever disk/USB you chose
+  per profile) — the uninstaller never touches those.
 
-Delete the folder where you installed the project (e.g. `C:\PunkBackup`).
-This removes the program, its configuration, and the list of
-profiles/tokens — it does **not** touch your already-backed-up photo
-folders, which live in a different location (the destination folder you
-chose per profile).
+If you also want to wipe your profiles/tokens, delete the
+`%APPDATA%\PunkBackup` folder by hand after uninstalling.
 
-## Step 5 — (Optional) Remove the Shortcut from the iPhone
+## Step 3 — (Optional) Remove the Shortcut from the iPhone
 
 1. On the iPhone, open **Shortcuts**.
 2. Long-press the shortcut (`PunkBackup`) → **Delete**.
 3. If you created a WiFi automation, go to the **Automation** tab →
    long-press it → **Delete**.
-4. If you created a "Respaldado" album in an older version of this system
-   (no longer needed in the current version), you can delete it from
-   Photos → Albums.
 
 ## What about my already-backed-up photos?
 

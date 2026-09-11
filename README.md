@@ -38,6 +38,8 @@ them the hard way.
 
 ## Getting started
 
+**[⬇ Download PunkBackupSetup.exe](https://github.com/hesner/punkbackup/releases/latest)** — Windows 10/11, no Python required. Run it, accept the one admin prompt (Program Files + Firewall rule), done.
+
 - [Installation Manual (PDF, EN)](docs/pdf/PunkBackup%20-%20Installation%20Manual%20(EN).pdf) · [Manual de instalación (PDF, ES)](<docs/pdf/PunkBackup - Manual de Instalacion (ES).pdf>)
 - [Usage Manual (PDF, EN)](<docs/pdf/PunkBackup - Usage Manual (EN).pdf>) · [Manual de uso (PDF, ES)](<docs/pdf/PunkBackup - Manual de Uso (ES).pdf>)
 - [iPhone Setup Manual (PDF, EN)](<docs/pdf/PunkBackup - iPhone Setup Manual (EN).pdf>) · [Configuración del iPhone (PDF, ES)](<docs/pdf/PunkBackup - Configuracion del iPhone (ES).pdf>)

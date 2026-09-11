@@ -87,7 +87,7 @@ Backup photos/
 ├── PLAN.md
 ├── README.md                    (GitHub, en inglés)
 ├── LICENSE                      (MIT)
-├── AGENTS.md                    (instrucciones de reconstrucción para un agente de IA — pendiente)
+├── AGENTS.md                    (instrucciones de reconstrucción para un agente de IA)
 ├── requirements.txt
 ├── main.py                      (entry point de la GUI)
 ├── .venv/                       (entorno virtual, no se versiona)
@@ -108,8 +108,8 @@ Backup photos/
 ├── shortcuts/
 │   ├── INSTRUCCIONES_ATAJO.md   (ES — plantilla genérica)
 │   └── SHORTCUT_INSTRUCTIONS.md (EN — plantilla genérica)
-├── docs/                        (manuales en PDF — pendiente)
-├── installer/                   (instalador Windows — pendiente)
+├── docs/                        (manuales en PDF, landing page GitHub Pages)
+├── installer/                   (PunkBackup.iss — Inno Setup, empaqueta dist/ de PyInstaller)
 └── tests/
     ├── test_backup_engine.py
     ├── test_api.py
@@ -208,13 +208,33 @@ Tabla `runs` (una corrida de backup, para `/status`):
 - Se crea un **acceso directo en el Escritorio** que al hacer doble clic abre
   la GUI; desde ahí el usuario decide cuándo encender el servidor.
 
-## 8. Distribución / instalador
-- Instalador para Windows fácil de usar (probablemente con Inno Setup empaquetando
-  el `.exe` generado por PyInstaller) que:
-  - Copia los archivos del programa.
-  - Crea el acceso directo del Escritorio.
-  - Deja lista la regla de Firewall (con permiso del usuario durante la instalación).
-  - Incluye un desinstalador limpio.
+## 8. Distribución / instalador — HECHO
+- `PunkBackupSetup.exe`, construido con PyInstaller (`--onedir --windowed`,
+  ver comando exacto en `installer/PunkBackup.iss`) + Inno Setup
+  (`installer/PunkBackup.iss`). Publicado como asset en
+  https://github.com/hesner/punkbackup/releases/latest.
+- Copia los archivos del programa a `Program Files\PunkBackup` (requiere
+  admin — un solo UAC durante la instalación).
+- Crea accesos directos del Escritorio y Menú Inicio, con el ícono real.
+- Agrega/quita la regla de Firewall (`netsh advfirewall`, nombre de regla
+  `"PunkBackup"`) como tarea opcional marcada por defecto.
+- Desinstalador limpio registrado en "Agregar o quitar programas": borra
+  programa + accesos directos + regla de Firewall; conserva a propósito
+  `%APPDATA%\PunkBackup` (perfiles/tokens) para que sobreviva a una
+  reinstalación.
+- Detalle no obvio de PyInstaller 6+: en modo `--onedir`, todo excepto el
+  `.exe` lanzador vive bajo `_internal\` (incluidos los assets agregados
+  con `--add-data`) — `sys._MEIPASS` en frío apunta ahí, no a la carpeta
+  del `.exe`. El `.iss` referencia los íconos como
+  `{app}\_internal\assets\punkbackup.ico`, no `{app}\assets\...`.
+- Detalle no obvio de Inno Setup: recuerda el estado de las casillas de
+  `[Tasks]` entre instalaciones del mismo AppId y las pre-marca según la
+  elección anterior — si el usuario no marcó "crear ícono de Escritorio"
+  la primera vez, instalaciones posteriores pueden aparecer con esa
+  casilla desmarcada por defecto aunque el usuario la vea marcada por
+  costumbre. Por eso `[UninstallDelete]` borra el acceso directo del
+  Escritorio incondicionalmente, sin depender de que Inno lo tenga
+  registrado como creado por esa instalación.
 
 ## 9. Documentación a entregar
 - `README.md` (GitHub, en inglés, estándar de la plataforma).
@@ -272,6 +292,13 @@ Tabla `runs` (una corrida de backup, para `/status`):
 - [x] WiFi de casa (para la automatización personal del usuario): `IOESTUDIO`.
 - [x] Historial de volúmenes por perfil (etiqueta, serie, espacio libre).
 - [x] Nombre final del proyecto: **PunkBackup**.
-- [ ] Aplicar tema oscuro/punk (al final, para no interrumpir un backup en curso).
+- [x] Tema oscuro/punk aplicado.
+- [x] Publicado en GitHub (`hesner/punkbackup`, público, MIT) + GitHub Pages
+      (`hesner.github.io/punkbackup`).
+- [x] Instalador Windows (`PunkBackupSetup.exe`, Inno Setup) — publicado en
+      GitHub Releases, probado de punta a punta (instalar/actualizar/
+      desinstalar) en la PC real del usuario. Ver sección 8.
+- [x] Diálogos propios oscuros (`gui/dialogs.py`) reemplazando el
+      `messagebox`/`CTkInputDialog` nativos, que rompían el tema oscuro.
 - [ ] Automatización WiFi en el iPhone del usuario (al final).
 - [ ] Compartir el Atajo a otro iPhone/perfil (al final).

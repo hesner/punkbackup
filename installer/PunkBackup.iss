@@ -72,6 +72,15 @@ Filename: "{app}\{#MyAppExeName}"; Description: "{cm:LaunchProgram,{#MyAppName}}
 Filename: "netsh.exe"; Parameters: "advfirewall firewall delete rule name=""PunkBackup"""; Flags: runhidden; RunOnceId: "RemovePunkBackupFirewallRule"
 
 [UninstallDelete]
+; Explicit, rather than relying on Inno's own "did this install create it"
+; tracking for the desktopicon Task — Inno remembers a Task's checked state
+; from a previous install of the same AppId and pre-fills the Tasks page
+; with it, so a shortcut can exist on disk (created by an earlier run, or
+; fixed up by hand) without this install run being the one that put it
+; there. Deleting it unconditionally on uninstall avoids ever leaving a
+; dangling shortcut that points at a now-removed PunkBackup.exe.
+Type: files; Name: "{autodesktop}\{#MyAppName}.lnk"
+
 ; The app writes its config/profiles under %APPDATA%\PunkBackup (see server/paths.py).
 ; Left in place on uninstall by default — it holds each profile's secret tokens and
 ; destination history, which the user likely wants to keep if they reinstall later.

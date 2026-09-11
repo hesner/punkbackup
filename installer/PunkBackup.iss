@@ -56,9 +56,13 @@ Name: "firewall"; Description: "Allow PunkBackup through Windows Firewall (requi
 Source: "..\dist\PunkBackup\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
 
 [Icons]
-Name: "{group}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; IconFilename: "{app}\assets\punkbackup.ico"
+; PyInstaller 6+ onedir builds put everything except the launcher .exe under
+; a _internal\ subfolder (that's also where sys._MEIPASS points at runtime,
+; per server/paths.py's app_root()) — the bundled assets/punkbackup.ico
+; therefore lives at {app}\_internal\assets\punkbackup.ico, NOT {app}\assets\.
+Name: "{group}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; IconFilename: "{app}\_internal\assets\punkbackup.ico"
 Name: "{group}\{cm:UninstallProgram,{#MyAppName}}"; Filename: "{uninstallexe}"
-Name: "{autodesktop}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; IconFilename: "{app}\assets\punkbackup.ico"; Tasks: desktopicon
+Name: "{autodesktop}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; IconFilename: "{app}\_internal\assets\punkbackup.ico"; Tasks: desktopicon
 
 [Run]
 Filename: "netsh.exe"; Parameters: "advfirewall firewall add rule name=""PunkBackup"" dir=in action=allow protocol=TCP localport=8787 profile=private"; Flags: runhidden; Tasks: firewall

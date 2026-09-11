@@ -127,7 +127,7 @@ Laura", "iPad de Hesner"). Diseño:
   automáticamente de qué perfil se trata — el servidor no necesita que se
   "seleccione" un perfil activo de antemano.
 - Cada perfil tiene **su propia carpeta destino independiente**, elegida al
-  crear el perfil (o después, desde la pestaña Perfiles): `<carpeta del
+  crear el perfil (o después, desde "⚙ Configuración"): `<carpeta del
   perfil>/<YYYY>/<MM>/archivo`. Puede ser un USB distinto para cada persona
   — no hay una carpeta compartida entre perfiles, ni necesitan sincronizarse.
 - Cada perfil tiene **su propio índice incremental** (vive dentro de su
@@ -138,7 +138,7 @@ Laura", "iPad de Hesner"). Diseño:
   siguen funcionando normal.
 - Cada vez que se elige/cambia la carpeta destino de un perfil, se guarda un
   **historial de volúmenes** (etiqueta del USB, número de serie, capacidad,
-  espacio libre, fecha) — botón "Historial USB" en la pestaña Perfiles —
+  espacio libre, fecha) — botón "Historial USB" en "⚙ Configuración" —
   para que el usuario recuerde qué disco físico es cuál, aunque Windows le
   asigne una letra de unidad distinta cada vez que lo conecta.
 - **Cualquier perfil puede respaldar en cualquier momento**: mientras el

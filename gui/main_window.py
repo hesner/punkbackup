@@ -29,6 +29,7 @@ import logging
 import logging.handlers
 import queue
 import socket
+from datetime import datetime, timezone
 from tkinter import filedialog, messagebox
 
 import customtkinter as ctk
@@ -82,6 +83,24 @@ def get_local_ip() -> str:
         s.close()
 
 
+def _format_local(iso_utc: str | None) -> str | None:
+    """Every timestamp the server hands the GUI (last_backup_at, a
+    destination-history snapshot's recorded_at, ...) is stored in UTC —
+    see manifest_db.py's _now(). The GUI is the only layer that should
+    ever convert it: show the user their own device's local time, never
+    change what's actually stored. Returns None (so callers can fall back
+    to their own "never"/empty text) if there's nothing to format."""
+    if not iso_utc:
+        return None
+    try:
+        dt = datetime.fromisoformat(iso_utc)
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=timezone.utc)
+        return dt.astimezone().strftime("%Y-%m-%d %H:%M")
+    except ValueError:
+        return iso_utc  # unexpected format — show it raw rather than crash
+
+
 def _volume_text(profile: Profile, lang: str) -> str:
     vol = profile.current_volume
     if not vol:
@@ -105,7 +124,7 @@ def _profile_stats_text(profile: Profile, lang: str) -> str:
     if app_module.is_configured():
         try:
             st = app_module.get_status_for_profile(profile)
-            last = st["last_backup_at"] or _t("never", lang)
+            last = _format_local(st["last_backup_at"]) or _t("never", lang)
             stats_line = _t("stats_line", lang, last=last, count=st["total_files_backed_up"])
         except Exception:
             pass
@@ -252,6 +271,8 @@ class MainWindow(ctk.CTk):
         self.controller: ServerController | None = None
         self.log_queue: "queue.Queue[str]" = queue.Queue()
         self.log_visible = False
+        self._extra_log_widgets: list[ctk.CTkTextbox] = []  # expanded-log popups also live-fed
+        self._log_popup: ctk.CTkToplevel | None = None  # only one expanded window at a time
         self.current_screen = "main"
         self._principal_rows: dict[str, ProfileStatusRow] = {}
         self._principal_empty_label: ctk.CTkLabel | None = None
@@ -367,11 +388,21 @@ class MainWindow(ctk.CTk):
         )
         self.stats_label.pack(anchor="w", padx=10, pady=8)
 
+        log_btn_row = ctk.CTkFrame(parent, fg_color="transparent")
+        log_btn_row.pack(fill="x", padx=12, pady=(0, 4))
+        log_btn_row.grid_columnconfigure(0, weight=1)
+
         self.log_toggle_btn = ctk.CTkButton(
-            parent, text=self.t("show_activity"), command=self._toggle_log, anchor="w",
+            log_btn_row, text=self.t("show_activity"), command=self._toggle_log, anchor="w",
             fg_color=CARD_BG, hover_color=CARD_BG_ALT, border_width=1, border_color=BORDER, text_color=TEXT_MAIN,
         )
-        self.log_toggle_btn.pack(fill="x", padx=12, pady=(0, 4))
+        self.log_toggle_btn.grid(row=0, column=0, sticky="ew")
+
+        self.log_expand_btn = ctk.CTkButton(
+            log_btn_row, text=self.t("expand_activity"), command=self._open_log_popup, width=110,
+            fg_color=CARD_BG, hover_color=CARD_BG_ALT, border_width=1, border_color=BORDER, text_color=TEXT_MAIN,
+        )
+        self.log_expand_btn.grid(row=0, column=1, padx=(8, 0))
 
         self.log_frame = ctk.CTkFrame(parent, fg_color=CARD_BG_ALT, border_width=1, border_color=BORDER)
         # not packed yet — starts hidden
@@ -461,6 +492,7 @@ class MainWindow(ctk.CTk):
         self.profiles_connected_title_label.configure(text=self.t("profiles_connected_title"))
 
         self.log_toggle_btn.configure(text=self.t("hide_activity") if self.log_visible else self.t("show_activity"))
+        self.log_expand_btn.configure(text=self.t("expand_activity"))
 
         self.language_title_label.configure(text=self.t("language_title"))
         self._refresh_language_buttons()
@@ -669,7 +701,7 @@ class MainWindow(ctk.CTk):
             free = format_bytes(snap.get("free_bytes"))
             total = format_bytes(snap.get("total_bytes"))
             serial = snap.get("volume_serial") or "?"
-            when = snap.get("recorded_at", "")[:19].replace("T", " ")
+            when = _format_local(snap.get("recorded_at")) or ""
             marker = self.t("history_current") if snap.get("path") == current.destination_dir else ""
             lines.append(
                 f'{when}{marker}\n  "{label}"  ·  {self.t("history_serial", serial=serial)}  ·  '
@@ -737,6 +769,45 @@ class MainWindow(ctk.CTk):
             self.log_frame.pack_forget()
             self.log_toggle_btn.configure(text=self.t("show_activity"))
 
+    def _open_log_popup(self) -> None:
+        """A separate, resizable/maximizable window mirroring the same
+        live log — for when the small embedded panel isn't enough to read
+        a long run's activity. Fed by the same _drain_log_queue loop as
+        the main log box, so both stay in sync while both are open."""
+        if self._log_popup is not None and self._log_popup.winfo_exists():
+            self._log_popup.lift()
+            self._log_popup.focus_set()
+            return
+
+        popup = ctk.CTkToplevel(self)
+        popup.title(f"{APP_TITLE} — {self.t('expand_activity')}")
+        popup.geometry("900x600")
+        popup.configure(fg_color=BG)
+        try:
+            popup.iconbitmap(str(ICON_PATH))
+        except Exception:
+            pass
+
+        box = ctk.CTkTextbox(
+            popup, wrap="word", font=ctk.CTkFont(family="Consolas", size=13),
+            fg_color="#050505", text_color=TERMINAL_GREEN,
+        )
+        box.pack(fill="both", expand=True, padx=10, pady=10)
+        box.configure(state="normal")
+        box.insert("end", self.log_box.get("1.0", "end-1c"))  # seed with what's already there
+        box.see("end")
+        box.configure(state="disabled")
+
+        self._extra_log_widgets.append(box)
+
+        def _on_close() -> None:
+            if box in self._extra_log_widgets:
+                self._extra_log_widgets.remove(box)
+            popup.destroy()
+
+        popup.protocol("WM_DELETE_WINDOW", _on_close)
+        self._log_popup = popup
+
     # ------------------------------------------------------------------
     # Live updates
     # ------------------------------------------------------------------
@@ -754,13 +825,21 @@ class MainWindow(ctk.CTk):
             self.log_box.insert("end", "> " + text + "\n")
             self.log_box.see("end")
             self.log_box.configure(state="disabled")
+            for widget in list(self._extra_log_widgets):
+                if not widget.winfo_exists():
+                    self._extra_log_widgets.remove(widget)
+                    continue
+                widget.configure(state="normal")
+                widget.insert("end", "> " + text + "\n")
+                widget.see("end")
+                widget.configure(state="disabled")
         self.after(300, self._drain_log_queue)
 
     def _refresh_aggregate_stats(self) -> None:
         if app_module.is_configured():
             try:
                 agg = app_module.get_aggregate_status()
-                last = agg["last_backup_at"] or self.t("never")
+                last = _format_local(agg["last_backup_at"]) or self.t("never")
                 self.stats_label.configure(text=self.t("aggregate_stats", last=last, total=agg["total_files_backed_up"]))
             except Exception:
                 pass

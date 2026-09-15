@@ -46,6 +46,7 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
 
     "show_activity": {"es": "▼  Mostrar actividad", "en": "▼  Show activity"},
     "hide_activity": {"es": "▲  Ocultar actividad", "en": "▲  Hide activity"},
+    "expand_activity": {"es": "⤢ Expandir", "en": "⤢ Expand"},
 
     "profile_active": {"es": "Activo", "en": "Active"},
     "profile_paused": {"es": "Pausado", "en": "Paused"},

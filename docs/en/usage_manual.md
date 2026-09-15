@@ -58,7 +58,12 @@ Shortcut (they don't change per profile):
 One card per profile you've created, showing:
 
 - **Name** of the profile.
-- **Last backup** and **Files**: how many it has backed up so far.
+- **Total in destination**: how many files are in that profile's folder
+  in total (everything backed up so far, across every run), plus the
+  date of the last backup.
+- **Last run**: how many files were saved specifically in the Shortcut's
+  most recent run (new vs. already had) — if that run is still going,
+  it's marked "(in progress...)".
 - **Folder**: where it's saving its files.
 - **USB**: if its folder is on a removable drive, that drive's label and
   free space.
@@ -87,7 +92,10 @@ backed up recently, without checking each profile individually.
 **Hidden by default** to keep the screen uncluttered. Expanding it shows a
 live, terminal-style (green text) log of each file as it arrives: new,
 already existed, or conflict. Useful to confirm something is actually
-happening in real time while you run the Shortcut on your iPhone.
+happening in real time while you run the Shortcut on your iPhone. It also
+clearly marks when each run **starts** and **finishes** (with the final
+summary: new/already had/conflicts/errors), so you can see at a glance
+where each backup begins and ends in the log history.
 
 Next to that button is a smaller **"⤢ Expand"** button, which opens the
 same log in a separate, larger, resizable window — handy when a long run

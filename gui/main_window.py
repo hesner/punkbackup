@@ -121,14 +121,28 @@ def _profile_stats_text(profile: Profile, lang: str) -> str:
         lines.append(_t("stats_usb", lang, info=volume))
 
     stats_line = _t("stats_line", lang, last=_t("never", lang), count=0)
+    last_run_line = None
     if app_module.is_configured():
         try:
             st = app_module.get_status_for_profile(profile)
             last = _format_local(st["last_backup_at"]) or _t("never", lang)
             stats_line = _t("stats_line", lang, last=last, count=st["total_files_backed_up"])
+            last_run = st.get("last_run")
+            if last_run:
+                running = _t("stats_last_run_in_progress", lang) if last_run.get("finished_at") is None else ""
+                last_run_line = _t(
+                    "stats_last_run",
+                    lang,
+                    new=last_run.get("files_new", 0),
+                    skipped=last_run.get("files_skipped", 0),
+                    running=running,
+                )
         except Exception:
             pass
-    return "\n".join([stats_line] + lines)
+    result_lines = [stats_line]
+    if last_run_line:
+        result_lines.append(last_run_line)
+    return "\n".join(result_lines + lines)
 
 
 class ProfileStatusRow(ctk.CTkFrame):

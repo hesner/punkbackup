@@ -58,8 +58,16 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
     "stats_folder": {"es": "Carpeta: {path}", "en": "Folder: {path}"},
     "stats_usb": {"es": "USB: {info}", "en": "USB: {info}"},
     "stats_line": {
-        "es": "Última copia: {last}   |   Archivos: {count}",
-        "en": "Last backup: {last}   |   Files: {count}",
+        "es": "Total en destino: {count} archivos   |   Última copia: {last}",
+        "en": "Total in destination: {count} files   |   Last backup: {last}",
+    },
+    "stats_last_run": {
+        "es": "Última corrida: {new} guardados, {skipped} ya existían{running}",
+        "en": "Last run: {new} saved, {skipped} already had{running}",
+    },
+    "stats_last_run_in_progress": {
+        "es": " (en curso...)",
+        "en": " (in progress...)",
     },
     "no_label": {"es": "Sin etiqueta", "en": "Unlabeled"},
     "free_of_total": {

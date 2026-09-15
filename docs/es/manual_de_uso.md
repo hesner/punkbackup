@@ -59,7 +59,12 @@ cada iPhone/iPad (no cambian entre perfiles):
 Una tarjeta por cada perfil que hayas creado, con:
 
 - **Nombre** del perfil.
-- **Última copia** y **Archivos**: cuántos lleva respaldados ese perfil.
+- **Total en destino**: cuántos archivos hay en total en la carpeta de ese
+  perfil (todo lo respaldado hasta ahora, de todas las corridas), y la
+  fecha de la última copia.
+- **Última corrida**: cuántos archivos se guardaron específicamente en la
+  corrida más reciente del Atajo (nuevos vs. los que ya existían) — si el
+  Atajo sigue corriendo en ese momento, se marca "(en curso...)".
 - **Carpeta**: a dónde está guardando sus archivos.
 - **USB**: si su carpeta está en una unidad extraíble, la etiqueta y el
   espacio libre de ese disco.
@@ -90,6 +95,10 @@ Está **oculto por defecto** para no saturar la pantalla. Al desplegarlo,
 muestra un registro en vivo (estilo terminal, texto verde) de cada archivo
 que va llegando: nuevo, ya existía, o conflicto. Sirve para confirmar que
 algo está pasando en tiempo real mientras corres un Atajo desde el iPhone.
+También marca claramente cuándo **inicia** y cuándo **termina** cada
+corrida (con el resumen final: nuevos/ya existían/conflictos/errores), así
+que puedes ver de un vistazo dónde empieza y termina cada backup en el
+historial del log.
 
 Junto a ese botón hay uno más pequeño, **"⤢ Expandir"**, que abre el mismo
 registro en una ventana aparte, más grande y redimensionable — útil cuando

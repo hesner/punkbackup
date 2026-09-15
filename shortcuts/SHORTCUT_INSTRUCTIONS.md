@@ -72,19 +72,57 @@ Note down these values:
   of the previous step).
 - **Set Variable** action → name it `RunID` → value: the result above.
 
-### 3) Find ALL photos/videos
-- **Find Photos** action (may be labeled "Filter Photos" on some iOS versions):
-  - No album filter — we want **every** photo/video; the server decides
-    which ones it already has.
-  - Sort by: **Date Taken**, **Oldest First**.
-  - (Optional) Limit: if you have a huge library (several thousand), set a
-    limit (e.g. 300) to keep each run shorter — since the check is
-    lightweight and the system is incremental, you can just run the
-    shortcut again and it keeps making progress.
+### 3) Set up the backward block-sweep
 
-### 4) Loop through each item: ask first, only upload if missing
-- **Repeat with Each** action over the result of the previous step. Inside
-  the "Repeat" block:
+`Find Photos` has no built-in pagination — asked for everything at once, it
+fails outright on a large library (confirmed: no `Limit` = the Shortcut
+errors out, even doing nothing but counting results). The fix is to sweep
+the library **backward in bounded blocks**, newest photos first, each block
+capped at 50 items, advancing a moving date boundary between blocks — all
+within one run of the Shortcut.
+
+- **Text** action → type `50` (how many blocks of 50 to sweep per run — see
+  the tuning note at the end of this section).
+  - **Set Variable** → name it `Repeticiones`.
+- **Current Date** action.
+  - **Adjust Date** action → **Add 1 day** to it (so the very first block
+    excludes nothing — "before tomorrow" covers everything you have today).
+  - **Set Variable** → name it `Limite` (type: Date — keep it as an actual
+    Date value here, not text; the next step compares it directly against
+    each photo's `Date Taken`).
+- **Repeat** action (the plain "Repeat X times" kind, **not** "Repeat with
+  Each" — this is the outer loop) → for its count, insert the **Repeticiones**
+  variable instead of typing a fixed number.
+
+Everything below, through the end of section 4, goes **inside** this outer
+`Repeat`:
+
+- **Find Photos** action (may be labeled "Filter Photos" on some iOS versions):
+  - Add a filter: **Date Taken** → **is before** → insert the **Limite**
+    variable.
+  - Sort by: **Date Taken**. Order: **Latest First** (this is the opposite
+    of what you'd naturally pick — it's what makes the sweep start from your
+    newest photos and work backward).
+  - **Limit**: turn it **on**, set to **50**. This is mandatory, not optional
+    — `Find Photos` without a `Limit` fails on a large library.
+- **Count** action → **Items** in the `Find Photos` result above.
+- **If** action: condition = the `Count` result **is** `0` (this fires once
+  the sweep has passed your oldest photo — nothing left to check).
+  - Inside the "If": **Stop This Shortcut** action.
+  - Nothing needed in "Otherwise" — if the count isn't 0, execution just
+    continues past the "End If" into section 4 below.
+
+### 4) Loop through each item in the current block: ask first, only upload if missing
+- **Repeat with Each** action over the `Find Photos` result from section 3.
+  Inside this inner "Repeat" block:
+
+  a.0. **Set Variable** action, as the very first action in this block:
+     - Value: tap "Repeat Item" and choose the **Date Taken** attribute
+       (leave it as the raw Date — don't run it through Format Date here).
+     - Name the variable `UltimaFecha`. This captures the current item's
+       exact date+time; by the time the loop finishes, it holds the OLDEST
+       item's date in this block (since sorted newest-first) — section 4's
+       closing steps use it to move `Limite` for the next block.
 
   a. **Format Date** action:
      - Date: tap "Repeat Item" and choose the **Date Taken** attribute.
@@ -140,11 +178,35 @@ Note down these values:
          (Tapping it again opens a "Name/Album/Width..." property menu — if
          that happens and you end up with anything other than plain "Repeat
          Item", clear it with "Clear Variable" and re-insert it without
-         touching it a second time.)
+         touching it a second time.) If this chip ever shows up highlighted
+         in red/"broken" in the editor — it can happen after editing actions
+         earlier in the same loop — delete it and re-insert it fresh the
+         same way; a broken reference here silently uploads an empty (0-byte)
+         file instead of erroring visibly.
        - Headers: `X-Backup-Token` → `Token` variable.
 
      - (Nothing needed in the "Otherwise" branch — if it was already backed
        up, just move on to the next item.)
+
+  Still inside the **inner** "Repeat with Each", after its own "End Repeat"
+  but **before** the outer "End Repeat" from section 3 — these two actions
+  advance the sweep to the next block:
+
+  - **Adjust Date** action → **Subtract 1 minute** from **UltimaFecha**
+    (a small safety buffer, so a photo sharing the exact same timestamp as
+    the block boundary — e.g. burst-mode shots — never gets silently
+    skipped; worst case it's re-checked redundantly, which is harmless).
+  - **Set Variable** action → variable: **Limite** (pick the *existing*
+    `Limite` from the list, don't create a new one with the same name) →
+    value: the result of the `Adjust Date` above.
+
+> **Tuning `Repeticiones`**: each block of 50 that's already fully backed up
+> checks fast (no file transfer); a block with real new content takes
+> longer. Confirmed working with `Repeticiones` up to 50 (≈2500 photos
+> checked in one run) in real testing. For a full one-time backfill of a
+> very large library, run it a few times in a row rather than setting an
+> extremely high number the first time — you'll see in "Backup Fotos y
+> Videos"'s progress whether it's keeping up before pushing higher.
 
 ### 5) Close out the run and show you the result
 - **Get Contents of URL** action:
@@ -157,14 +219,9 @@ Note down these values:
   `Backup complete ✅\nNew: [files_new]\nAlready had: [files_skipped]\nConflicts: [files_conflict]`
 - **Show Notification** (or **Show Result**) action with that text.
 
-Save the shortcut — you can now tap it manually to test it.
-
-> **On how long each run takes**: the first time you run this against a
-> large library, it will check EVERY photo (the `/check` call is
-> lightweight — just filename/size/date, no file transfer — so it's fast
-> even for thousands of photos). Later runs cover the same full library but
-> feel much faster in practice, since most items will already be backed up
-> and `/check` answers instantly for those.
+Save the shortcut — you can now tap it manually to test it. (See the
+"Tuning `Repeticiones`" note in section 3 for how long a run takes on a
+large library, and how to size the sweep for your first backfill.)
 
 ---
 

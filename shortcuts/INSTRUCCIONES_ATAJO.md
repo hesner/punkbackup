@@ -68,19 +68,62 @@ Anota estos datos:
   resultado del paso anterior).
 - Acción **Establecer variable** → nombre `RunID` → valor: el resultado anterior.
 
-### 3) Buscar TODAS las fotos/videos
-- Acción **Buscar fotos** (o "Filtrar fotos" según tu versión de iOS):
-  - Sin filtro de álbum — queremos **todas** las fotos/videos; el servidor
-    decide cuáles ya tiene.
-  - Ordenar por: **Fecha de captura**, **Más antiguo primero**.
-  - (Opcional) Límite: si tienes una biblioteca enorme (varios miles), puedes
-    poner un límite (ej. 300) para que cada corrida sea más corta — como el
-    chequeo es liviano y el sistema es incremental, puedes correr el atajo
-    varias veces seguidas y cada vez seguirá avanzando.
+### 3) Armar el barrido en bloques hacia atrás
 
-### 4) Recorrer cada foto/video: preguntar primero, subir solo si falta
+`Buscar fotos` no tiene paginación integrada — pedirle todo de una vez
+directamente falla en una biblioteca grande (comprobado: sin `Limit`, el
+Atajo da error incluso solo contando resultados, sin subir nada). La
+solución es barrer la biblioteca **hacia atrás en bloques acotados**,
+empezando por las fotos más recientes, de a 50 a la vez, avanzando un
+límite de fecha móvil entre bloque y bloque — todo dentro de una sola
+corrida del Atajo.
+
+- Acción **Texto** → escribe `50` (cuántos bloques de 50 barrer por
+  corrida — ver la nota de ajuste al final de esta sección).
+  - **Establecer variable** → nómbrala `Repeticiones`.
+- Acción **Fecha actual** (Current Date).
+  - Acción **Ajustar fecha** (Adjust Date) → **Sumar 1 día** a esa fecha
+    (así el primer bloque no excluye nada — "antes de mañana" cubre todo
+    lo que tienes hoy).
+  - **Establecer variable** → nómbrala `Limite` (tipo Fecha — déjalo como
+    valor de Fecha real, no texto; el siguiente paso lo compara
+    directamente contra la fecha de captura de cada foto).
+- Acción **Repetir** (la versión simple "Repeat X times", **no** "Repetir
+  con cada elemento" — este es el loop externo) → como cantidad, inserta
+  la variable **Repeticiones** en vez de escribir un número fijo.
+
+Todo lo que sigue, hasta el final de la sección 4, va **dentro** de este
+`Repetir` externo:
+
+- Acción **Buscar fotos** (o "Filtrar fotos" según tu versión de iOS):
+  - Agrega un filtro: **Fecha de captura** → **es antes de** (is before) →
+    inserta la variable **Limite**.
+  - Ordenar por: **Fecha de captura**. Orden: **Más reciente primero**
+    (Latest First) — es lo opuesto a lo natural, y es justo lo que hace
+    que el barrido empiece por tus fotos más nuevas y avance hacia atrás.
+  - **Limit**: actívalo, ponlo en **50**. Esto es obligatorio, no
+    opcional — `Buscar fotos` sin `Limit` falla en una biblioteca grande.
+- Acción **Contar** (Count) → **Items** sobre el resultado de `Buscar fotos`.
+- Acción **Si** (If): condición = el resultado de `Count` **es** (is) `0`
+  (esto se cumple cuando el barrido ya pasó tu foto más vieja — no queda
+  nada por revisar).
+  - Dentro del "Si": acción **Stop This Shortcut**.
+  - No hace falta nada en "Si no" — si el conteo no es 0, la ejecución
+    simplemente sigue después del "End If" hacia la sección 4.
+
+### 4) Recorrer cada foto/video del bloque actual: preguntar primero, subir solo si falta
 - Acción **Repetir con cada elemento** (Repeat with Each) sobre el resultado
-  del paso anterior. Dentro del bloque "Repetir":
+  de `Buscar fotos` de la sección 3. Dentro de este bloque "Repetir" interno:
+
+  a.0. Acción **Establecer variable**, como la primera acción de este bloque:
+     - Valor: toca "Elemento de repetición" (Repeat Item) y elige el
+       atributo **Fecha de captura** (Date Taken) — déjalo como Fecha
+       cruda, sin pasarlo por Formatear fecha aquí.
+     - Nombra la variable `UltimaFecha`. Esto captura la fecha exacta del
+       elemento actual; al terminar el loop, queda con la fecha del
+       elemento MÁS VIEJO de ese bloque (porque está ordenado de más
+       nuevo a más viejo) — los pasos finales de la sección 4 la usan
+       para mover `Limite` de cara al siguiente bloque.
 
   a. Acción **Formatear fecha**:
      - Fecha: toca el "Elemento de repetición" (Repeat Item) y elige el
@@ -139,10 +182,37 @@ Anota estos datos:
          atributos tipo "Name/Album/Width..." — si eso pasa y terminas con
          algo distinto de "Repeat Item" a secas, bórralo con "Clear
          Variable" y vuelve a insertarlo desde cero sin tocarlo otra vez).
+         Si este chip alguna vez aparece resaltado en rojo/"roto" en el
+         editor — puede pasar después de editar otras acciones más arriba
+         en el mismo loop — bórralo y vuelve a insertarlo igual que antes;
+         una referencia rota aquí sube un archivo vacío (0 bytes) en vez
+         de dar un error visible.
        - Encabezados: `X-Backup-Token` → variable `Token`.
 
      - (No hace falta ninguna acción en el "Si no" — si ya estaba
        respaldada, simplemente no se hace nada y se sigue con la siguiente foto).
+
+  Todavía dentro del "Repetir con cada elemento" **interno**, después de su
+  propio "End Repeat" pero **antes** del "End Repeat" externo de la
+  sección 3 — estas dos acciones avanzan el barrido al siguiente bloque:
+
+  - Acción **Ajustar fecha** (Adjust Date) → **Restar 1 minuto** a
+    **UltimaFecha** (un pequeño colchón de seguridad, para que una foto
+    con el mismo timestamp exacto que el límite del bloque — por ejemplo
+    fotos en ráfaga — nunca se salte en silencio; en el peor caso se
+    vuelve a revisar de más, lo cual es inofensivo).
+  - Acción **Establecer variable** → variable: **Limite** (elige la
+    variable `Limite` ya existente en la lista, no crees una nueva con el
+    mismo nombre) → valor: el resultado del `Ajustar fecha` de arriba.
+
+> **Ajustando `Repeticiones`**: un bloque de 50 que ya está completo se
+> revisa rápido (sin transferir archivos); un bloque con contenido nuevo
+> de verdad tarda más. Comprobado funcionando con `Repeticiones` hasta 50
+> (≈2500 fotos revisadas en una sola corrida) en pruebas reales. Para un
+> respaldo inicial completo de una biblioteca muy grande, corre el atajo
+> varias veces seguidas en vez de poner un número muy alto desde el
+> principio — el progreso en "Backup Fotos y Videos" te dice si va bien
+> antes de subir el número.
 
 ### 5) Cerrar la corrida y mostrarte el resultado
 - Acción **Obtener contenido de URL**:
@@ -155,14 +225,10 @@ Anota estos datos:
   `Backup completo ✅\nNuevos: [files_new]\nYa existían: [files_skipped]\nConflictos: [files_conflict]`
 - Acción **Mostrar notificación** (o **Mostrar resultado**) con ese texto.
 
-Guarda el atajo (listo, ya puedes tocarlo manualmente para probarlo).
-
-> **Sobre la duración de cada corrida**: la primera vez que corras esto con
-> una biblioteca grande, va a revisar TODAS tus fotos (el chequeo `/check`
-> es liviano — solo nombre/tamaño/fecha, no manda el archivo — así que es
-> rápido incluso para miles de fotos). Las corridas siguientes son igual de
-> completas pero mucho más rápidas en la práctica porque casi todo ya
-> estará respaldado y el `/check` responde al instante para esos casos.
+Guarda el atajo (listo, ya puedes tocarlo manualmente para probarlo). (Ver
+la nota "Ajustando `Repeticiones`" en la sección 3 para saber cuánto tarda
+una corrida en una biblioteca grande, y cómo dimensionar el barrido para
+tu primer respaldo completo.)
 
 ---
 

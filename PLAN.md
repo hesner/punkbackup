@@ -183,6 +183,57 @@ Laura", "iPad de Hesner"). Diseño:
   fecha/hora del último backup, cantidad de archivos copiados en esa
   corrida, y estado general — todo por perfil.
 
+### 5.1 Bibliotecas grandes: barrido por bloques hacia atrás — HECHO
+
+`Find Photos` de Shortcuts no tiene paginación nativa. Comprobado en el
+dispositivo real: sin `Limit`, la acción falla directamente (incluso solo
+contando resultados, sin ningún procesamiento) — así que un `Limit` es
+obligatorio, no una optimización. Con un `Limit` fijo y sin forma de avanzar,
+el Atajo revisaría siempre el mismo conjunto de fotos más viejas, sin nunca
+llegar al resto de una biblioteca grande.
+
+**Solución implementada** (ver `shortcuts/SHORTCUT_INSTRUCTIONS.md` /
+`shortcuts/INSTRUCCIONES_ATAJO.md` para el paso a paso completo): dentro de
+**una sola ejecución** del Atajo, un loop externo (`Repeat Repeticiones
+times`) barre la biblioteca de la foto más nueva hacia la más vieja, en
+bloques de 50 (`Find Photos` con `Date Taken is before Limite`, `Latest
+First`, `Limit 50`). Al terminar cada bloque, `Limite` se actualiza a la
+fecha del ítem más viejo del bloque (menos 1 minuto de colchón, para no
+perder fotos con el mismo timestamp exacto en el borde de dos bloques —
+ráfagas). Si un bloque viene vacío, el Atajo se detiene (`Stop This
+Shortcut`) — ya pasó la foto más vieja.
+
+Este límite y cursor viven **enteramente en el Atajo** — no hay ningún
+endpoint de servidor dedicado a esto (se descartó un diseño anterior con un
+endpoint `/resume_cursor` basado en `MAX(taken_at)`, por tener una falla
+real: `Date Taken` no es monótono — una foto vieja reenviada por WhatsApp o
+descargada de Google Photos puede entrar a la librería hoy con una fecha de
+captura de hace años, y un cursor basado en esa fecha la saltaría para
+siempre). Como el barrido siempre arranca desde "mañana" y avanza hacia
+atrás dentro de la misma corrida, no hay ese punto ciego: cualquier foto,
+sin importar su fecha, se revisa dentro de esa misma ejecución.
+
+**Probado con carga real**: `Repeticiones` hasta 50 (≈2500 fotos revisadas
+en una corrida) subiendo archivos reales sin errores. El límite superior de
+cuántos bloques aguanta una sola ejecución de iOS no está confirmado —
+queda como trabajo futuro probarlo hasta las ~180 vueltas que cubrirían una
+biblioteca de ~9000 fotos.
+
+**Protección contra archivos vacíos**: se confirmó (captura de depuración
+directa al servidor) que el iPhone a veces envía un cuerpo vacío (0 bytes)
+al `/upload` — sobre todo cuando el Atajo corre con la pantalla bloqueada o
+en segundo plano (`User-Agent: BackgroundShortcutRunner`, el mismo modo en
+que corre la automatización por WiFi). El servidor (`BackupEngine.
+finalize_upload`) ahora **rechaza y no registra** un cuerpo de 0 bytes en
+vez de guardarlo como "respaldado" — así `/check` lo sigue reportando como
+"falta" y una corrida futura lo reintenta solo, sin envenenar el índice
+para siempre. Confirmado: con la pantalla activa en primer plano, las fotos
+suben al 100% de fiabilidad; los videos grandes fallan de forma
+intermitente incluso en primer plano (causa exacta no determinada —
+descartado iCloud, que estaba apagado; descartado que Google Fotos
+reemplace el original local) pero ya no representa pérdida de datos gracias
+a esta protección.
+
 ## 6. Modelo de datos (índice SQLite, uno por perfil)
 
 Tabla `backed_up_files`:
@@ -300,5 +351,11 @@ Tabla `runs` (una corrida de backup, para `/status`):
       desinstalar) en la PC real del usuario. Ver sección 8.
 - [x] Diálogos propios oscuros (`gui/dialogs.py`) reemplazando el
       `messagebox`/`CTkInputDialog` nativos, que rompían el tema oscuro.
+- [x] Backfill de bibliotecas grandes: barrido por bloques hacia atrás
+      dentro de una sola corrida del Atajo, probado con carga real
+      (`Repeticiones` hasta 50, ≈2500 fotos, sin errores). Ver sección 5.1.
+- [x] Protección del servidor contra subidas vacías (0 bytes) — se
+      rechazan en vez de registrarse, autorreparación vía reintento.
+- [x] Hora local (no UTC) en la GUI; panel de actividad expandible.
 - [ ] Automatización WiFi en el iPhone del usuario (al final).
 - [ ] Compartir el Atajo a otro iPhone/perfil (al final).

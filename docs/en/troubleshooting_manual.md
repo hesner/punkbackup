@@ -48,29 +48,50 @@
 
 ## The Shortcut runs but doesn't upload any new photo
 
-- Check **"Find Photos"** has no stray filter (it should just say "Find
-  Photos" with no extra conditions, only Sort/Order/Limit) — a filter that
-  sneaks in by accident makes it return 0 results silently, with no visible
+- Check **"Find Photos"** has no stray filter beyond the `Date Taken is
+  before Limite` one described in the iPhone Setup Manual — a different
+  filter sneaking in makes it return 0 results silently, with no visible
   error.
-- If "Find Photos" has a low **Limit** and you've run it several times, it
-  may keep checking the same oldest photos over and over — raise the Limit
-  to make progress.
+- Check **`Limit`** is turned **on** and set to **50** on `Find Photos` —
+  this is mandatory (not optional): without it, `Find Photos` fails outright
+  on a large library, even doing nothing but counting results.
 - Confirm under **iPhone Settings → Privacy & Security → Photos** that the
-  Shortcuts app has access ("All Photos" / "Always Allow").
+  Shortcuts app has access ("All Photos" / "Always Allow") — with limited
+  access, a photo you just took or saved may simply not be visible to the
+  Shortcut yet, with no error shown.
 
-## My library is huge (thousands of photos) and the full backup fails or freezes
+## My library is huge (thousands of photos) — will the full backup ever finish?
 
-- "Find Photos" with **no limit** scans your entire library at once — with
-  very large libraries (thousands of photos) this can take a long time or
-  cause iOS to interrupt the Shortcut with a generic error ("There was a
-  problem running the shortcut"). This is a **known limitation**, without a
-  definitive fix yet.
-- In the meantime: use a **moderate Limit** (e.g. 300-500) and run the
-  Shortcut several times manually — with a fixed limit it may never reach
-  the oldest photos in a very large library, though. For the initial full
-  backup of a large library, be patient, disable Auto-Lock and keep the
-  phone plugged in, and if it fails, just run it again — the system is
-  incremental, so progress already made isn't lost.
+The Shortcut sweeps your library backward in bounded blocks of 50, newest
+photos first, advancing automatically block after block within one run —
+see the "Set up the backward block-sweep" step of the iPhone Setup Manual.
+This is what makes a large library actually finish, instead of either
+timing out (no `Limit`) or getting stuck re-checking the same fixed set
+forever (a plain `Limit` with no way to advance).
+
+- The number of blocks per run is controlled by the `Repeticiones` variable
+  (a `Text` action near the top, defaults to `50`). Confirmed working with
+  `Repeticiones` up to 50 (≈2500 photos checked in one run). For your very
+  first full backfill of a large library, it's fine to run the Shortcut
+  several times in a row rather than pushing `Repeticiones` very high on
+  the first try — watch the PC app's activity log (use "⤢ Expand" for a
+  bigger view) to see it's keeping up before raising the number.
+- **Videos can occasionally arrive empty (0 bytes)**, especially when the
+  Shortcut runs with the screen locked/app backgrounded (the WiFi
+  automation runs this way by design) — the server now detects and rejects
+  this automatically, so it's never recorded as a real backup; the same
+  video is simply retried on a later run instead. Keeping the screen on and
+  the Shortcuts app in the foreground during a large manual run makes this
+  much less likely to begin with.
+- If a run gets interrupted (you leave home, or tap Stop), nothing is lost
+  — anything already uploaded stays backed up permanently. The next run
+  just starts sweeping from your newest photos again rather than exactly
+  where it left off; the already-completed blocks re-check quickly (no
+  file transfer) before it reaches new ground.
+- If the Shortcut itself appears to freeze with no error and no visible
+  cause (rare, but a known Shortcuts app quirk unrelated to this system),
+  force-quit it from the app switcher and run it again — nothing gets
+  corrupted by an interrupted run, see the point above.
 
 ## The phone freezes while the Shortcut runs
 

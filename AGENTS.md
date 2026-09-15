@@ -159,14 +159,42 @@ reintroduces these problems.
    broken.
 5. **"Find Photos" with a fixed `Limit` and no advancing cursor always
    returns the same N items**, sorted however you specified — there is no
-   built-in pagination. For a one-time full-library backfill, remove the
-   Limit entirely (accept a long first run). For fast day-to-day
-   incremental runs against a huge library, a real fix (not yet built)
-   would need a persisted "last scanned date" cursor read/written each run
-   — deliberately NOT a Photos album (that's exactly the anti-pattern
-   invariant 1 forbids); a cursor stored in a small local file via
-   Shortcuts' file actions would work without coupling correctness to the
-   destination.
+   built-in pagination. Removing the `Limit` entirely to backfill a large
+   library does NOT work either — confirmed on a real device: `Find Photos`
+   with no `Limit` fails outright, even doing nothing but counting results
+   (no per-item processing at all). A `Limit` is mandatory, not optional.
+
+   **Solved** with a backward block-sweep, entirely inside one Shortcut
+   execution: an outer `Repeat` loop advances a `Limite` (Date) variable
+   backward from "tomorrow", 50 items at a time (`Find Photos` filtered
+   `Date Taken is before Limite`, `Latest First`, `Limit 50`), updating
+   `Limite` to the oldest item's date (minus a 1-minute safety buffer, for
+   same-timestamp burst photos at a block boundary) after each block, and
+   stopping (`Stop This Shortcut`) once a block comes back empty. See
+   `shortcuts/SHORTCUT_INSTRUCTIONS.md` for the full build and PLAN.md §5.1
+   for the design rationale.
+
+   An earlier design cursor based on `MAX(taken_at)` already backed up
+   (server-side, forward-advancing) was tried and rejected: `Date Taken` is
+   **not monotonic** with library growth — a photo forwarded via WhatsApp
+   or downloaded from Google Photos can enter the library today carrying an
+   EXIF capture date from years ago, and a forward cursor would skip it
+   forever once past that date. Confirmed on a real device with an actual
+   photo (family photo from 2018, downloaded via Google Photos, which
+   preserves real EXIF — unlike WhatsApp, which strips it and makes every
+   WhatsApp-saved item's `Date Taken` = today, a safe case for date
+   cursors). The block-sweep design sidesteps this: it examines the full
+   library within one run rather than trusting any date as a permanent
+   boundary, so there's no forward-only blind spot — deliberately NOT a
+   Photos album marker either (that's exactly the anti-pattern invariant 1
+   forbids), and no server endpoint needed for it at all (the boundary is
+   computed entirely from `Find Photos` results on-device).
+
+   Remaining known gap: the server can't distinguish "upload never arrived"
+   from "genuinely empty file" from a 0-byte POST body alone — it rejects
+   both the same way (see point 8 below). This is a deliberate, safe
+   trade-off (never silently recording a broken backup), not a missed edge
+   case.
 6. **A stray filter can silently attach to "Find Photos"** (e.g. filtering
    against an unrelated variable like a `run_id`) if a filter row gets
    added by accident while configuring the action — always visually

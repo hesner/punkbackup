@@ -46,31 +46,53 @@
 
 ## El Atajo corre pero no sube ninguna foto nueva
 
-- Revisa que **"Find Photos"** no tenga ningún filtro raro (debe decir
-  "Find Photos" sin condiciones adicionales, salvo Sort/Order/Limit) — un
-  filtro que se cuele por accidente hace que dé 0 resultados en silencio,
-  sin ningún error visible.
-- Si tienes un **Limit** bajo en "Find Photos" y ya llevas varias corridas,
-  puede que siempre esté revisando las mismas fotos más viejas — sube el
-  Limit para avanzar.
+- Revisa que **"Find Photos"** no tenga ningún filtro raro además del
+  `Date Taken is before Limite` descrito en el Manual de configuración del
+  iPhone — otro filtro distinto que se cuele hace que dé 0 resultados en
+  silencio, sin ningún error visible.
+- Revisa que **`Limit`** esté activado y en **50** en "Find Photos" — esto
+  es obligatorio, no opcional: sin él, "Find Photos" falla directamente en
+  una biblioteca grande, incluso solo contando resultados.
 - Confirma en Configuración → Privacidad y seguridad → Fotos que la app
-  Atajos tenga acceso ("Todas las fotos" / "Always Allow").
+  Atajos tenga acceso ("Todas las fotos" / "Always Allow") — con acceso
+  limitado, una foto que acabas de tomar o guardar simplemente puede no
+  ser visible para el Atajo todavía, sin ningún error visible.
 
-## Mi biblioteca es enorme (miles de fotos) y el respaldo completo falla o se congela
+## Mi biblioteca es enorme (miles de fotos) — ¿llegará a terminar el respaldo completo?
 
-- "Find Photos" **sin límite** revisa toda tu biblioteca de una sola vez —
-  con bibliotecas muy grandes (miles de fotos) esto puede tardar mucho o
-  hacer que iOS interrumpa el Atajo con un error genérico ("There was a
-  problem running the shortcut"). Esto es una **limitación conocida**,
-  todavía sin una solución definitiva.
-- Mientras tanto: usa un **Limit moderado** (ej. 300-500) y corre el Atajo
-  varias veces manualmente — cada corrida avanza mientras haya fotos
-  nuevas sin respaldar más recientes que las ya cubiertas, aunque con un
-  límite fijo puede que no llegue nunca a las fotos más antiguas de una
-  biblioteca muy grande. Para el respaldo inicial completo de una biblioteca
-  grande, ten paciencia, mantén el teléfono con auto-bloqueo desactivado y
-  conectado a corriente, y si falla, vuelve a correrlo — el sistema es
-  incremental, así que no se pierde el progreso ya logrado.
+El Atajo barre tu biblioteca hacia atrás en bloques acotados de 50 fotos,
+empezando por las más recientes, avanzando automáticamente bloque por
+bloque dentro de una sola corrida — ver el paso "Armar el barrido en
+bloques hacia atrás" del Manual de configuración del iPhone. Esto es lo
+que permite que una biblioteca grande de verdad llegue a terminar, en vez
+de fallar por tiempo (sin `Limit`) o quedarse revisando siempre el mismo
+conjunto fijo sin avanzar (`Limit` fijo sin forma de avanzar).
+
+- La cantidad de bloques por corrida se controla con la variable
+  `Repeticiones` (una acción `Text` cerca del inicio, por defecto `50`).
+  Comprobado funcionando con `Repeticiones` hasta 50 (≈2500 fotos
+  revisadas en una sola corrida). Para tu primer respaldo completo de una
+  biblioteca grande, está bien correr el Atajo varias veces seguidas en
+  vez de subir `Repeticiones` muy alto desde el primer intento — revisa el
+  log de actividad de la app en la PC (usa "⤢ Expandir" para verlo más
+  grande) para confirmar que va avanzando bien antes de subir el número.
+- **Los videos a veces pueden llegar vacíos (0 bytes)**, sobre todo cuando
+  el Atajo corre con la pantalla bloqueada o la app en segundo plano (así
+  corre por diseño la automatización por WiFi) — el servidor ahora detecta
+  y rechaza esto automáticamente, así que nunca queda registrado como
+  respaldado de verdad; ese mismo video simplemente se reintenta en una
+  corrida posterior. Mantener la pantalla encendida y Atajos en primer
+  plano durante una corrida manual grande hace esto mucho menos probable.
+- Si una corrida se interrumpe (sales de casa, o le das Stop), no se pierde
+  nada — todo lo ya subido queda respaldado para siempre. La siguiente
+  corrida simplemente vuelve a empezar desde tus fotos más recientes, no
+  exactamente donde quedó — los bloques ya completos se revisan rápido
+  (sin transferir archivos) antes de llegar a terreno nuevo.
+- Si el Atajo mismo parece congelarse sin ningún error ni causa visible
+  (raro, pero una falla conocida de la app Atajos sin relación con este
+  sistema), fuérzalo a cerrar desde el selector de apps y vuelve a
+  correrlo — nada se corrompe por una corrida interrumpida, ver el punto
+  anterior.
 
 ## El teléfono se traba mientras corre el Atajo
 

@@ -401,7 +401,8 @@ Tabla `runs` (una corrida de backup, para `/status`):
 - [x] Nombre final del proyecto: **PunkBackup**.
 - [x] Tema oscuro/punk aplicado.
 - [x] Publicado en GitHub (`hesner/punkbackup`, público, MIT) + GitHub Pages
-      (`hesner.github.io/punkbackup`).
+      con dominio propio **`punkbackup.com`** (comprado en Cloudflare,
+      DNS apuntando a GitHub Pages, certificado HTTPS aprobado).
 - [x] Instalador Windows (`PunkBackupSetup.exe`, Inno Setup) — publicado en
       GitHub Releases, probado de punta a punta (instalar/actualizar/
       desinstalar) en la PC real del usuario. Ver sección 8.

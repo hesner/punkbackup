@@ -17,7 +17,7 @@ each one.
 On your PC:
 1. Open the app and click **"🤘 Start backup"**.
 2. In **"⚙ Settings"**, click **"+ Add profile"** and name it after THIS
-   device (e.g. `iPhone de Laura`), then choose its destination folder
+   device (e.g. `iPhone de María`), then choose its destination folder
    when prompted.
 3. The app shows you (and auto-copies) that profile's **token** — it only
    works for this one device.

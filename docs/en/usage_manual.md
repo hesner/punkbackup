@@ -110,8 +110,8 @@ person or device.
 
 ### "+ Add profile"
 
-1. Type a name identifying the device (e.g. `iPhone de Laura`, `iPad de
-   Hesner`) — it doesn't need to be technical, it's just so you recognize it.
+1. Type a name identifying the device (e.g. `iPhone de María`, `iPad de
+   Diego`) — it doesn't need to be technical, it's just so you recognize it.
 2. The app generates a unique **token** for that profile and copies it to
    your clipboard automatically — you'll paste it into that device's
    Shortcut (see the iPhone Setup Manual).

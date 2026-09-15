@@ -3,8 +3,8 @@
 ## 1. Objetivo
 
 Respaldar automáticamente (o manualmente) las fotos y videos del iPhone/iPad
-de varias personas hacia un disco en la PC Windows `DELL-IOESTUDIO`, sin
-cable USB y sin depender de iCloud, usando la red WiFi local de la casa.
+de varias personas hacia un disco en tu PC Windows, sin cable USB y sin
+depender de iCloud, usando la red WiFi local de la casa.
 
 ## 2. Arquitectura
 
@@ -14,7 +14,7 @@ cable USB y sin depender de iCloud, usando la red WiFi local de la casa.
 │   (un perfil por         │   HTTP POST /upload                │                                     │
 │    dispositivo)          │   (foto/video + metadata           │  ┌───────────────────────────────┐  │
 │                          │    + token DEL PERFIL)             │  │  Servidor local (FastAPI)      │  │
-│  App Atajos (Shortcuts) │ ◀── /check (liviano, sin ─────── │  │  http://DELL-IOESTUDIO.local:PORT│  │
+│  App Atajos (Shortcuts) │ ◀── /check (liviano, sin ─────── │  │  http://[TU-PC].local:PORT      │  │
 │  - Nativa de iOS,        │     archivo) responde si          │  │  - token → identifica el perfil │  │
 │    no requiere instalar  │     already_backed_up             │  │  - /check: ¿existe ya en el     │  │
 │    nada extra            │                                     │  │    destino ACTUAL de ese perfil?│  │
@@ -34,8 +34,8 @@ cable USB y sin depender de iCloud, usando la red WiFi local de la casa.
    propio token)                                                  │  └───────────────────────────────┘  │
                                                                    │              │                        │
                                                                    │              ▼                        │
-                                                                   │   <destino>/iphone-de-laura/2026/09/  │
-                                                                   │   <destino>/ipad-de-hesner/2026/09/   │
+                                                                   │   <destino>/iphone-de-maria/2026/09/  │
+                                                                   │   <destino>/ipad-de-diego/2026/09/    │
                                                                    └───────────────────────────────────┘
 ```
 
@@ -50,7 +50,7 @@ cable USB y sin depender de iCloud, usando la red WiFi local de la casa.
 3. Se agrega una regla de Firewall de Windows que permite tráfico entrante
    solo en el puerto elegido (ej. 8787), solo desde redes privadas (✅ hecho).
 4. Se crea un **perfil por cada persona/dispositivo** desde la GUI (ej.
-   "iPhone de Laura", "iPad de Hesner") — cada uno genera su propio token.
+   "iPhone de María", "iPad de Diego") — cada uno genera su propio token.
 5. En cada iPhone/iPad, se crea (siguiendo instrucciones paso a paso) un
    **Atajo de Shortcuts** que, para cada foto/video de la Fototeca:
    - Primero pregunta al servidor (`/check`, liviano, sin mandar el archivo)
@@ -120,7 +120,7 @@ Backup photos/
 
 El sistema soporta **múltiples perfiles** dentro de la misma instalación en
 la PC — cada perfil representa una persona o un dispositivo (ej. "iPhone de
-Laura", "iPad de Hesner"). Diseño:
+María", "iPad de Diego"). Diseño:
 
 - Cada perfil tiene **su propio token secreto** (ya no hay un token único
   para toda la PC). El header `X-Backup-Token` que manda el Atajo identifica
@@ -131,8 +131,8 @@ Laura", "iPad de Hesner"). Diseño:
   perfil>/<YYYY>/<MM>/archivo`. Puede ser un USB distinto para cada persona
   — no hay una carpeta compartida entre perfiles, ni necesitan sincronizarse.
 - Cada perfil tiene **su propio índice incremental** (vive dentro de su
-  propia carpeta, igual que en la sección 5), así que el progreso de Laura y
-  el de Hesner son completamente independientes.
+  propia carpeta, igual que en la sección 5), así que el progreso de un
+  perfil y el de otro son completamente independientes.
 - Si el disco de un perfil no está conectado, ese perfil simplemente no
   puede recibir en ese momento (error claro, 503) — los demás perfiles
   siguen funcionando normal.
@@ -142,8 +142,8 @@ Laura", "iPad de Hesner"). Diseño:
   para que el usuario recuerde qué disco físico es cuál, aunque Windows le
   asigne una letra de unidad distinta cada vez que lo conecta.
 - **Cualquier perfil puede respaldar en cualquier momento**: mientras el
-  servidor esté encendido, no importa el orden — hoy corre el Atajo de
-  Laura, mañana el de Hesner, sin que el usuario de la PC tenga que cambiar
+  servidor esté encendido, no importa el orden — hoy corre el Atajo de un
+  perfil, mañana el de otro, sin que el usuario de la PC tenga que cambiar
   nada en la GUI.
 - Gestión de perfiles (crear/renombrar/renovar token/eliminar) se hace
   **solo desde la GUI de la PC**, nunca por red — así un dispositivo ajeno
@@ -396,7 +396,8 @@ Tabla `runs` (una corrida de backup, para `/status`):
 - [x] Puerto: **8787**.
 - [x] Sin álbum de iOS — el Atajo pregunta al servidor vía `/check` (la
       carpeta destino de la PC es la única fuente de verdad).
-- [x] WiFi de casa (para la automatización personal del usuario): `IOESTUDIO`.
+- [x] Automatización personal por WiFi: configurable a la red de casa del
+      usuario (ver `shortcuts/*.md`, paso de la automatización).
 - [x] Historial de volúmenes por perfil (etiqueta, serie, espacio libre).
 - [x] Nombre final del proyecto: **PunkBackup**.
 - [x] Tema oscuro/punk aplicado.

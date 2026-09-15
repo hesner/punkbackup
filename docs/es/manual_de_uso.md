@@ -114,7 +114,7 @@ por cada persona o dispositivo.
 ### "+ Agregar perfil"
 
 1. Escribe un nombre que identifique el dispositivo (ej. `iPhone de
-   Laura`, `iPad de Hesner`) — no tiene que ser técnico, es solo para que
+   María`, `iPad de Diego`) — no tiene que ser técnico, es solo para que
    tú lo reconozcas.
 2. La app genera un **token** único para ese perfil y te lo copia al
    portapapeles automáticamente — lo vas a pegar en el Atajo de ese

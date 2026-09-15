@@ -177,9 +177,15 @@ async def upload(
         engine.db.bump_run(run_id, "files_error")
         raise
 
-    result = await run_in_threadpool(
-        engine.finalize_upload, filename, staging_path, hasher.hexdigest(), size, taken_at, run_id
-    )
+    try:
+        result = await run_in_threadpool(
+            engine.finalize_upload, filename, staging_path, hasher.hexdigest(), size, taken_at, run_id
+        )
+    except ValueError as exc:
+        # Currently just an empty (0-byte) body — see finalize_upload's
+        # docstring. Not recorded as backed up, so /check still reports it
+        # missing and a later run retries it automatically.
+        raise HTTPException(422, str(exc))
     return result
 
 

@@ -118,6 +118,20 @@ class BackupEngine:
     ) -> dict:
         """Phase 2: staging_path already holds the full, hashed content —
         decide where it lands (new / duplicate-skip / keep-both-conflict)."""
+        if size == 0:
+            # A genuinely empty upload — seen in practice when Shortcuts runs
+            # in the background and can't fetch a large video's full bytes
+            # from iCloud in time (Content-Length: 0 on the wire, confirmed
+            # via a debug capture). Refusing to record this as "backed up"
+            # is what makes the system self-healing: /check keeps reporting
+            # it as missing, so a later run (ideally in the foreground, with
+            # the asset already downloaded) retries it automatically instead
+            # of the empty file silently poisoning the record forever.
+            staging_path.unlink(missing_ok=True)
+            self.db.bump_run(run_id, "files_error")
+            logger.error("x %s: received 0 bytes, refusing to record as backed up", filename)
+            raise ValueError(f'"{filename}" arrived empty (0 bytes) — not recorded, will retry on the next run.')
+
         safe_name = Path(filename).name  # strip any path components — never trust client paths
         target_dir = self._year_month_dir(taken_at)
         target_dir.mkdir(parents=True, exist_ok=True)

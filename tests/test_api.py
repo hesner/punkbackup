@@ -210,6 +210,28 @@ def test_full_run_flow(client, store, tmp_path):
     assert status["last_backup_at"] is not None
 
 
+def test_empty_upload_is_rejected_and_not_recorded(client, store, tmp_path):
+    """A 0-byte body (seen in practice when Shortcuts runs in the
+    background and can't fetch a large video's full bytes from iCloud in
+    time) must never be recorded as a successful backup — otherwise /check
+    would wrongly report it as already backed up forever, and the real
+    file would never get a chance to upload on a later, successful run."""
+    profile = add_profile_with_dest(store, tmp_path, "Perfil de prueba")
+    headers = {"X-Backup-Token": profile.token}
+
+    r = upload(client, headers, "IMG_1.mov", b"")
+    assert r.status_code == 422
+
+    status = client.get("/status", headers=headers).json()
+    assert status["total_files_backed_up"] == 0
+
+    check = client.post(
+        "/check", headers=headers,
+        data={"filename": "IMG_1.mov", "taken_at": "2026-06-01T12:00:00"},
+    )
+    assert check.json() == {"missing": True}  # still reported missing, so a retry can succeed
+
+
 def test_aggregate_status_sums_all_profiles(client, store, tmp_path):
     laura = add_profile_with_dest(store, tmp_path, "iPhone de Laura")
     hesner = add_profile_with_dest(store, tmp_path, "iPad de Hesner")

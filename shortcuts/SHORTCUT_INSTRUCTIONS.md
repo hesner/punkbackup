@@ -203,10 +203,23 @@ Everything below, through the end of section 4, goes **inside** this outer
 > **Tuning `Repeticiones`**: each block of 50 that's already fully backed up
 > checks fast (no file transfer); a block with real new content takes
 > longer. Confirmed working with `Repeticiones` up to 50 (≈2500 photos
-> checked in one run) in real testing. For a full one-time backfill of a
-> very large library, run it a few times in a row rather than setting an
-> extremely high number the first time — you'll see in "Backup Fotos y
-> Videos"'s progress whether it's keeping up before pushing higher.
+> checked in one run) in real testing.
+>
+> ⚠️ **Important, non-obvious limitation**: `Limite` always resets to
+> "tomorrow" at the start of every run — there is no memory of where a
+> *previous* run stopped. If a run ends because it used up all its
+> `Repeticiones` (rather than because it found an empty block and reached
+> your oldest photo), **running it again with the same `Repeticiones`
+> makes no further progress** — it re-sweeps the exact same newest photos
+> and stops at the exact same point every time. To actually reach older
+> photos, you must **increase `Repeticiones`**, not just re-run the
+> Shortcut. For a one-time full backfill of a large library, set
+> `Repeticiones` high enough to cover your whole library in a single run
+> (roughly `your total photo count ÷ 50`, rounded up — e.g. ~180 for a
+> 9,000-photo library) rather than a small number you plan to re-run —
+> whether iOS can sustain that many blocks in one run hasn't been
+> confirmed for very large values, so increase it gradually and watch the
+> PC app's activity log to see it's keeping up.
 
 ### 5) Close out the run and show you the result
 - **Get Contents of URL** action:

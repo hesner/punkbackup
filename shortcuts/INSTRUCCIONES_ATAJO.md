@@ -208,11 +208,24 @@ Todo lo que sigue, hasta el final de la sección 4, va **dentro** de este
 > **Ajustando `Repeticiones`**: un bloque de 50 que ya está completo se
 > revisa rápido (sin transferir archivos); un bloque con contenido nuevo
 > de verdad tarda más. Comprobado funcionando con `Repeticiones` hasta 50
-> (≈2500 fotos revisadas en una sola corrida) en pruebas reales. Para un
-> respaldo inicial completo de una biblioteca muy grande, corre el atajo
-> varias veces seguidas en vez de poner un número muy alto desde el
-> principio — el progreso en "Backup Fotos y Videos" te dice si va bien
-> antes de subir el número.
+> (≈2500 fotos revisadas en una sola corrida) en pruebas reales.
+>
+> ⚠️ **Limitación importante, no obvia**: `Limite` siempre se reinicia a
+> "mañana" al empezar cada corrida — no hay memoria de dónde quedó la
+> corrida *anterior*. Si una corrida termina porque se acabaron sus
+> `Repeticiones` (y no porque encontró un bloque vacío y llegó a tu foto
+> más vieja), **volver a correrla con el mismo `Repeticiones` no avanza
+> nada más** — vuelve a barrer exactamente las mismas fotos más recientes
+> y se detiene exactamente en el mismo punto, siempre. Para de verdad
+> llegar a fotos más viejas, hay que **subir `Repeticiones`**, no solo
+> volver a correr el atajo. Para un respaldo inicial completo de una
+> biblioteca grande, pon `Repeticiones` lo suficientemente alto para
+> cubrir toda tu biblioteca en una sola corrida (aproximadamente
+> `tu total de fotos ÷ 50`, redondeado hacia arriba — ej. ~180 para una
+> biblioteca de 9.000 fotos) en vez de un número chico que piensas
+> repetir — no está confirmado que iOS aguante tantos bloques seguidos con
+> números muy altos, así que súbelo de a poco y revisa el log de
+> actividad de la app en la PC para confirmar que va avanzando bien.
 
 ### 5) Cerrar la corrida y mostrarte el resultado
 - Acción **Obtener contenido de URL**:

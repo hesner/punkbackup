@@ -419,10 +419,10 @@ Tabla `runs` (una corrida de backup, para `/status`):
 - [ ] Diagnóstico de headers para el 0-byte de videos agregado
       (`server/app.py`), pero **la causa raíz de los videos sigue sin
       resolver** — sigue siendo el problema abierto más importante.
-- [ ] Pendiente en la GUI (pedido por el usuario, no iniciado): marcar en el
-      log cuándo inicia/termina cada corrida de backup, mostrar cuántos
-      archivos se guardaron en la ÚLTIMA corrida específicamente (no el
-      acumulado), y mostrar en algún otro lugar el total de archivos
-      actualmente en la carpeta destino del perfil.
+- [x] GUI: el log marca cuándo inicia/termina cada corrida de backup (con
+      el resumen final), la tarjeta de cada perfil muestra por separado el
+      total de archivos en su carpeta destino y cuántos se guardaron
+      específicamente en la última corrida. Ver sección 6 (esquema `runs`)
+      y `gui/main_window.py`/`gui/i18n.py`.
 - [ ] Automatización WiFi en el iPhone del usuario (al final).
 - [ ] Compartir el Atajo a otro iPhone/perfil (al final).

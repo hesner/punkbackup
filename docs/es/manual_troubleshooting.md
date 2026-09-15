@@ -76,13 +76,19 @@ conjunto fijo sin avanzar (`Limit` fijo sin forma de avanzar).
   vez de subir `Repeticiones` muy alto desde el primer intento — revisa el
   log de actividad de la app en la PC (usa "⤢ Expandir" para verlo más
   grande) para confirmar que va avanzando bien antes de subir el número.
-- **Los videos a veces pueden llegar vacíos (0 bytes)**, sobre todo cuando
-  el Atajo corre con la pantalla bloqueada o la app en segundo plano (así
-  corre por diseño la automatización por WiFi) — el servidor ahora detecta
-  y rechaza esto automáticamente, así que nunca queda registrado como
-  respaldado de verdad; ese mismo video simplemente se reintenta en una
-  corrida posterior. Mantener la pantalla encendida y Atajos en primer
-  plano durante una corrida manual grande hace esto mucho menos probable.
+- **Los videos actualmente pueden llegar vacíos (0 bytes) — a veces de
+  forma sistemática, no solo ocasional.** El servidor siempre detecta y
+  rechaza esto automáticamente, así que nunca queda registrado como
+  respaldado de verdad y ese mismo video simplemente se reintenta en una
+  corrida posterior — pero la causa real (por qué el iPhone a veces manda
+  el cuerpo vacío específicamente para un video) todavía no está resuelta:
+  no es optimización de almacenamiento de iCloud, no es un límite de
+  tamaño fijo, y ni siquiera se arregla de forma confiable manteniendo
+  Atajos en primer plano — es un problema abierto, no resuelto. Las fotos
+  no se ven afectadas (confirmado confiable al 100%). Mantener la pantalla
+  encendida y Atajos en primer plano durante una corrida manual grande
+  puede ayudar igual, y no hace daño, pero no cuentes con que arregle
+  todos los casos.
 - Si una corrida se interrumpe (sales de casa, o le das Stop), no se pierde
   nada — todo lo ya subido queda respaldado para siempre. La siguiente
   corrida simplemente vuelve a empezar desde tus fotos más recientes, no

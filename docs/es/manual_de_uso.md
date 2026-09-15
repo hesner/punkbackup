@@ -91,6 +91,10 @@ muestra un registro en vivo (estilo terminal, texto verde) de cada archivo
 que va llegando: nuevo, ya existía, o conflicto. Sirve para confirmar que
 algo está pasando en tiempo real mientras corres un Atajo desde el iPhone.
 
+Junto a ese botón hay uno más pequeño, **"⤢ Expandir"**, que abre el mismo
+registro en una ventana aparte, más grande y redimensionable — útil cuando
+una corrida larga genera mucho texto y el panel chico se queda corto.
+
 ---
 
 ## Pantalla "⚙ Configuración" → Perfiles

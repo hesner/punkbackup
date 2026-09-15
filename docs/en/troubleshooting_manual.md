@@ -76,13 +76,18 @@ forever (a plain `Limit` with no way to advance).
   several times in a row rather than pushing `Repeticiones` very high on
   the first try — watch the PC app's activity log (use "⤢ Expand" for a
   bigger view) to see it's keeping up before raising the number.
-- **Videos can occasionally arrive empty (0 bytes)**, especially when the
-  Shortcut runs with the screen locked/app backgrounded (the WiFi
-  automation runs this way by design) — the server now detects and rejects
-  this automatically, so it's never recorded as a real backup; the same
-  video is simply retried on a later run instead. Keeping the screen on and
-  the Shortcuts app in the foreground during a large manual run makes this
-  much less likely to begin with.
+- **Videos can currently arrive empty (0 bytes) — sometimes consistently,
+  not just occasionally.** The server always detects and rejects this
+  automatically, so it's never recorded as a real backup and the same
+  video is simply retried on a later run instead — but the underlying
+  cause (why the iPhone sometimes sends an empty body for a video
+  specifically) isn't fully understood yet: it's not iCloud storage
+  optimization, not a fixed file-size limit, and it isn't reliably fixed
+  by keeping the Shortcuts app in the foreground either — this is an open
+  issue, not a solved one. Photos are unaffected (confirmed reliable).
+  Keeping the screen on and the Shortcuts app in the foreground during a
+  large manual run may still help, and does no harm, but don't count on it
+  fixing every case.
 - If a run gets interrupted (you leave home, or tap Stop), nothing is lost
   — anything already uploaded stays backed up permanently. The next run
   just starts sweeping from your newest photos again rather than exactly

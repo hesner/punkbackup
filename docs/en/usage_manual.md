@@ -89,6 +89,10 @@ live, terminal-style (green text) log of each file as it arrives: new,
 already existed, or conflict. Useful to confirm something is actually
 happening in real time while you run the Shortcut on your iPhone.
 
+Next to that button is a smaller **"⤢ Expand"** button, which opens the
+same log in a separate, larger, resizable window — handy when a long run
+generates more text than the small embedded panel comfortably shows.
+
 ---
 
 ## "⚙ Settings" → Profiles

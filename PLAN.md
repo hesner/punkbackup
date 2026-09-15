@@ -227,12 +227,17 @@ que corre la automatización por WiFi). El servidor (`BackupEngine.
 finalize_upload`) ahora **rechaza y no registra** un cuerpo de 0 bytes en
 vez de guardarlo como "respaldado" — así `/check` lo sigue reportando como
 "falta" y una corrida futura lo reintenta solo, sin envenenar el índice
-para siempre. Confirmado: con la pantalla activa en primer plano, las fotos
-suben al 100% de fiabilidad; los videos grandes fallan de forma
-intermitente incluso en primer plano (causa exacta no determinada —
-descartado iCloud, que estaba apagado; descartado que Google Fotos
-reemplace el original local) pero ya no representa pérdida de datos gracias
-a esta protección.
+para siempre. Confirmado con carga real: las fotos suben al 100% de
+fiabilidad, en primer plano y en segundo plano. **Los videos, en cambio,
+fallan de forma sistemática — no intermitente** (en una sesión de prueba
+completa, cero videos lograron subir con contenido real, todos los
+intentos dieron 0 bytes) — la causa exacta sigue sin determinar (descartado
+iCloud, que estaba apagado; descartado que Google Fotos reemplace el
+original local; mantener la app en primer plano NO lo arregla de forma
+confiable). Gracias a la protección del servidor esto no representa
+pérdida de datos ni corrupción — cada video queda pendiente y se reintenta
+solo — pero **el respaldo de videos es, a la fecha, un problema abierto sin
+resolver**, no una molestia menor.
 
 ## 6. Modelo de datos (índice SQLite, uno por perfil)
 

@@ -26,8 +26,8 @@ Note down these values:
 
 | Value | Where to find it in the app | Example |
 |---|---|---|
-| Server address (same for every profile) | "Address" field | `http://[YOUR_PC_NAME].local:8787` |
-| Fallback IP (in case the address above doesn't resolve from the iPhone) | "Fallback IP" field | `http://192.168.1.50:8787` |
+| Server address (same for every profile) | "Address" field | `http:​/​/​[YOUR_PC_NAME].​local:​8787` |
+| Fallback IP (in case the address above doesn't resolve from the iPhone) | "Fallback IP" field | `http:​/​/​192.​168.​1.​50:​8787` |
 | This profile's token | "Copy token" button on the profile row you just created | a long string of letters/numbers |
 
 > Your iPhone and your PC must be on the **same WiFi network**.
@@ -53,7 +53,7 @@ Note down these values:
 
 ### 1) Store the server address and token as variables
 - **Text** action → type the server address, e.g.
-  `http://[YOUR_PC_NAME].local:8787`
+  `http:​/​/​[YOUR_PC_NAME].​local:​8787`
 - **Set Variable** action → name it `ServerURL` → value: the Text above.
 - **Text** action → paste the Token **for this profile/device** you copied from the app.
 - **Set Variable** action → name it `Token` → value: the Text above.

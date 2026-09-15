@@ -44,6 +44,13 @@ blockquote { border-left: 3px solid #c81d4a; margin-left: 0; padding-left: 12px;
 table { border-collapse: collapse; width: 100%; margin: 8px 0; }
 th, td { border: 1px solid #ccc; padding: 5px 8px; font-size: 9.5pt; text-align: left; }
 th { background: #f2f2f2; }
+/* xhtml2pdf ignores word-wrap/word-break/overflow-wrap/table-layout entirely
+   (confirmed via its own "ignoring CSS properties" warning at build time) —
+   a long unbroken string (a URL/path in an example table cell) just overflows
+   the cell instead of wrapping. The actual fix has to be in the source
+   Markdown: insert U+200B (zero-width space) after natural break characters
+   (/ . : -) in any such string, since ReportLab (which xhtml2pdf sits on
+   top of) wraps at ordinary whitespace-like break points by default. */
 a { color: #c81d4a; }
 .brand { color: #888; font-size: 8.5pt; }
 .pdf-logo { width: 56pt; height: 56pt; float: left; margin: 0 12pt 4pt 0; }

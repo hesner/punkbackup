@@ -23,8 +23,8 @@ Anota estos datos:
 
 | Dato | Dónde lo ves en la app | Ejemplo |
 |---|---|---|
-| Dirección del servidor (igual para todos los perfiles) | Campo "Dirección" | `http://[NOMBRE_DE_TU_PC].local:8787` |
-| IP alternativa (por si la anterior no responde desde el iPhone) | Campo "IP alternativa" | `http://192.168.1.50:8787` |
+| Dirección del servidor (igual para todos los perfiles) | Campo "Dirección" | `http:​/​/​[NOMBRE_DE_TU_PC].​local:​8787` |
+| IP alternativa (por si la anterior no responde desde el iPhone) | Campo "IP alternativa" | `http:​/​/​192.​168.​1.​50:​8787` |
 | Token de ESTE perfil | Botón "Copiar token" en la fila del perfil que acabas de crear | una cadena larga de letras/números |
 
 > Tu iPhone y tu PC deben estar conectados a la **misma red WiFi**.
@@ -50,7 +50,7 @@ Anota estos datos:
 
 ### 1) Guardar la dirección del servidor y el token como variables
 - Acción **Texto** → escribe la Dirección del servidor, ej.
-  `http://[NOMBRE_DE_TU_PC].local:8787`
+  `http:​/​/​[NOMBRE_DE_TU_PC].​local:​8787`
 - Acción **Establecer variable** → nombre `ServidorURL` → valor: el Texto anterior.
 - Acción **Texto** → pega el Token **de este perfil/dispositivo** que copiaste de la app.
 - Acción **Establecer variable** → nombre `Token` → valor: el Texto anterior.

@@ -776,7 +776,9 @@ class MainWindow(ctk.CTk):
         the main log box, so both stay in sync while both are open."""
         if self._log_popup is not None and self._log_popup.winfo_exists():
             self._log_popup.lift()
-            self._log_popup.focus_set()
+            self._log_popup.attributes("-topmost", True)
+            self._log_popup.focus_force()
+            self._log_popup.after(150, lambda: self._log_popup.attributes("-topmost", False))
             return
 
         popup = ctk.CTkToplevel(self)
@@ -787,6 +789,18 @@ class MainWindow(ctk.CTk):
             popup.iconbitmap(str(ICON_PATH))
         except Exception:
             pass
+
+        # New Toplevels can otherwise open BEHIND the main window on
+        # Windows — force it to the front once it's actually mapped, then
+        # drop the "always on top" flag so it behaves like a normal window
+        # afterward (just raised once, not pinned above everything).
+        def _bring_to_front() -> None:
+            popup.lift()
+            popup.attributes("-topmost", True)
+            popup.focus_force()
+            popup.after(150, lambda: popup.attributes("-topmost", False))
+
+        popup.after(50, _bring_to_front)
 
         box = ctk.CTkTextbox(
             popup, wrap="word", font=ctk.CTkFont(family="Consolas", size=13),

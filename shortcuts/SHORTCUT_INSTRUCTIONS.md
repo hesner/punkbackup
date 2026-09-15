@@ -116,89 +116,115 @@ Everything below, through the end of section 4, goes **inside** this outer
 - **Repeat with Each** action over the `Find Photos` result from section 3.
   Inside this inner "Repeat" block:
 
-  a.0. **Set Variable** action, as the very first action in this block:
-     - Value: tap "Repeat Item" and choose the **Date Taken** attribute
-       (leave it as the raw Date — don't run it through Format Date here).
-     - Name the variable `UltimaFecha`. This captures the current item's
-       exact date+time; by the time the loop finishes, it holds the OLDEST
-       item's date in this block (since sorted newest-first) — section 4's
-       closing steps use it to move `Limite` for the next block.
+    - **Step a.0)** **Set Variable** action, as the very first action in
+      this block:
 
-  a. **Format Date** action:
-     - Date: tap "Repeat Item" and choose the **Date Taken** attribute.
-     - Format: **Custom** → type: `yyyy-MM-dd'T'HH:mm:ss`
-     - Store this as a variable named `TakenAt` (**Set Variable** action).
+        - Value: tap "Repeat Item" and choose the **Date Taken** attribute
+          (leave it as the raw Date — don't run it through Format Date
+          here).
+        - Name the variable `UltimaFecha`. This captures the current
+          item's exact date+time; by the time the loop finishes, it holds
+          the OLDEST item's date in this block (since sorted
+          newest-first) — section 4's closing steps use it to move
+          `Limite` for the next block.
 
-  a.2. **Text** action — build the full filename, **with extension**
-     (⚠️ important: Shortcuts' "File Name" attribute on its own does **not**
-     include the extension — skip this step and you'll end up with files
-     like `IMG_1234` instead of `IMG_1234.HEIC`):
-     - In the text field, insert: **Repeat Item** → choose the **File Name**
-       attribute → type a period `.` (no spaces) → insert **Repeat Item**
-       again → choose the **File Extension** attribute.
-     - It should read something like: `[File Name].[File Extension]`
-     - Store this as a variable named `FileName` (**Set Variable** action).
+    - **Step a)** **Format Date** action:
 
-  b. **Get Contents of URL** action — the lightweight check, WITHOUT the file:
-     - URL: `ServerURL` + `/check`
-     - Method: **POST**
-     - Request Body: **Form**
-     - Form fields:
-       - `filename` → value: the **FileName** variable (from step a.2 —
-         NOT the bare "File Name" attribute, which is missing the extension).
-       - `taken_at` → value: `TakenAt` variable.
-     > No need to send the file size — Shortcuts has no reliable way to give
-     > a plain byte count (it always formats it as something like "1.2 MB"),
-     > so the check only uses filename + date. The exact content check
-     > happens later, in `/upload`.
-     - Headers: `X-Backup-Token` → `Token` variable.
-     - **Get Dictionary Value** action → key `missing` → applied to that result.
+        - Date: tap "Repeat Item" and choose the **Date Taken** attribute.
+        - Format: **Custom** → type: `yyyy-MM-dd'T'HH:mm:ss`
+        - Store this as a variable named `TakenAt` (**Set Variable**
+          action).
+        - ⚠️ **Fragile chip, double-check it after saving**: if you later
+          add or move any action INSIDE this same "Repeat" block (e.g.
+          step a.0 above), Shortcuts can silently reconfigure this chip
+          to point at a different attribute (like "Name") instead of
+          "Date Taken" — with no red error, no visible warning. The
+          symptom shows up weeks later: ALL new photos land in the same
+          folder (this month's) instead of their real month. If you
+          suspect this, tap the chip inside "Format Date" and confirm it
+          says **Date Taken**, not Name or anything else.
 
-  c. **If** action: condition = the value above **has any value** (this is
-     how the server tells you "it's missing, upload it"; when a file is
-     already backed up, the server simply omits the `missing` field
-     entirely, so this condition is automatically false and the "If" is
-     skipped — you do NOT need "is equal to" or to type `false` anywhere,
-     "has any value" is already the right option):
+    - **Step a.2)** **Text** action — build the full filename, **with
+      extension** (⚠️ important: Shortcuts' "File Name" attribute on its
+      own does **not** include the extension — skip this step and you'll
+      end up with files like `IMG_1234` instead of `IMG_1234.HEIC`):
 
-     - **Get Contents of URL** (inside the "If"):
-       - URL: tap the field and insert, IN THIS ORDER, inside the same text
-         field: the **ServerURL** chip → type `/upload?filename=` → insert
-         the **FileName** variable chip (the same one from step a.2 — NOT
-         the bare "File Name" attribute, which is missing the extension) →
-         type `&taken_at=` → the **TakenAt** chip → type `&run_id=` → the
-         **RunID** chip.
-         > Inserting the chips directly into the URL field (instead of
-         > building the text separately with "Combine Text") makes
-         > Shortcuts URL-encode them automatically.
-       - Method: **POST**
-       - **Request Body** → change it to **File** (no longer Form).
-       - In the value field that appears, open the variable bar and insert
-         **Repeat Item** — **once, and don't tap the chip again afterward**.
-         (Tapping it again opens a "Name/Album/Width..." property menu — if
-         that happens and you end up with anything other than plain "Repeat
-         Item", clear it with "Clear Variable" and re-insert it without
-         touching it a second time.) If this chip ever shows up highlighted
-         in red/"broken" in the editor — it can happen after editing actions
-         earlier in the same loop — delete it and re-insert it fresh the
-         same way; a broken reference here silently uploads an empty (0-byte)
-         file instead of erroring visibly.
-       - Headers: `X-Backup-Token` → `Token` variable.
+        - In the text field, insert: **Repeat Item** → choose the **File
+          Name** attribute → type a period `.` (no spaces) → insert
+          **Repeat Item** again → choose the **File Extension**
+          attribute.
+        - It should read something like: `[File Name].[File Extension]`
+        - Store this as a variable named `FileName` (**Set Variable**
+          action).
 
-     - (Nothing needed in the "Otherwise" branch — if it was already backed
-       up, just move on to the next item.)
+    - **Step b)** **Get Contents of URL** action — the lightweight check,
+      WITHOUT the file:
 
-  Still inside the **inner** "Repeat with Each", after its own "End Repeat"
-  but **before** the outer "End Repeat" from section 3 — these two actions
-  advance the sweep to the next block:
+        - URL: `ServerURL` + `/check`
+        - Method: **POST**
+        - Request Body: **Form**
+        - Form fields:
+            - `filename` → value: the **FileName** variable (from step
+              a.2 — NOT the bare "File Name" attribute, which is missing
+              the extension).
+            - `taken_at` → value: `TakenAt` variable.
+        - No need to send the file size — Shortcuts has no reliable way
+          to give a plain byte count (it always formats it as something
+          like "1.2 MB"), so the check only uses filename + date. The
+          exact content check happens later, in `/upload`.
+        - Headers: `X-Backup-Token` → `Token` variable.
+        - **Get Dictionary Value** action → key `missing` → applied to
+          that result.
 
-  - **Adjust Date** action → **Subtract 1 minute** from **UltimaFecha**
-    (a small safety buffer, so a photo sharing the exact same timestamp as
-    the block boundary — e.g. burst-mode shots — never gets silently
-    skipped; worst case it's re-checked redundantly, which is harmless).
-  - **Set Variable** action → variable: **Limite** (pick the *existing*
-    `Limite` from the list, don't create a new one with the same name) →
-    value: the result of the `Adjust Date` above.
+    - **Step c)** **If** action: condition = the value above **has any
+      value** (this is how the server tells you "it's missing, upload
+      it"; when a file is already backed up, the server simply omits the
+      `missing` field entirely, so this condition is automatically false
+      and the "If" is skipped — you do NOT need "is equal to" or to type
+      `false` anywhere, "has any value" is already the right option):
+
+        - **Get Contents of URL** (inside the "If"):
+
+            - URL: tap the field and insert, IN THIS ORDER, inside the
+              same text field: the **ServerURL** chip → type
+              `/upload?filename=` → insert the **FileName** variable chip
+              (the same one from step a.2 — NOT the bare "File Name"
+              attribute, which is missing the extension) → type
+              `&taken_at=` → the **TakenAt** chip → type `&run_id=` → the
+              **RunID** chip. Inserting the chips directly into the URL
+              field (instead of building the text separately with
+              "Combine Text") makes Shortcuts URL-encode them
+              automatically.
+            - Method: **POST**
+            - **Request Body** → change it to **File** (no longer Form).
+            - In the value field that appears, open the variable bar and
+              insert **Repeat Item** — **once, and don't tap the chip
+              again afterward**. (Tapping it again opens a
+              "Name/Album/Width..." property menu — if that happens and
+              you end up with anything other than plain "Repeat Item",
+              clear it with "Clear Variable" and re-insert it without
+              touching it a second time.) If this chip ever shows up
+              highlighted in red/"broken" in the editor — it can happen
+              after editing actions earlier in the same loop — delete it
+              and re-insert it fresh the same way; a broken reference
+              here silently uploads an empty (0-byte) file instead of
+              erroring visibly.
+            - Headers: `X-Backup-Token` → `Token` variable.
+
+        - (Nothing needed in the "Otherwise" branch — if it was already
+          backed up, just move on to the next item.)
+
+Still inside the **inner** "Repeat with Each", after its own "End Repeat"
+but **before** the outer "End Repeat" from section 3 — these two actions
+advance the sweep to the next block:
+
+- **Adjust Date** action → **Subtract 1 minute** from **UltimaFecha** (a
+  small safety buffer, so a photo sharing the exact same timestamp as the
+  block boundary — e.g. burst-mode shots — never gets silently skipped;
+  worst case it's re-checked redundantly, which is harmless).
+- **Set Variable** action → variable: **Limite** (pick the *existing*
+  `Limite` from the list, don't create a new one with the same name) →
+  value: the result of the `Adjust Date` above.
 
 > **Tuning `Repeticiones`**: each block of 50 that's already fully backed up
 > checks fast (no file transfer); a block with real new content takes

@@ -215,6 +215,42 @@ reintroduces these problems.
    start/stop-server button) in their own try/except that does the same.
    This was essential to actually diagnosing bug #7 — the user could only
    report the real error once this was in place.
+9. **A magic-variable chip's bound attribute (Name/Date Taken/File
+   Extension/...) can silently change when you edit a NEARBY action in the
+   same loop** — not just the chip you're actively working on. Confirmed
+   real instances: the `/upload` `File` field's chip losing its raw-item
+   binding, and — months later — the `Format Date` action building
+   `TakenAt` getting silently reconfigured from "Date Taken" to "Name"
+   right after the `UltimaFecha`-capture step (point 5's block-sweep) was
+   inserted just above it in the same "Repeat" block. Both broke with
+   zero visible error in the editor; the second one wasn't caught for
+   ~2000 uploads because the server dutifully accepted the empty date and
+   fell back to "now" (see `BackupEngine._year_month_dir`), silently
+   misfiling everything into the current month instead of failing loudly.
+   **Any chip whose bound attribute matters (not just "the raw item")
+   deserves a periodic sanity check** — after any edit to a loop, not just
+   the action you touched — and server-side, prefer surfacing a
+   suspicious-default loudly (e.g. log or reject an empty/fallback value)
+   over silently "doing something reasonable," since that's what let this
+   one run undetected so long.
+10. **A one-off script that writes to `index.sqlite` while the app might be
+    running needs real retry logic around every `commit()`, not just
+    `connect(timeout=...)`/`PRAGMA busy_timeout`.** The GUI polls
+    `ManifestDB.get_status()` every 1.5s (`main_window.py`'s
+    `_refresh_status_loop`) for as long as it's open, and the destination
+    folder is commonly a slow external USB drive — the two combined
+    produced sustained `database is locked` errors that outlasted a 30-60s
+    `busy_timeout` more than once. Retry `commit()` specifically (~10
+    attempts, several seconds apart) **on the same open connection** — do
+    NOT open a fresh connection per retry attempt; an early version of a
+    maintenance script did that, and each failed attempt left its own
+    connection dangling with an uncommitted (still-locked) transaction,
+    which piled up and self-deadlocked far worse than the original
+    contention. Also order disk-vs-DB operations so a crash mid-retry
+    never leaves the DB pointing at a file that no longer exists (e.g.
+    delete the DB row and commit it BEFORE deleting the file on disk, not
+    after). Simplest real fix when available: just ask the user to close
+    the GUI app for the duration of the script.
 
 ## 6. Testing approach that actually caught bugs
 

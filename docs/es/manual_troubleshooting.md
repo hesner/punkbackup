@@ -58,6 +58,33 @@
   limitado, una foto que acabas de tomar o guardar simplemente puede no
   ser visible para el Atajo todavía, sin ningún error visible.
 
+## Todas las fotos nuevas están cayendo en la misma carpeta (el mes actual)
+
+Esto pasa cuando el servidor recibe una fecha vacía para cada foto, y
+`_year_month_dir()` usa "ahora mismo" como respaldo — así que todo termina
+en la carpeta del mes en curso sin importar cuándo se tomó la foto
+realmente.
+
+- **Causa casi siempre confirmada**: el chip dentro de la acción
+  **Formatear fecha** (la que construye la variable `TomadaEn`, en la
+  sección 4 del Manual de configuración del iPhone) se desconfiguró en
+  silencio y quedó apuntando a otro atributo (por ejemplo "Nombre") en vez
+  de **Fecha de captura**. Esto suele pasar sin ningún error visible,
+  justo después de agregar o mover otra acción dentro del mismo bloque
+  "Repetir" — Shortcuts a veces reconfigura chips vecinos sin avisar.
+- **Cómo confirmarlo**: dentro del Atajo, abre la acción "Formatear fecha"
+  de la sección 4 y toca su chip — debe decir **Fecha de captura**. Si
+  dice cualquier otra cosa, ese es el problema.
+- **Arreglo**: vuelve a seleccionar "Fecha de captura" en ese chip. Las
+  fotos que subas DESPUÉS de este arreglo van a quedar en su carpeta
+  correcta automáticamente — no hace falta hacer nada más para las
+  nuevas.
+- **Las fotos que ya se subieron mal archivadas** (antes del arreglo) no
+  se reorganizan solas — quedan donde cayeron. Si esto te pasó con muchos
+  archivos, es un caso de mantenimiento puntual (leer la fecha real
+  directamente del archivo o forzar un re-envío desde el teléfono); no es
+  algo que el Atajo o el servidor corrijan automáticamente.
+
 ## Mi biblioteca es enorme (miles de fotos) — ¿llegará a terminar el respaldo completo?
 
 El Atajo barre tu biblioteca hacia atrás en bloques acotados de 50 fotos,

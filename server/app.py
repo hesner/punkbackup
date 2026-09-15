@@ -24,6 +24,7 @@ new identity or redirect where files get written.
 from __future__ import annotations
 
 import hashlib
+import logging
 import uuid
 from pathlib import Path
 from typing import Optional
@@ -34,6 +35,11 @@ from starlette.concurrency import run_in_threadpool
 from .manifest_db import ManifestDB
 from .profiles import Profile, ProfileStore
 from .storage import BackupEngine
+
+# Reuses "backup_engine" (not a new logger name) so this shows up in the
+# GUI's live activity log for free — main_window.py only wires its
+# QueueHandler onto that one logger.
+logger = logging.getLogger("backup_engine")
 
 app = FastAPI(title="PunkBackup")
 
@@ -176,6 +182,21 @@ async def upload(
         staging_path.unlink(missing_ok=True)
         engine.db.bump_run(run_id, "files_error")
         raise
+
+    if size == 0:
+        # Diagnostic for the still-unresolved "videos arrive as 0 bytes" bug
+        # (see PLAN.md) — capture exactly what the phone declared vs what the
+        # stream actually delivered, so the next real-device video test gives
+        # real evidence instead of another guess.
+        logger.warning(
+            "0-byte upload: filename=%r declared_content_length=%r "
+            "content_type=%r user_agent=%r transfer_encoding=%r",
+            filename,
+            request.headers.get("content-length"),
+            request.headers.get("content-type"),
+            request.headers.get("user-agent"),
+            request.headers.get("transfer-encoding"),
+        )
 
     try:
         result = await run_in_threadpool(

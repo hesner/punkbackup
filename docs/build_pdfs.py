@@ -9,6 +9,7 @@ Windows. Output goes to docs/pdf/.
 from __future__ import annotations
 
 import base64
+import re
 from pathlib import Path
 
 import markdown
@@ -17,6 +18,30 @@ from xhtml2pdf import pisa
 ROOT = Path(__file__).resolve().parent.parent
 PDF_DIR = ROOT / "docs" / "pdf"
 LOGO_PATH = ROOT / "assets" / "punkbackup.png"
+
+# xhtml2pdf/reportlab renders with plain Helvetica, which has glyphs for
+# some symbols (confirmed OK by rendering a test page: → U+2192, ≈ U+2248,
+# ▼ U+25BC all display correctly) but not others — each unsupported one
+# shows up as a solid black "tofu" box instead of failing loudly, and can
+# push a line past the page margin. Confirmed broken the same way: ⚙
+# U+2699, ⚠ U+26A0, ✅ U+2705, ⤢ U+2922, 🤘 U+1F918. These symbols work
+# fine in the Markdown source (GitHub, the repo, plain text editors all
+# render them), so the source keeps them for readability there; only the
+# PDF pipeline strips them, and only the specific ranges confirmed broken
+# — not arrows/math symbols in general, which render fine as-is.
+_EMOJI_RE = re.compile(
+    "["
+    "\U0001F300-\U0001FAFF"  # pictographs, emoticons, transport, symbols (covers 🤘)
+    "\U00002600-\U000027BF"  # misc symbols & dingbats (covers ⚙ ⚠ ✅)
+    "\U00002900-\U0000297F"  # supplemental arrows-B (covers ⤢)
+    "\U0000FE0F"              # variation selector-16 (emoji presentation)
+    "]+ ?"  # a run of them (⚠️ is 2 codepoints) plus one trailing space,
+             # so removal doesn't leave a stray double space or "( paso"
+)
+
+
+def _strip_unsupported_symbols(text: str) -> str:
+    return _EMOJI_RE.sub("", text)
 
 
 def _logo_data_uri() -> str:
@@ -75,6 +100,7 @@ MANUALS = [
 
 def build_pdf(md_path: Path, out_name: str, logo_uri: str) -> None:
     md_text = md_path.read_text(encoding="utf-8")
+    md_text = _strip_unsupported_symbols(md_text)
     body_html = markdown.markdown(md_text, extensions=["tables", "fenced_code", "sane_lists"])
     logo_tag = f'<img class="pdf-logo" src="{logo_uri}"/>'
     html = f"<html><head><style>{CSS}</style></head><body>{FOOTER}{logo_tag}{body_html}</body></html>"

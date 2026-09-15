@@ -60,6 +60,32 @@
   access, a photo you just took or saved may simply not be visible to the
   Shortcut yet, with no error shown.
 
+## All new photos are landing in the same folder (the current month)
+
+This happens when the server receives an empty date for each photo, and
+`_year_month_dir()` falls back to "right now" — so everything ends up in
+the current month's folder regardless of when the photo was actually
+taken.
+
+- **Almost always confirmed cause**: the chip inside the **Format Date**
+  action (the one that builds the `TakenAt` variable, section 4 of the
+  iPhone Setup Manual) got silently reconfigured to point at a different
+  attribute (e.g. "Name") instead of **Date Taken**. This usually happens
+  with no visible error, right after adding or moving another action
+  inside the same "Repeat" block — Shortcuts sometimes silently
+  reconfigures neighboring chips.
+- **How to confirm it**: inside the Shortcut, open section 4's "Format
+  Date" action and tap its chip — it should say **Date Taken**. If it
+  says anything else, that's the problem.
+- **Fix**: re-select "Date Taken" on that chip. Photos uploaded AFTER
+  this fix will land in their correct folder automatically — nothing
+  else needs to change for new uploads.
+- **Photos already uploaded to the wrong folder** (before the fix) don't
+  reorganize themselves — they stay where they landed. If this happened
+  to a large number of files, it's a one-off maintenance job (reading the
+  real date directly from each file, or forcing a re-send from the
+  phone), not something the Shortcut or server fixes automatically.
+
 ## My library is huge (thousands of photos) — will the full backup ever finish?
 
 The Shortcut sweeps your library backward in bounded blocks of 50, newest

@@ -239,6 +239,57 @@ pérdida de datos ni corrupción — cada video queda pendiente y se reintenta
 solo — pero **el respaldo de videos es, a la fecha, un problema abierto sin
 resolver**, no una molestia menor.
 
+**Diagnóstico agregado para investigar los videos** (`server/app.py`): cuando
+llega un cuerpo de 0 bytes, el servidor ahora registra en el log de
+actividad (reutiliza el logger `"backup_engine"` para que aparezca en el
+panel de la GUI) el `Content-Length`/`Content-Type`/`User-Agent`/
+`Transfer-Encoding` que declaró el teléfono. Se confirmó que `/upload` ya
+cuenta los bytes realmente recibidos en el stream (no confía en el header
+`Content-Length`), así que "0 bytes" significa que el cuerpo llegó
+genuinamente vacío de principio a fin, no un problema de parseo de headers.
+Hipótesis principal sin confirmar: un video grande (HEVC) necesita
+exportarse/transcodificarse a un archivo temporal antes de que Shortcuts
+pueda adjuntarlo, y esa exportación puede no terminar antes de que la
+acción de red dispare — lo que explicaría por qué es independiente de
+primer/segundo plano y siempre da exactamente 0 bytes en vez de datos
+parciales.
+
+### 5.2 Bug real: `taken_at` vacío misarchivó ~2000 fotos — RESUELTO
+
+El chip dentro de la acción **Formatear fecha** que construye `TomadaEn`
+se reconfiguró en silencio para apuntar a "Nombre" en vez de "Fecha de
+captura" (ver AGENTS.md §5 punto 9) — probablemente al insertar el paso de
+captura de `UltimaFecha` justo antes en el mismo loop del barrido por
+bloques. El servidor recibió `taken_at` vacío para ~2116 archivos durante
+varios días y, como `_year_month_dir()` usa "ahora" como respaldo cuando la
+fecha es vacía o no parseable, todos terminaron amontonados en la carpeta
+del mes en curso en vez de su mes real.
+
+**Arreglo del Atajo**: el usuario volvió a seleccionar "Fecha de captura"
+en ese chip — confirmado que las subidas nuevas ya llegan con fecha real.
+
+**Recuperación de lo ya mal archivado**: se hizo con un script de
+mantenimiento puntual (no forma parte del repo, fue descartable) que leyó
+el EXIF real (`DateTimeOriginal`, tag `36867`) directamente de cada
+archivo con Pillow + `pillow-heif`, y movió/actualizó el índice para los
+que sí tenían ese dato — 714 de 2116. Los 1330 restantes (sobre todo
+`.jpeg` de apps como WhatsApp, que iOS guarda sin metadatos) no tenían
+ningún EXIF recuperable del archivo en sí. Para esos, en vez de intentar
+recuperarlos desde el archivo, se **borraron del índice y del disco** —
+la app de Fotos del iPhone sí conserva un "Date Taken" interno para
+cualquier foto, tenga o no EXIF, así que al volver a correr el Atajo (ya
+arreglado) sobre la biblioteca completa, el mecanismo normal de
+`/check`+`/upload` los vuelve a subir solos, esta vez a su carpeta
+correcta — sin necesidad de un script de "reparación" separado. El
+respaldo es de un solo sentido y nunca toca el iPhone, así que borrar la
+copia del PC es seguro: el original siempre sigue estando en el teléfono.
+
+**Lección operativa**: cualquier script que escriba en `index.sqlite`
+mientras la app pueda estar corriendo necesita reintentos reales alrededor
+de cada `commit()` (no solo `PRAGMA busy_timeout`) — la GUI sondea el
+estado cada 1.5s y la carpeta destino suele ser una USB externa lenta; ver
+AGENTS.md §5 punto 10 para el detalle completo.
+
 ## 6. Modelo de datos (índice SQLite, uno por perfil)
 
 Tabla `backed_up_files`:
@@ -362,5 +413,16 @@ Tabla `runs` (una corrida de backup, para `/status`):
 - [x] Protección del servidor contra subidas vacías (0 bytes) — se
       rechazan en vez de registrarse, autorreparación vía reintento.
 - [x] Hora local (no UTC) en la GUI; panel de actividad expandible.
+- [x] Bug del chip `Formatear fecha` (misarchivo de ~2000 fotos) diagnosticado,
+      arreglado en el Atajo, y los archivos ya mal archivados recuperados o
+      re-encolados para resubirse. Ver sección 5.2.
+- [ ] Diagnóstico de headers para el 0-byte de videos agregado
+      (`server/app.py`), pero **la causa raíz de los videos sigue sin
+      resolver** — sigue siendo el problema abierto más importante.
+- [ ] Pendiente en la GUI (pedido por el usuario, no iniciado): marcar en el
+      log cuándo inicia/termina cada corrida de backup, mostrar cuántos
+      archivos se guardaron en la ÚLTIMA corrida específicamente (no el
+      acumulado), y mostrar en algún otro lugar el total de archivos
+      actualmente en la carpeta destino del perfil.
 - [ ] Automatización WiFi en el iPhone del usuario (al final).
 - [ ] Compartir el Atajo a otro iPhone/perfil (al final).

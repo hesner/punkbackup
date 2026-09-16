@@ -215,12 +215,19 @@ def test_empty_upload_is_rejected_and_not_recorded(client, store, tmp_path):
     background and can't fetch a large video's full bytes from iCloud in
     time) must never be recorded as a successful backup — otherwise /check
     would wrongly report it as already backed up forever, and the real
-    file would never get a chance to upload on a later, successful run."""
+    file would never get a chance to upload on a later, successful run.
+
+    Deliberately a 200 with `detail` in the body, not a 4xx status:
+    confirmed on a real device that a non-2xx response makes Shortcuts
+    silently abort the rest of that loop iteration, which would break the
+    client-side Encode-Media-and-retry logic built to run right after this
+    call (see PLAN.md §5.1) — same always-200 idiom as /check's `missing`."""
     profile = add_profile_with_dest(store, tmp_path, "Perfil de prueba")
     headers = {"X-Backup-Token": profile.token}
 
     r = upload(client, headers, "IMG_1.mov", b"")
-    assert r.status_code == 422
+    assert r.status_code == 200
+    assert r.json().get("detail")
 
     status = client.get("/status", headers=headers).json()
     assert status["total_files_backed_up"] == 0

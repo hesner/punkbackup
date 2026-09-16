@@ -219,7 +219,16 @@ async def upload(
         # Currently just an empty (0-byte) body — see finalize_upload's
         # docstring. Not recorded as backed up, so /check still reports it
         # missing and a later run retries it automatically.
-        raise HTTPException(422, str(exc))
+        #
+        # Deliberately a 200 with the error in the body (`detail`, same
+        # shape FastAPI's HTTPException would have used) instead of a 4xx
+        # status: confirmed on a real device that when this action itself
+        # errors, Shortcuts silently aborts the REST of that loop
+        # iteration — including the Encode-Media-and-retry steps built to
+        # follow it (see PLAN.md §5.1). A 200 keeps the action "successful"
+        # so the Shortcut's own `detail`-has-any-value check downstream
+        # still runs, exactly like `/check`'s always-200 `missing` pattern.
+        return {"detail": str(exc)}
     return result
 
 

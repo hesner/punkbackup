@@ -228,31 +228,80 @@ finalize_upload`) ahora **rechaza y no registra** un cuerpo de 0 bytes en
 vez de guardarlo como "respaldado" — así `/check` lo sigue reportando como
 "falta" y una corrida futura lo reintenta solo, sin envenenar el índice
 para siempre. Confirmado con carga real: las fotos suben al 100% de
-fiabilidad, en primer plano y en segundo plano. **Los videos, en cambio,
-fallan de forma sistemática — no intermitente** (en una sesión de prueba
-completa, cero videos lograron subir con contenido real, todos los
-intentos dieron 0 bytes) — la causa exacta sigue sin determinar (descartado
-iCloud, que estaba apagado; descartado que Google Fotos reemplace el
-original local; mantener la app en primer plano NO lo arregla de forma
-confiable). Gracias a la protección del servidor esto no representa
-pérdida de datos ni corrupción — cada video queda pendiente y se reintenta
-solo — pero **el respaldo de videos es, a la fecha, un problema abierto sin
-resolver**, no una molestia menor.
+fiabilidad, en primer plano y en segundo plano.
 
-**Diagnóstico agregado para investigar los videos** (`server/app.py`): cuando
-llega un cuerpo de 0 bytes, el servidor ahora registra en el log de
-actividad (reutiliza el logger `"backup_engine"` para que aparezca en el
-panel de la GUI) el `Content-Length`/`Content-Type`/`User-Agent`/
-`Transfer-Encoding` que declaró el teléfono. Se confirmó que `/upload` ya
-cuenta los bytes realmente recibidos en el stream (no confía en el header
-`Content-Length`), así que "0 bytes" significa que el cuerpo llegó
-genuinamente vacío de principio a fin, no un problema de parseo de headers.
-Hipótesis principal sin confirmar: un video grande (HEVC) necesita
-exportarse/transcodificarse a un archivo temporal antes de que Shortcuts
-pueda adjuntarlo, y esa exportación puede no terminar antes de que la
-acción de red dispare — lo que explicaría por qué es independiente de
-primer/segundo plano y siempre da exactamente 0 bytes en vez de datos
-parciales.
+**Los videos, en cambio, fallaban de forma sistemática — no intermitente**
+(en una sesión de prueba completa, cero videos lograron subir con
+contenido real, todos los intentos dieron 0 bytes). Diagnóstico agregado
+en `server/app.py`: cuando llega un cuerpo de 0 bytes, el servidor registra
+en el log de actividad (reutiliza el logger `"backup_engine"` para que
+aparezca en el panel de la GUI) el `Content-Length`/`Content-Type`/
+`User-Agent`/`Transfer-Encoding` que declaró el teléfono. Se confirmó que
+`/upload` ya cuenta los bytes realmente recibidos en el stream (no confía
+en el header `Content-Length`), así que "0 bytes" significa que el cuerpo
+llegó genuinamente vacío de principio a fin — Shortcuts nunca llegó a
+materializar los datos reales del video antes de armar la petición.
+
+**RESUELTO (2026-09-16): causa raíz encontrada y arreglo confirmado con
+evidencia real de servidor.** Investigación en vivo con un Atajo de
+prueba descartó, una por una: `Guardar archivo` (Save File) tanto a
+iCloud Drive como a almacenamiento local ("En este iPhone") — falla para
+video en ambos casos, incluso con un video de cámara viejo que sí sube
+bien por la vía normal; esperar unos segundos antes de subir — mismo
+resultado; duplicar el ítem en Fotos — la acción no existe en Shortcuts.
+**La única acción que sí logra materializar el video es `Encode Media`**
+(búscala como "Encode", no existe una acción llamada "Convert Video").
+Usada con `Size: Passthrough`, un video que consistentemente subía como
+0 bytes se subió con éxito real: `test-convert-video.mp4`, 7,096,331
+bytes, verificado directamente en `backed_up_files` — no solo una vista
+previa del teléfono (las vistas previas de Quick Look demostraron ser
+poco confiables durante toda esta investigación: mostraban "No Items"
+para ítems que sí tenían datos reales, así que se abandonaron como señal
+de diagnóstico a favor de verificar siempre contra la base de datos real
+del servidor).
+
+**Comparación técnica del video original vs. el procesado con `Encode
+Media` (Size: Passthrough)**, hecha con `ffprobe` sobre el mismo archivo
+descargado directo del iPhone sin modificar vs. el que pasó por Encode
+Media:
+
+| | Original (iPhone) | Encode Media (Passthrough) |
+|---|---|---|
+| Códec de video | H.264, perfil High | H.264, perfil High — igual |
+| Resolución | 1920×1080 | 1920×1080 — igual |
+| Frame rate | 30 fps (2008 cuadros) | 30 fps (2008 cuadros) — igual |
+| Bitrate de video | 648,976 bps | 648,976 bps — igual |
+| Códec/bitrate de audio | AAC 44.1kHz estéreo, 193,519 bps | idéntico |
+| Duración | 67.07 s | 67.07 s — igual |
+| Tamaño | 7,096,486 bytes | 7,096,331 bytes (0.002% menos) |
+
+Únicas diferencias reales encontradas: el orden de los streams (Encode
+Media pone el video primero, el original trae el audio primero — sin
+efecto perceptible) y la etiqueta de metadata
+`com.apple.quicktime.creationdate` (la fecha real de captura embebida en
+el archivo) que Encode Media no conserva. Esto último **no afecta la
+fecha del backup** porque `taken_at` se captura por separado desde
+Shortcuts (atributo "Date Taken" de Fotos) antes de tocar el video, no
+depende de esa metadata interna del archivo. **Conclusión: "Passthrough"
+es, en la práctica, sin pérdida real de calidad** — mismo códec, misma
+resolución, mismo bitrate, mismos cuadros exactos, solo reempaqueta el
+contenedor.
+
+**Diseño del arreglo para el Atajo real** (reintento condicional, NO
+conversión de todos los videos): en el paso c) del barrido por bloques,
+justo después del `Obtener contenido de URL` que sube el archivo —
+`Obtener valor de diccionario` → clave `detail` → sobre esa respuesta →
+`Si` tiene algún valor (la subida directa falló) → `Encode Media` sobre
+`Elemento de repetición` (`Size: Passthrough`) → un segundo
+`Obtener contenido de URL` idéntico al primero pero con el resultado de
+`Encode Media` como cuerpo. Así, las fotos y los videos de cámara que ya
+suben bien (confirmado: 11 videos `IMG_XXXX` subidos con éxito antes de
+esta investigación) nunca tocan `Encode Media` — solo pagan el costo de
+recodificación los videos que realmente lo necesitan (en la práctica,
+videos importados de otras apps como WhatsApp, con nombre tipo UUID en
+vez de `IMG_XXXX`). Pendiente: construir esto en el Atajo real (se probó
+solo en un Atajo de prueba desechable) y correr una prueba controlada
+antes de confiar en él para un barrido completo.
 
 ### 5.2 Bug real: `taken_at` vacío misarchivó ~2000 fotos — RESUELTO
 
@@ -418,9 +467,11 @@ Tabla `runs` (una corrida de backup, para `/status`):
 - [x] Bug del chip `Formatear fecha` (misarchivo de ~2000 fotos) diagnosticado,
       arreglado en el Atajo, y los archivos ya mal archivados recuperados o
       re-encolados para resubirse. Ver sección 5.2.
-- [ ] Diagnóstico de headers para el 0-byte de videos agregado
-      (`server/app.py`), pero **la causa raíz de los videos sigue sin
-      resolver** — sigue siendo el problema abierto más importante.
+- [x] Causa raíz del 0-byte en videos encontrada y arreglo confirmado con
+      evidencia real de servidor (`Encode Media`, `Size: Passthrough`,
+      sin pérdida real de calidad — comparado con `ffprobe`). Ver sección
+      5.1. Pendiente: construir el reintento condicional en el Atajo real
+      (probado solo en un Atajo de prueba desechable hasta ahora).
 - [x] GUI: el log marca cuándo inicia/termina cada corrida de backup (con
       el resumen final), la tarjeta de cada perfil muestra por separado el
       total de archivos en su carpeta destino y cuántos se guardaron

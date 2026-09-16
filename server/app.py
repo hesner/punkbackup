@@ -195,11 +195,13 @@ async def upload(
         raise
 
     if size == 0:
-        # Diagnostic for the still-unresolved "videos arrive as 0 bytes" bug
-        # (see PLAN.md) — capture exactly what the phone declared vs what the
-        # stream actually delivered, so the next real-device video test gives
-        # real evidence instead of another guess.
-        logger.warning(
+        # Header-level detail for the 0-byte video bug (see PLAN.md §5.1 —
+        # root cause found and fixed client-side via an Encode Media retry,
+        # so this is now an expected, self-healing event, not a mystery).
+        # Kept at debug (not shown in the GUI's normal activity panel,
+        # which only surfaces info+) in case it's ever needed again; the
+        # user-visible pairing is storage.py's "x ... / + ..." log lines.
+        logger.debug(
             "0-byte upload: filename=%r declared_content_length=%r "
             "content_type=%r user_agent=%r transfer_encoding=%r",
             filename,

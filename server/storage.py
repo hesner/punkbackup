@@ -129,7 +129,7 @@ class BackupEngine:
             # of the empty file silently poisoning the record forever.
             staging_path.unlink(missing_ok=True)
             self.db.bump_run(run_id, "files_error")
-            logger.error("x %s: received 0 bytes, refusing to record as backed up", filename)
+            logger.error("x %s: received 0 bytes, requesting the file again", filename)
             raise ValueError(f'"{filename}" arrived empty (0 bytes) — not recorded, will retry on the next run.')
 
         safe_name = Path(filename).name  # strip any path components — never trust client paths

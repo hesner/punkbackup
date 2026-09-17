@@ -355,6 +355,15 @@ Optional but recommended — lets you check status without running a full backup
 > You can also run `PunkBackup` manually anytime by tapping it in the
 > Shortcuts app, or saying "Hey Siri, PunkBackup".
 
+> ⚠️ **A brief WiFi drop can re-trigger this automation.** Since it's
+> set to fire on "Connects," walking somewhere in your house with a weak
+> signal and reconnecting counts as a new connection — the automation can
+> fire again on top of a backup that's still running (or just got cut
+> off). Confirmed on a real device: no photos are lost either way (the
+> self-healing design handles it), but you may see a couple of
+> overlapping runs in the PC app's activity log after that happens —
+> that's expected, not a bug.
+
 ---
 
 ## Notes

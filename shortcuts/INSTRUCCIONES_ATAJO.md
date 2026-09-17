@@ -369,6 +369,16 @@ Opcional pero recomendado — te deja ver el estado sin correr un backup complet
 > También puedes correr `PunkBackup` manualmente en cualquier momento
 > tocándolo en la app Atajos, o diciendo "Oye Siri, PunkBackup".
 
+> ⚠️ **Un corte breve de WiFi puede re-disparar esta automatización.**
+> Como está configurada para "Al conectar", caminar por la casa por una
+> zona de señal débil y reconectar cuenta como una nueva conexión — la
+> automatización puede volver a dispararse encima de un backup que ya
+> estaba corriendo (o que se acaba de cortar). Confirmado en un
+> dispositivo real: no se pierde ninguna foto en ningún caso (el diseño
+> autosanador lo cubre), pero puedes ver un par de corridas superpuestas
+> en el log de actividad de la app de PC después de eso — es esperado,
+> no es un error.
+
 ---
 
 ## Notas

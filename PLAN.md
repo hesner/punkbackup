@@ -427,6 +427,63 @@ duplicados existentes ya se limpiaron manualmente (se conservó 1 copia
 de cada archivo real, se borraron las copias sobrantes vía script
 puntual, no versionado en el repo).
 
+### 5.5 Bug: el aviso de inactividad se disparaba solo con abrir la app — RESUELTO
+
+Tras agregar el aviso de "backup inactivo 5+ minutos" (§ este mismo doc,
+feature de la GUI), un usuario reportó que el aviso salía apenas 5 minutos
+después de abrir la app, sin que ningún backup real hubiera corrido esa
+sesión.
+
+**Causa real**: `ManifestDB.get_status()` calcula `state` mirando si el
+run más reciente tiene `finished_at IS NULL`, sin importar qué tan viejo
+sea ese run. Si la app se cierra (o el proceso muere) a mitad de una
+corrida, ese run queda "running" en la base de datos **para siempre** —
+ninguna corrida futura puede llamar a `/run/finish` con ese `run_id`
+(`RunID` es una variable local del Atajo, no sobrevive a esa ejecución).
+Cada vez que la app se reabre, `state` vuelve a reportar "running"
+inmediatamente por ese run viejo, y 5 minutos después el aviso de
+inactividad se dispara — sobre un run que en realidad se abandonó horas
+antes, no que se acaba de estancar.
+
+**Arreglo**: `ManifestDB.__init__` ahora cierra automáticamente
+cualquier run que siga con `finished_at IS NULL` la primera vez que se
+abre la base de datos de ese perfil en un proceso nuevo (`UPDATE runs SET
+finished_at = NOW() WHERE finished_at IS NULL`). Es seguro porque un
+`run_id` de una ejecución de un proceso anterior nunca puede volver a
+recibir su `/run/finish` real. Test:
+`test_reopening_reaps_a_run_left_running_by_a_previous_process`.
+
+### 5.6 Hallazgo: la automatización WiFi puede re-dispararse tras un corte breve de conexión
+
+Probado deliberadamente (2026-09-17): con un backup real corriendo,
+apagar el WiFi del iPhone ~10 segundos y volver a encenderlo.
+
+**Resultado bueno, confirmado**: ningún archivo se perdió. Hubo un hueco
+real de ~99 segundos sin subidas (más que los 10s reales, por el tiempo
+que toma a iOS reconectar/reintentar DNS), y las subidas se reanudaron
+solas después, sin intervención — el diseño autosanador (`/check` contra
+el estado real del destino) cubre esto sin problema.
+
+**Hallazgo colateral**: justo en medio de ese hueco apareció un `run_id`
+**nuevo** en la tabla `runs` — es decir, se volvió a llamar `/run/start`
+a mitad de lo que debería haber sido una sola ejecución continua del
+Atajo. Hipótesis mejor sustentada (no confirmada al 100%, pero consistente
+con TODA la evidencia observada, incluyendo 4 corridas separadas la misma
+mañana sin `/run/finish`, cada ~20-40 min): la automatización personal
+está configurada con la condición **"Wi-Fi Connects"** — y volver a
+encender el WiFi cuenta como una nueva conexión, así que la automatización
+se re-dispara, lanzando una SEGUNDA ejecución del Atajo encima de la que
+ya estaba corriendo (o se acababa de cortar).
+
+**Impacto real**: ninguno en los datos (el diseño de deduplicación por
+nombre+hash hace que dos corridas superpuestas no corrompan ni dupliquen
+nada, en el peor caso reintentan lo mismo). El costo es tiempo/batería
+extra y un historial de corridas más confuso de leer (varios `run_id`
+cortos entrelazados en vez de una corrida limpia). **No se tomó ninguna
+acción correctiva** — el usuario decidió dejarlo así por ahora dado que
+no hay pérdida de datos; queda documentado como comportamiento conocido,
+no como bug a resolver.
+
 ## 6. Modelo de datos (índice SQLite, uno por perfil)
 
 Tabla `backed_up_files`:

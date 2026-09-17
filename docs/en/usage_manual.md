@@ -97,6 +97,11 @@ clearly marks when each run **starts** and **finishes** (with the final
 summary: new/already had/conflicts/errors), so you can see at a glance
 where each backup begins and ends in the log history.
 
+Every line is stamped with the **local date and time** it happened
+(`DD-MM-YYYY HH:MM:SS`), so a log that spans several days (if you leave the
+app open) still reads clearly — you can tell exactly when each backup ran,
+not just their order.
+
 If a run stays "in progress" without receiving any new file for 5
 straight minutes (e.g. WiFi dropped, or you closed the Shortcut on the
 phone mid-backup), the log shows a notice like `⏸ "[profile]": no

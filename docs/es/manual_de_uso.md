@@ -100,6 +100,11 @@ corrida (con el resumen final: nuevos/ya existían/conflictos/errores), así
 que puedes ver de un vistazo dónde empieza y termina cada backup en el
 historial del log.
 
+Cada línea lleva la **fecha y hora local** en que ocurrió
+(`DD-MM-AAAA HH:MM:SS`), así que un log que abarca varios días (si dejas la
+app abierta) se sigue leyendo con claridad — puedes saber exactamente
+cuándo corrió cada backup, no solo el orden en que aparecen.
+
 Si una corrida se queda "en curso" sin recibir ningún archivo nuevo
 durante 5 minutos seguidos (por ejemplo, si el WiFi se cortó o cerraste
 el Atajo en el teléfono a medio backup), el log muestra un aviso tipo

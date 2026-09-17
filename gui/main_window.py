@@ -857,7 +857,7 @@ class MainWindow(ctk.CTk):
             except queue.Empty:
                 break
             text = record.getMessage() if isinstance(record, logging.LogRecord) else str(record)
-            stamp = datetime.now().strftime("%H:%M:%S")
+            stamp = datetime.now().strftime("%d-%m-%Y %H:%M:%S")
             line = f"{stamp} > {text}\n"
             self.log_box.configure(state="normal")
             self.log_box.insert("end", line)

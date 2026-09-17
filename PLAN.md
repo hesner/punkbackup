@@ -395,6 +395,38 @@ new, N already had, N conflicts, N errors ===` que nunca había aparecido
 en todo el historial del proyecto, y la notificación en el teléfono
 muestra los números reales.
 
+### 5.4 Hallazgo acotado: ítems sin `Date Taken` (grabaciones de pantalla, algunos screenshots importados) — DOCUMENTADO, sin arreglar a propósito
+
+Se detectaron duplicados repetidos de un mismo `ScreenRecording_09-14-2026`
+(6 copias) y dos versiones del mismo screenshot guardado desde Facebook
+(una con extensión `.jpg`, otra sin extensión). Investigado a fondo:
+
+- **Causa**: estos ítems no tienen ningún valor de `Date Taken` legible
+  por Shortcuts (llega `NULL` al servidor, no solo vacío) — parece
+  específico de grabaciones de pantalla y de algunas imágenes importadas
+  desde otras apps (Facebook, en este caso), que no traen la metadata de
+  captura estándar de Fotos.
+- **Efecto 1**: sin fecha real, `_year_month_dir()` usa "hoy" como
+  respaldo — estos ítems siempre caen en el mes en curso en vez de su
+  fecha real (que probablemente ni existe).
+- **Efecto 2 (hipótesis, no confirmada en dispositivo)**: al no tener
+  `Date Taken`, es probable que el barrido "Más reciente primero" los
+  ubique siempre cerca del principio, así que cada corrida nueva los
+  vuelve a encontrar sin importar cuánto haya avanzado `Limite` en
+  corridas anteriores — y como cada vez pasan por el reintento de
+  `Encode Media` (que reescribe metadata interna, cambiando el hash),
+  el sistema los trata como contenido nuevo y genera otra copia con
+  sufijo en vez de reconocerlos como ya respaldados.
+
+**Alcance real, medido**: 3 archivos distintos de 2232 en total (0.13%)
+— no es un problema generalizado. **Decisión del usuario**: no modificar
+el Atajo para esto (el arreglo propuesto era usar `Date Created` como
+respaldo cuando `Date Taken` no tiene valor) — se deja documentado como
+limitación conocida y aceptada, dado lo acotado del impacto. Los
+duplicados existentes ya se limpiaron manualmente (se conservó 1 copia
+de cada archivo real, se borraron las copias sobrantes vía script
+puntual, no versionado en el repo).
+
 ## 6. Modelo de datos (índice SQLite, uno por perfil)
 
 Tabla `backed_up_files`:

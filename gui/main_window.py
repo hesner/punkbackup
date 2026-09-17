@@ -857,8 +857,10 @@ class MainWindow(ctk.CTk):
             except queue.Empty:
                 break
             text = record.getMessage() if isinstance(record, logging.LogRecord) else str(record)
+            stamp = datetime.now().strftime("%H:%M:%S")
+            line = f"{stamp} > {text}\n"
             self.log_box.configure(state="normal")
-            self.log_box.insert("end", "> " + text + "\n")
+            self.log_box.insert("end", line)
             self.log_box.see("end")
             self.log_box.configure(state="disabled")
             for widget in list(self._extra_log_widgets):
@@ -866,7 +868,7 @@ class MainWindow(ctk.CTk):
                     self._extra_log_widgets.remove(widget)
                     continue
                 widget.configure(state="normal")
-                widget.insert("end", "> " + text + "\n")
+                widget.insert("end", line)
                 widget.see("end")
                 widget.configure(state="disabled")
         self.after(300, self._drain_log_queue)

@@ -97,6 +97,12 @@ clearly marks when each run **starts** and **finishes** (with the final
 summary: new/already had/conflicts/errors), so you can see at a glance
 where each backup begins and ends in the log history.
 
+If a run stays "in progress" without receiving any new file for 5
+straight minutes (e.g. WiFi dropped, or you closed the Shortcut on the
+phone mid-backup), the log shows a notice like `⏸ "[profile]": no
+activity for 5+ minutes — the backup looks like it stopped` — once per
+stretch of inactivity, not repeated while it stays idle.
+
 Next to that button is a smaller **"⤢ Expand"** button, which opens the
 same log in a separate, larger, resizable window — handy when a long run
 generates more text than the small embedded panel comfortably shows.

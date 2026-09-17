@@ -100,6 +100,13 @@ corrida (con el resumen final: nuevos/ya existían/conflictos/errores), así
 que puedes ver de un vistazo dónde empieza y termina cada backup en el
 historial del log.
 
+Si una corrida se queda "en curso" sin recibir ningún archivo nuevo
+durante 5 minutos seguidos (por ejemplo, si el WiFi se cortó o cerraste
+el Atajo en el teléfono a medio backup), el log muestra un aviso tipo
+`⏸ "[perfil]": sin actividad hace 5+ minutos — el backup parece haberse
+detenido` — una sola vez por cada corte, no se repite mientras siga
+inactivo.
+
 Junto a ese botón hay uno más pequeño, **"⤢ Expandir"**, que abre el mismo
 registro en una ventana aparte, más grande y redimensionable — útil cuando
 una corrida larga genera mucho texto y el panel chico se queda corto.

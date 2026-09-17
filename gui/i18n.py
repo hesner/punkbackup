@@ -179,6 +179,10 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
     "log_server_stopped": {"es": "Servidor detenido.", "en": "Server stopped."},
     "log_profile_activated": {"es": 'Perfil "{name}" activado.', "en": 'Profile "{name}" activated.'},
     "log_profile_paused": {"es": 'Perfil "{name}" pausado.', "en": 'Profile "{name}" paused.'},
+    "log_backup_idle": {
+        "es": '⏸ "{name}": sin actividad hace {minutes}+ minutos — el backup parece haberse detenido (¿se cortó el WiFi o se cerró el Atajo en el teléfono?).',
+        "en": '⏸ "{name}": no activity for {minutes}+ minutes — the backup looks like it stopped (WiFi dropped, or the Shortcut closed on the phone?).',
+    },
 
     "err_toggle_server": {
         "es": "Ocurrió un error al iniciar/detener el servidor:\n\n{details}",

@@ -52,6 +52,8 @@ ctk.set_default_color_theme("blue")
 
 APP_TITLE = "PunkBackup"  # brand name — stays the same in every language
 
+IDLE_BACKUP_SECONDS = 300  # 5 min of no new files while a run is "running" -> log a one-time notice
+
 BG = "#0c0c0e"            # near-black window background
 CARD_BG = "#19191d"        # card/panel background
 CARD_BG_ALT = "#221418"    # subtle warm-dark variant for the log panel
@@ -287,6 +289,12 @@ class MainWindow(ctk.CTk):
         self.log_visible = False
         self._extra_log_widgets: list[ctk.CTkTextbox] = []  # expanded-log popups also live-fed
         self._log_popup: ctk.CTkToplevel | None = None  # only one expanded window at a time
+        # Per-profile idle-backup tracking, keyed by profile id: last seen
+        # last_backup_at + wall-clock time it last changed + whether we've
+        # already logged the "looks stopped" notice for this stretch of
+        # inactivity (reset the moment new activity or a finished run shows
+        # up) — see _check_idle_backups().
+        self._idle_tracking: dict[str, dict] = {}
         self.current_screen = "main"
         self._principal_rows: dict[str, ProfileStatusRow] = {}
         self._principal_empty_label: ctk.CTkLabel | None = None
@@ -880,9 +888,46 @@ class MainWindow(ctk.CTk):
                 self._refresh_aggregate_stats()
                 self._refresh_principal_profiles()
                 self._refresh_settings_profiles()
+                self._check_idle_backups()
             except Exception:
                 pass
         self.after(1500, self._refresh_status_loop)
+
+    def _check_idle_backups(self) -> None:
+        """A run has no persistent connection to watch — the server can
+        only infer "the phone stopped talking to us" from a lack of new
+        files while a run is still marked "running" (no /run/finish yet).
+        Logs a one-time notice per stretch of inactivity, per profile;
+        resets the moment new activity shows up or the run finishes."""
+        now = datetime.now(timezone.utc)
+        for profile in self.profile_store.list():
+            try:
+                st = app_module.get_status_for_profile(profile)
+            except Exception:
+                continue
+
+            tracking = self._idle_tracking.setdefault(
+                profile.id, {"last_backup_at": None, "seen_at": now, "notified": False}
+            )
+
+            if st["state"] != "running":
+                tracking["last_backup_at"] = None
+                tracking["notified"] = False
+                continue
+
+            current_backup_at = st.get("last_backup_at")
+            if current_backup_at != tracking["last_backup_at"]:
+                tracking["last_backup_at"] = current_backup_at
+                tracking["seen_at"] = now
+                tracking["notified"] = False
+                continue
+
+            idle_seconds = (now - tracking["seen_at"]).total_seconds()
+            if idle_seconds >= IDLE_BACKUP_SECONDS and not tracking["notified"]:
+                tracking["notified"] = True
+                self._log_local(
+                    self.t("log_backup_idle", name=profile.name, minutes=IDLE_BACKUP_SECONDS // 60)
+                )
 
     def report_callback_exception(self, exc, val, tb) -> None:
         """Tkinter calls this for any uncaught exception raised inside a

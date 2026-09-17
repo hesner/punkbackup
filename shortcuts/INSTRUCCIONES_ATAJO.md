@@ -219,9 +219,53 @@ Todo lo que sigue, hasta el final de la sección 4, va **dentro** de este
               error visible.
             - Encabezados: `X-Backup-Token` → variable `Token`.
 
-        - (No hace falta ninguna acción en el "Si no" — si ya estaba
-          respaldada, simplemente no se hace nada y se sigue con la
-          siguiente foto).
+        - **Paso c.1) Obtener valor de diccionario** — revisa si esa
+          subida falló (los videos importados de WhatsApp/otras apps a
+          veces llegan vacíos, 0 bytes — ver la nota de más abajo):
+            - **Obtener valor de**: escribe `detail`
+            - **en**: el resultado del `Obtener contenido de URL` de
+              arriba (aparece como "Contents of URL" en la lista de
+              variables recientes).
+
+        - **Paso c.2) Si** (nuevo, anidado dentro del "Si" del paso c):
+          condición = el resultado del paso c.1 **has any value** (si la
+          subida directa funcionó, el servidor no manda el campo
+          `detail`, así que esta condición da falso y se salta todo este
+          bloque — igual idioma que el "has any value" del paso c).
+
+            - **Paso c.3) Encode Media** (dentro de este "Si" nuevo):
+                - Ítem: **Elemento de repetición** — insértalo directo,
+                  una sola vez, sin volver a tocarlo (mismo cuidado de
+                  siempre con este chip).
+                - **Size**: `Passthrough` (no reduce calidad ni
+                  resolución — solo fuerza a Shortcuts a leer el archivo
+                  completo, que es justo lo que falla para estos videos).
+
+            - **Paso c.4) Obtener contenido de URL** (segundo intento —
+              lo más seguro es copiar el de arriba y pegarlo aquí, para
+              no volver a escribir la URL a mano):
+                - Misma URL, mismo Método POST, mismos Encabezados que el
+                  `Obtener contenido de URL` original de arriba.
+                - **Request Body** → **File** → valor: el resultado de
+                  **Encode Media** (paso c.3) — NO Elemento de repetición
+                  esta vez.
+
+            - No hace falta nada en el "Si no" de este "Si" anidado.
+
+        - (No hace falta ninguna acción en el "Si no" del "Si" del paso c
+          — si ya estaba respaldada, simplemente no se hace nada y se
+          sigue con la siguiente foto).
+
+> ⚠️ **Por qué existe este reintento**: se confirmó que un video
+> importado de WhatsApp/Mensajes/otras apps a veces llega al servidor
+> como 0 bytes en el primer intento — Shortcuts no logra leer sus datos
+> reales de la librería de Fotos directamente. "Encode Media" con
+> `Size: Passthrough` sí logra forzar esa lectura completa (confirmado
+> comparando el video original contra el procesado con `ffprobe`: mismo
+> códec, misma resolución, mismo bitrate — sin pérdida real). Por eso el
+> reintento SOLO se activa si la subida directa falla — los videos de
+> cámara nativa (`IMG_XXXX`) casi siempre suben bien a la primera, sin
+> tocar Encode Media.
 
 Todavía dentro del "Repetir con cada elemento" **interno**, después de su
 propio "End Repeat" pero **antes** del "End Repeat" externo de la

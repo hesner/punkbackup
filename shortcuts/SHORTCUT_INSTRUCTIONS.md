@@ -211,8 +211,51 @@ Everything below, through the end of section 4, goes **inside** this outer
               erroring visibly.
             - Headers: `X-Backup-Token` → `Token` variable.
 
-        - (Nothing needed in the "Otherwise" branch — if it was already
-          backed up, just move on to the next item.)
+        - **Step c.1) Get Dictionary Value** — check whether that upload
+          failed (videos imported from WhatsApp/other apps sometimes
+          arrive empty, 0 bytes — see the note below):
+            - **Get Value for**: type `detail`
+            - **in**: the result of the `Get Contents of URL` above (it
+              appears as "Contents of URL" in the recent variables list).
+
+        - **Step c.2) If** (new, nested inside step c's "If"): condition
+          = the result of step c.1 **has any value** (if the direct
+          upload succeeded, the server doesn't send a `detail` field, so
+          this condition is false and the whole block is skipped — same
+          "has any value" idiom as step c itself).
+
+            - **Step c.3) Encode Media** (inside this new "If"):
+                - Item: **Repeat Item** — insert it directly, once, and
+                  don't tap it again afterward (same care as always with
+                  this chip).
+                - **Size**: `Passthrough` (doesn't reduce quality or
+                  resolution — it just forces Shortcuts to read the full
+                  file, which is exactly what fails for these videos).
+
+            - **Step c.4) Get Contents of URL** (second attempt —
+              safest to copy the one above and paste it here, instead of
+              retyping the URL by hand):
+                - Same URL, same Method POST, same Headers as the
+                  original `Get Contents of URL` above.
+                - **Request Body** → **File** → value: the result of
+                  **Encode Media** (step c.3) — NOT Repeat Item this
+                  time.
+
+            - Nothing needed in this nested "If"'s "Otherwise".
+
+        - (Nothing needed in the outer "Otherwise" branch of step c — if
+          it was already backed up, just move on to the next item.)
+
+> ⚠️ **Why this retry exists**: confirmed on a real device that a video
+> imported from WhatsApp/Messages/other apps sometimes arrives at the
+> server as 0 bytes on the first attempt — Shortcuts fails to read its
+> real data straight from the Photos library. "Encode Media" with
+> `Size: Passthrough` does force that full read to succeed (confirmed by
+> comparing the original video against the processed one with `ffprobe`:
+> same codec, same resolution, same bitrate — no real quality loss). The
+> retry only kicks in when the direct upload fails — camera-native
+> videos (`IMG_XXXX`) almost always upload fine on the first try,
+> without ever touching Encode Media.
 
 Still inside the **inner** "Repeat with Each", after its own "End Repeat"
 but **before** the outer "End Repeat" from section 3 — these two actions

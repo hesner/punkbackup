@@ -26,6 +26,7 @@ from __future__ import annotations
 import hashlib
 import logging
 import uuid
+from datetime import datetime
 from pathlib import Path
 from typing import Optional
 
@@ -122,7 +123,12 @@ async def health():
 @app.post("/run/start")
 async def run_start(profile: Profile = Depends(verify_token)):
     run_id = _engine_for(profile).db.start_run()
-    logger.info("=== Backup run started (%s) — run_id %s ===", profile.name, run_id)
+    logger.info(
+        "=== Backup run started (%s) — run_id %s — %s ===",
+        profile.name,
+        run_id,
+        datetime.now().strftime("%H:%M:%S"),
+    )
     return {"run_id": run_id, "profile": profile.name}
 
 
@@ -130,13 +136,15 @@ async def run_start(profile: Profile = Depends(verify_token)):
 async def run_finish(run_id: str = Form(...), profile: Profile = Depends(verify_token)):
     result = _engine_for(profile).db.finish_run(run_id)
     logger.info(
-        "=== Backup run finished (%s) — run_id %s — %s new, %s already had, %s conflicts, %s errors ===",
+        "=== Backup run finished (%s) — run_id %s — %s new, %s already had, %s conflicts,"
+        " %s errors — %s ===",
         profile.name,
         run_id,
         result.get("files_new", 0),
         result.get("files_skipped", 0),
         result.get("files_conflict", 0),
         result.get("files_error", 0),
+        datetime.now().strftime("%H:%M:%S"),
     )
     return result
 

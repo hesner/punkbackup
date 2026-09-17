@@ -40,6 +40,25 @@ Anota estos datos:
 
 ---
 
+## Archivo de Atajo disponible (alternativa más rápida)
+
+Si prefieres no armar cada acción a mano, este repositorio incluye un archivo
+`shortcuts/PunkBackup.shortcut` ya armado. Envíalo a tu iPhone (AirDrop,
+iCloud Drive, correo — lo que tengas a mano), ábrelo y toca **"Añadir
+atajo"**. Luego ábrelo para editarlo y ajusta solo dos acciones con tus
+propios datos (todo lo demás ya está correctamente conectado):
+
+- La primera acción **Texto** (actualmente `http://your-pc.local:8787`) →
+  tu **dirección del servidor** real.
+- La segunda acción **Texto** (actualmente `TOKEN HERE`) → el **token** real
+  de este perfil.
+
+Con eso ya quedó — puedes saltar directo a **"¿Ya quedó funcionando?"** más
+abajo. Los pasos de construcción detallados que siguen solo hacen falta si
+prefieres armar el Atajo desde cero, o quieres entender qué hace cada acción.
+
+---
+
 ## Paso 1 — Crear el Atajo principal ("PunkBackup")
 
 1. Abre la app **Atajos**.

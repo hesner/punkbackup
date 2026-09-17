@@ -43,6 +43,25 @@ Note down these values:
 
 ---
 
+## Shortcut file available (faster alternative)
+
+If you'd rather not build every action by hand, this repo includes a ready-made
+`shortcuts/PunkBackup.shortcut` file. Send it to your iPhone (AirDrop, iCloud
+Drive, email — whatever you have), open it, and tap **"Add Shortcut"**. Then
+open it for editing and set just two actions to your own values (everything
+else is already wired up correctly):
+
+- The first **Text** action (currently `http://your-pc.local:8787`) → your
+  real **Server address**.
+- The second **Text** action (currently `TOKEN HERE`) → this profile's real
+  **Token**.
+
+That's it — skip straight to **"Is it working?"** below. The step-by-step
+build instructions that follow are only needed if you'd rather build the
+Shortcut from scratch, or want to understand what each action does.
+
+---
+
 ## Step 1 — Create the main Shortcut ("PunkBackup")
 
 1. Open the **Shortcuts** app.

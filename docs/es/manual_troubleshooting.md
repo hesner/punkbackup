@@ -138,11 +138,20 @@ conjunto fijo sin avanzar (`Limit` fijo sin forma de avanzar).
 
 ## La notificación final del Atajo sale con los números vacíos (Nuevos/Ya existían/Conflictos)
 
-Es un problema cosmético conocido — el paso final que cierra la corrida
-(`/run/finish`) a veces no completa, así que el resumen no siempre trae los
-números. **No afecta el respaldo real**: las fotos se siguen subiendo y
-guardando correctamente. Para confirmar que sí se guardó algo, revisa la
-carpeta destino directamente (ver siguiente sección).
+**No afecta el respaldo real** en ningún caso — las fotos se siguen
+subiendo y guardando correctamente aunque la notificación salga vacía.
+Si te pasa, revisa la acción **"Obtener contenido de URL"** hacia
+`/run/finish` (sección 5 del Manual de configuración del iPhone):
+
+- El header `X-Backup-Token` debe estar en **Headers**, no dentro de
+  **Request Body → Form**.
+- **Request Body → Form** debe tener un campo `run_id` con valor la
+  variable `RunID` — sin ese campo, el servidor rechaza la petición y el
+  resto de esa sección (leer los contadores, armar el mensaje) se salta
+  en silencio, dejando el resumen vacío.
+
+Para confirmar que sí se guardó algo mientras lo revisas, mira la carpeta
+destino directamente (ver siguiente sección).
 
 ## Cómo revisar si de verdad se están guardando archivos
 

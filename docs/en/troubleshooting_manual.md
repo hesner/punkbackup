@@ -135,10 +135,19 @@ forever (a plain `Limit` with no way to advance).
 
 ## The Shortcut's final notification shows blank numbers (New/Already had/Conflicts)
 
-Known cosmetic issue — the step that closes out the run (`/run/finish`)
-sometimes doesn't complete, so the summary doesn't always carry the
-numbers. **This doesn't affect the actual backup**: files still upload and
-save correctly. To confirm something was really saved, check the
+**This never affects the actual backup** — files keep uploading and
+saving correctly even when the notification comes back blank. If it
+happens, check the **"Get Contents of URL"** action pointing at
+`/run/finish` (section 5 of the iPhone Setup Manual):
+
+- The `X-Backup-Token` header must be under **Headers**, not inside
+  **Request Body → Form**.
+- **Request Body → Form** needs a `run_id` field set to the `RunID`
+  variable — without it, the server rejects the request and the rest of
+  that section (reading the counters, building the message) gets
+  silently skipped, leaving the summary blank.
+
+To confirm something was really saved while you check, look at the
 destination folder directly (see next section).
 
 ## How to check files are really being saved

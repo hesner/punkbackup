@@ -299,9 +299,32 @@ suben bien (confirmado: 11 videos `IMG_XXXX` subidos con éxito antes de
 esta investigación) nunca tocan `Encode Media` — solo pagan el costo de
 recodificación los videos que realmente lo necesitan (en la práctica,
 videos importados de otras apps como WhatsApp, con nombre tipo UUID en
-vez de `IMG_XXXX`). Pendiente: construir esto en el Atajo real (se probó
-solo en un Atajo de prueba desechable) y correr una prueba controlada
-antes de confiar en él para un barrido completo.
+vez de `IMG_XXXX`).
+
+**CONFIRMADO EN PRODUCCIÓN (2026-09-17): 7 de 7 videos que fallaban antes
+ahora suben completos.** Construido en el Atajo real, verificado con una
+prueba controlada real (no un atajo de prueba desechable) — resultado
+directo de `backed_up_files`:
+
+| Archivo | Tamaño real recibido |
+|---|---|
+| IMG_0640.mov | 6.3 MB |
+| 5450c81e-...mp4 | 11.6 MB |
+| ScreenRecording_09-14-2026 | 45.6 MB |
+| IMG_0455.mov | 5.4 MB |
+| e065584b-...mp4 | 11.6 MB |
+| 3621fdc3-...mp4 | 5.3 MB |
+| IMG_0398.mov | 6.2 MB |
+
+**Bug adicional encontrado y arreglado en el camino**: la primera versión
+del arreglo devolvía HTTP 422 para el rechazo de 0 bytes — confirmado en
+dispositivo real que un código de error HTTP hace que Shortcuts aborte en
+silencio el resto de esa vuelta del loop (todo lo agregado después:
+`Obtener valor de diccionario` → `Si` → `Encode Media` → reintento nunca
+se ejecutaba). Arreglado en `server/app.py`: el rechazo de 0 bytes ahora
+responde **200** con el error solo en el campo `detail` del cuerpo, igual
+que `/check` ya hacía con `missing` — nunca un código de error HTTP para
+este caso, aunque el archivo sigue sin registrarse como respaldado.
 
 ### 5.2 Bug real: `taken_at` vacío misarchivó ~2000 fotos — RESUELTO
 
@@ -338,6 +361,30 @@ mientras la app pueda estar corriendo necesita reintentos reales alrededor
 de cada `commit()` (no solo `PRAGMA busy_timeout`) — la GUI sondea el
 estado cada 1.5s y la carpeta destino suele ser una USB externa lenta; ver
 AGENTS.md §5 punto 10 para el detalle completo.
+
+### 5.3 Bug histórico: notificación final vacía / `finished_at` nunca se completaba — RESUELTO
+
+Desde el inicio del proyecto, prácticamente ninguna corrida completaba
+`/run/finish` (`finished_at` quedaba `NULL` en la tabla `runs`, y la
+notificación final mostraba "Nuevos: / Ya existían: / Conflictos:" sin
+ningún número). Se documentaba como "cosmético, baja prioridad" sin causa
+raíz conocida.
+
+**Causa real encontrada (2026-09-17)**: en el `Get Contents of URL` hacia
+`/run/finish`, el header `X-Backup-Token` estaba puesto por error dentro
+de **Request Body → Form** en vez de en **Headers**, y el campo de
+formulario `run_id` (obligatorio en el servidor, `Form(...)`) **no
+existía en absoluto**. El servidor rechazaba la petición (falta un campo
+requerido), Shortcuts abortaba el resto de esa sección en silencio —mismo
+mecanismo que el bug de los videos— y ninguna de las variables
+`FilesNew`/`FilesSkipped`/`FilesConflict` llegaba a tener valor.
+
+**Arreglo**: mover `X-Backup-Token` a **Headers**, agregar el campo de
+formulario `run_id` → variable `RunID`. Confirmado con evidencia real de
+servidor — el log ahora muestra la línea `=== Backup run finished ... — N
+new, N already had, N conflicts, N errors ===` que nunca había aparecido
+en todo el historial del proyecto, y la notificación en el teléfono
+muestra los números reales.
 
 ## 6. Modelo de datos (índice SQLite, uno por perfil)
 
@@ -467,11 +514,15 @@ Tabla `runs` (una corrida de backup, para `/status`):
 - [x] Bug del chip `Formatear fecha` (misarchivo de ~2000 fotos) diagnosticado,
       arreglado en el Atajo, y los archivos ya mal archivados recuperados o
       re-encolados para resubirse. Ver sección 5.2.
-- [x] Causa raíz del 0-byte en videos encontrada y arreglo confirmado con
-      evidencia real de servidor (`Encode Media`, `Size: Passthrough`,
-      sin pérdida real de calidad — comparado con `ffprobe`). Ver sección
-      5.1. Pendiente: construir el reintento condicional en el Atajo real
-      (probado solo en un Atajo de prueba desechable hasta ahora).
+- [x] Bug de los videos (0 bytes) **resuelto y confirmado en producción**:
+      causa raíz encontrada (`Encode Media`, `Size: Passthrough`, sin
+      pérdida real de calidad — comparado con `ffprobe`), reintento
+      condicional construido en el Atajo real, y verificado con 7/7 videos
+      previamente fallidos subiendo completos. Ver sección 5.1.
+- [x] Bug histórico de `/run/finish` (notificación final vacía,
+      `finished_at` nunca se completaba desde el inicio del proyecto)
+      resuelto — el campo `run_id` faltaba en el cuerpo de esa petición.
+      Ver sección 5.3.
 - [x] GUI: el log marca cuándo inicia/termina cada corrida de backup (con
       el resumen final), la tarjeta de cada perfil muestra por separado el
       total de archivos en su carpeta destino y cuántos se guardaron

@@ -326,6 +326,15 @@ responde **200** con el error solo en el campo `detail` del cuerpo, igual
 que `/check` ya hacía con `missing` — nunca un código de error HTTP para
 este caso, aunque el archivo sigue sin registrarse como respaldado.
 
+**Detalle cosmético también arreglado**: como cada video que necesita el
+reintento genera un "error" real en su primer intento (por diseño), el
+contador `files_error` quedaba inflado con reintentos que en realidad sí
+tuvieron éxito. `ManifestDB.mark_error()`/`resolve_error()` ahora
+recuerdan qué archivo falló en qué corrida y descuentan ese error si el
+mismo archivo se sube con éxito más adelante en la misma corrida — el
+contador en vivo ya no cuenta como "error permanente" algo que se
+autorreparó al toque.
+
 ### 5.2 Bug real: `taken_at` vacío misarchivó ~2000 fotos — RESUELTO
 
 El chip dentro de la acción **Formatear fecha** que construye `TomadaEn`

@@ -272,9 +272,10 @@ reintroduces these problems.
 
 ## 7. What "done" looks like
 
-- `pytest tests -q` passes (23 tests as of this writing, covering engine
+- `pytest tests -q` passes (25 tests as of this writing, covering engine
   rules, profile isolation/pause/delete, destination-switch correctness,
-  concurrent uploads, and the `/check` contract).
+  concurrent uploads, the `/check` contract, the 0-byte-upload rejection,
+  and its self-healing retry error-count behavior).
 - A real iPhone can run the Shortcut manually, and files appear in the
   chosen destination with correct extensions, organized by Year/Month, and
   `<dest>/.iphone_backup_index/index.sqlite`'s `backed_up_files` table

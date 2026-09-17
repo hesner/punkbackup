@@ -66,6 +66,11 @@ class ManifestDB:
         with self._lock:
             self._conn.executescript(SCHEMA)
             self._conn.commit()
+        # In-memory only (reset on restart) — which filenames currently have
+        # an unresolved mark_error() in a given run, so a same-run retry that
+        # later succeeds for that exact filename can un-count it. See
+        # mark_error()/resolve_error().
+        self._pending_errors: dict[str, set[str]] = {}
 
     # -- file records ---------------------------------------------------
 
@@ -115,6 +120,38 @@ class ManifestDB:
                 f"UPDATE runs SET {field} = {field} + 1 WHERE id = ?", (run_id,)
             )
             self._conn.commit()
+
+    def mark_error(self, run_id: Optional[str], filename: str) -> None:
+        """Like bump_run(run_id, "files_error"), but remembers the filename
+        so a same-run retry that later succeeds for this exact file can
+        un-count it via resolve_error() — a 0-byte upload that the
+        Shortcut's own Encode-Media retry fixes a moment later (see
+        PLAN.md §5.1) isn't a real, lasting error, and the live counter
+        shouldn't keep saying it is."""
+        if not run_id:
+            return
+        with self._lock:
+            self._conn.execute(
+                "UPDATE runs SET files_error = files_error + 1 WHERE id = ?", (run_id,)
+            )
+            self._conn.commit()
+            self._pending_errors.setdefault(run_id, set()).add(filename)
+
+    def resolve_error(self, run_id: Optional[str], filename: str) -> None:
+        """Undo a previous mark_error() for this exact filename in this
+        run, if there was one — call right after a file finishes
+        successfully (new / skipped / conflict), before/after the matching
+        bump_run() for that outcome."""
+        if not run_id:
+            return
+        with self._lock:
+            pending = self._pending_errors.get(run_id)
+            if pending and filename in pending:
+                pending.discard(filename)
+                self._conn.execute(
+                    "UPDATE runs SET files_error = files_error - 1 WHERE id = ?", (run_id,)
+                )
+                self._conn.commit()
 
     def finish_run(self, run_id: str) -> dict:
         with self._lock:

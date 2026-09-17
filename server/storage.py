@@ -128,7 +128,7 @@ class BackupEngine:
             # the asset already downloaded) retries it automatically instead
             # of the empty file silently poisoning the record forever.
             staging_path.unlink(missing_ok=True)
-            self.db.bump_run(run_id, "files_error")
+            self.db.mark_error(run_id, Path(filename).name)
             logger.error("x %s: received 0 bytes, requesting the file again", filename)
             raise ValueError(f'"{filename}" arrived empty (0 bytes) — not recorded, will retry on the next run.')
 
@@ -140,6 +140,7 @@ class BackupEngine:
         try:
             if candidate_path.exists():
                 if self._hash_existing(candidate_path) == sha256:
+                    self.db.resolve_error(run_id, safe_name)
                     self.db.bump_run(run_id, "files_skipped")
                     logger.info("= %s already backed up, skipped", safe_name)
                     return {"status": "skipped_duplicate", "dest_path": str(candidate_path)}
@@ -147,12 +148,14 @@ class BackupEngine:
                 final_path = self._next_conflict_name(target_dir, candidate_path)
                 shutil.move(str(staging_path), str(final_path))
                 self.db.record_file(safe_name, sha256, taken_at, str(final_path), size)
+                self.db.resolve_error(run_id, safe_name)
                 self.db.bump_run(run_id, "files_conflict")
                 logger.warning("! %s: name conflict, kept both -> %s", safe_name, final_path.name)
                 return {"status": "conflict_kept_both", "dest_path": str(final_path)}
 
             shutil.move(str(staging_path), str(candidate_path))
             self.db.record_file(safe_name, sha256, taken_at, str(candidate_path), size)
+            self.db.resolve_error(run_id, safe_name)
             self.db.bump_run(run_id, "files_new")
             logger.info("+ %s backed up (%.1f MB)", safe_name, size / (1024 * 1024))
             return {"status": "new", "dest_path": str(candidate_path)}

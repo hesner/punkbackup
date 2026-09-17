@@ -239,6 +239,30 @@ def test_empty_upload_is_rejected_and_not_recorded(client, store, tmp_path):
     assert check.json() == {"missing": True}  # still reported missing, so a retry can succeed
 
 
+def test_error_count_self_heals_when_retry_succeeds(client, store, tmp_path):
+    """The Shortcut's own retry (see PLAN.md §5.1: 0-byte upload -> Encode
+    Media -> re-upload the same filename) shouldn't leave files_error
+    permanently inflated once that retry succeeds — a transient failure
+    that immediately fixed itself isn't a real, lasting problem, and the
+    live counter shouldn't keep claiming it is."""
+    profile = add_profile_with_dest(store, tmp_path, "Perfil de prueba")
+    headers = {"X-Backup-Token": profile.token}
+    run_id = client.post("/run/start", headers=headers).json()["run_id"]
+
+    # First attempt: 0 bytes (as if the raw Photos item failed to
+    # materialize) -> rejected, counted as an error.
+    r1 = upload(client, headers, "IMG_1.mov", b"", run_id=run_id)
+    assert r1.json().get("detail")
+
+    # Retry with the SAME filename (as if Encode Media fixed it) -> succeeds.
+    r2 = upload(client, headers, "IMG_1.mov", b"real video bytes", run_id=run_id)
+    assert r2.json()["status"] == "new"
+
+    summary = client.post("/run/finish", headers=headers, data={"run_id": run_id}).json()
+    assert summary["files_new"] == 1
+    assert summary["files_error"] == 0  # the resolved retry un-counted the earlier error
+
+
 def test_aggregate_status_sums_all_profiles(client, store, tmp_path):
     laura = add_profile_with_dest(store, tmp_path, "iPhone de Laura")
     hesner = add_profile_with_dest(store, tmp_path, "iPad de Hesner")

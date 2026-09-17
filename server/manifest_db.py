@@ -65,6 +65,19 @@ class ManifestDB:
         self._conn.row_factory = sqlite3.Row
         with self._lock:
             self._conn.executescript(SCHEMA)
+            # A run's finished_at can only ever be set by /run/finish, called
+            # from the SAME app process that handed out its run_id via
+            # /run/start (RunID is a Shortcut-local variable, never persisted
+            # across a Shortcut run) — so a run still open from a PREVIOUS
+            # process lifetime (app closed/crashed mid-run) can never be
+            # finished for real. Reap it here, once, the first time this
+            # profile's DB is opened in this process: otherwise get_status()
+            # reports "running" indefinitely for a run nobody is actually
+            # running, which then falsely trips the GUI's idle-backup notice
+            # a few minutes after simply opening the app.
+            self._conn.execute(
+                "UPDATE runs SET finished_at = ? WHERE finished_at IS NULL", (_now(),)
+            )
             self._conn.commit()
         # In-memory only (reset on restart) — which filenames currently have
         # an unresolved mark_error() in a given run, so a same-run retry that

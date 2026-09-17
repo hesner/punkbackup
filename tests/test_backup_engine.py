@@ -124,3 +124,23 @@ def test_run_tracking_counts_new_skipped_and_conflict(tmp_path):
     status = engine.db.get_status()
     assert status["state"] == "idle"
     assert status["total_files_backed_up"] == 2  # new + conflict, not the skipped one
+
+
+def test_reopening_reaps_a_run_left_running_by_a_previous_process(tmp_path):
+    """A run's finished_at can only be set by /run/finish from the SAME
+    process that started it (RunID never survives past one Shortcut
+    execution) — so a run still "running" when the app closes/crashes is
+    permanently orphaned. Re-opening the DB (simulating the app being
+    reopened) must close it out, otherwise get_status() reports "running"
+    forever and falsely trips the GUI's idle-backup notice on every future
+    launch, even with zero real activity that session."""
+    dest = tmp_path / "dest"
+    dest.mkdir()
+    db1 = ManifestDB(dest)
+    run_id = db1.start_run()
+    db1.close()  # simulate the app closing mid-run, /run/finish never called
+
+    db2 = ManifestDB(dest)  # simulate the app being reopened later
+    assert db2.get_status()["state"] == "idle"
+    assert db2.get_status()["last_run"]["id"] == run_id
+    assert db2.get_status()["last_run"]["finished_at"] is not None

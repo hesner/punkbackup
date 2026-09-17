@@ -6,6 +6,44 @@ Respalda automáticamente las fotos y videos de uno o varios iPhone/iPad hacia
 tu PC Windows, por WiFi local, sin cable y sin depender de iCloud. Cada
 persona/dispositivo tiene su propio perfil con su propia carpeta destino.
 
+## ⚠ Importante: esta app no tiene firma digital de pago
+
+PunkBackup es un proyecto independiente y pequeño — el `.exe` **no** tiene
+firma digital de pago (ese certificado cuesta dinero; más abajo hay notas
+sobre eso por si te interesa). Esto tiene dos consecuencias reales y
+esperadas:
+
+- **Windows SmartScreen** te va a avisar una vez al instalar (ver Paso 2).
+  Es normal y no representa ningún riesgo — sigue los pasos de abajo.
+- **Tu antivirus puede ir más allá de solo avisar.** Los antivirus usan
+  heurísticas (patrones de comportamiento), no solo listas de virus
+  conocidos, y un programa nuevo sin firma que habla con la red puede
+  disparar esas heurísticas — aunque PunkBackup solo habla con tu propio
+  iPhone en tu propia WiFi y nunca manda nada a ningún otro lado. **Se ha
+  visto específicamente a Avast cerrar PunkBackup en silencio poco después
+  de abrirlo**, sin ningún mensaje de error de la app (simplemente
+  desaparece). Si te pasa esto, es Avast, no un error de PunkBackup — mira
+  el arreglo abajo.
+
+Puedes revisar el código fuente completo tú mismo (es un proyecto de código
+abierto) si quieres verificar exactamente qué hace antes de confiar en él.
+
+### Arreglo: "Avast me sigue cerrando la app"
+
+1. Abre **Avast** → **Menú → Cuarentena** (o "Virus Chest") — si aparece
+   `PunkBackup.exe` ahí, restáuralo y agrega una excepción para que no lo
+   vuelva a agarrar.
+2. O bien: **Avast → Menú → Configuración → General → Excepciones** →
+   agrega la carpeta de instalación (por defecto
+   `C:\Program Files\PunkBackup\`) para que Avast la deje de escanear/bloquear
+   por completo.
+3. Vuelve a abrir PunkBackup desde el ícono del Escritorio — ahora debería
+   quedarse abierta.
+
+Es el mismo arreglo para otros antivirus que se comporten así (Windows
+Defender, Norton, etc.) — agrega una excepción para la carpeta de
+instalación de PunkBackup.
+
 ## Requisitos
 
 - PC con **Windows 10 o 11**.

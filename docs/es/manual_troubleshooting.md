@@ -1,5 +1,13 @@
 # PunkBackup — Manual de solución de problemas
 
+## La app se cierra sola poco después de abrirla
+
+**Esto es Avast** (u otro antivirus parecido), no un error de PunkBackup —
+ver la sección "⚠ Importante: esta app no tiene firma digital de pago" del
+Manual de instalación para el por qué, y el arreglo (agregar una excepción
+para la carpeta de instalación de PunkBackup en Avast, restaurarla desde
+Cuarentena/Virus Chest si quedó ahí).
+
 ## "Iniciar backup" no hace nada / no cambia de estado
 
 - Cierra la app por completo (no solo minimizarla) y ábrela de nuevo con el

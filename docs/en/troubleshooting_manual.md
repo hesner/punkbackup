@@ -3,6 +3,14 @@
 > This manual shows the app in **English** — go to **"⚙ Settings" →
 > "English"** if it isn't already switched (instant, no restart).
 
+## The app closes by itself shortly after opening
+
+**This is Avast** (or a similar antivirus), not a bug in PunkBackup — see
+the "⚠ Important: this app is not code-signed" section of the Installation
+Manual for why, and the fix (add an exception for the PunkBackup install
+folder in Avast, restore it from Quarantine/Virus Chest if it landed
+there).
+
 ## "Start backup" does nothing / doesn't change state
 
 - Fully close the app (not just minimize it) and reopen it from the

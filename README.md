@@ -42,6 +42,13 @@ them the hard way.
 
 **[⬇ Download PunkBackupSetup.exe](https://github.com/hesner/punkbackup/releases/latest)** — Windows 10/11, no Python required. Run it, accept the one admin prompt (Program Files + Firewall rule), done.
 
+> ⚠ **Not code-signed.** This is an independent open-source project without
+> a paid code-signing certificate, so Windows SmartScreen will warn you once
+> at install, and some antivirus software (Avast in particular) may flag or
+> even close the app on heuristics alone. Both are expected — see the
+> Installation Manual's "not code-signed" section for the one-time fix.
+> Read the source yourself if you want to verify what it does first.
+
 - [Installation Manual (PDF, EN)](docs/pdf/PunkBackup%20-%20Installation%20Manual%20(EN).pdf) · [Manual de instalación (PDF, ES)](<docs/pdf/PunkBackup - Manual de Instalacion (ES).pdf>)
 - [Usage Manual (PDF, EN)](<docs/pdf/PunkBackup - Usage Manual (EN).pdf>) · [Manual de uso (PDF, ES)](<docs/pdf/PunkBackup - Manual de Uso (ES).pdf>)
 - [iPhone Setup Manual (PDF, EN)](<docs/pdf/PunkBackup - iPhone Setup Manual (EN).pdf>) · [Configuración del iPhone (PDF, ES)](<docs/pdf/PunkBackup - Configuracion del iPhone (ES).pdf>)

@@ -11,6 +11,41 @@ Automatically backs up photos and videos from one or more iPhones/iPads to
 your Windows PC, over local WiFi, no cable, no iCloud dependency. Each
 person/device gets its own profile with its own destination folder.
 
+## ⚠ Important: this app is not code-signed
+
+PunkBackup is a small independent project — the `.exe` is **not** digitally
+signed with a paid code-signing certificate (those cost money; see the
+project's notes on this if you're curious why). This has two real, expected
+consequences:
+
+- **Windows SmartScreen** will warn you once at install time (see Step 2).
+  This is normal and harmless — click through it as described below.
+- **Your antivirus may go further than a warning.** Antivirus products use
+  heuristics (behavior patterns), not just known-virus lists, and an
+  unsigned new program that talks to the network can trip those heuristics
+  — even though PunkBackup only talks to your own iPhone on your own WiFi
+  and never sends anything anywhere else. **Avast in particular has been
+  observed silently closing PunkBackup shortly after it opens**, with no
+  error message from the app itself (it just vanishes). If that happens to
+  you, it's Avast, not a bug in PunkBackup — see the fix below.
+
+You can read the full source code yourself (this is an open-source project)
+if you want to verify exactly what it does before trusting it.
+
+### Fixing "Avast keeps closing the app"
+
+1. Open **Avast** → **Menu → Quarantine** (or "Virus Chest") — if
+   `PunkBackup.exe` is listed there, restore it and add an exception so it
+   doesn't get grabbed again.
+2. Or: **Avast → Menu → Settings → General → Exceptions** → add the
+   install folder (default `C:\Program Files\PunkBackup\`) so Avast skips
+   scanning/blocking it entirely.
+3. Reopen PunkBackup from the Desktop icon — it should now stay open.
+
+This is the same fix for other antivirus products that behave this way
+(Windows Defender, Norton, etc.) — add an exception for the PunkBackup
+install folder.
+
 ## Requirements
 
 - **Windows 10 or 11** PC.

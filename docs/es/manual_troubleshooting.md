@@ -27,8 +27,11 @@ Cuarentena/Virus Chest si quedó ahí).
    carga, prueba con la "IP alternativa" que también te muestra la app.
 3. Confirma que el servidor esté encendido en la PC ("Escuchando en el
    puerto...").
-   Si alguna vez falla al iniciar (por ejemplo, si otro programa ya está
-   usando el puerto), la app ahora muestra un mensaje de error real
+   Reintenta automáticamente unas cuantas veces (mostrando brevemente
+   "Iniciando backup...") si el puerto no se libera de inmediato — común
+   justo después de que un antivirus cierre y reabra la app. Si sigue
+   fallando después de esos reintentos (por ejemplo, si otro programa de
+   verdad está usando el puerto), la app muestra un mensaje de error real
    explicando por qué, en vez de decir "Escuchando" sin serlo de verdad —
    si ves ese error, cierra lo que esté usando el puerto 8787 (u otra
    copia de PunkBackup abierta) e inténtalo de nuevo.

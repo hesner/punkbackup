@@ -49,20 +49,27 @@ A one-directional (iPhone/iPad → PC) photo/video backup system:
 3. **HTTP API** (`server/app.py`, FastAPI). See section 4 for the exact
    contract — it looks simple but every field shape here was chosen to
    work around a real iOS Shortcuts limitation (section 5).
-4. **GUI** (`gui/main_window.py`, CustomTkinter, PunkBackup dark theme) —
-   a custom nav bar (not `CTkTabview` — its tab identity is tied to its
-   display text, which breaks live language switching) toggles two
-   screens: "Principal" (server on/off + profile status + connection info
-   + collapsible log) and "⚙ Configuración" (a language switch, ES/EN,
-   applied instantly via `gui/i18n.py`'s `t(key, lang)` — every
-   translatable widget is stored as a `self.xxx` attribute so
-   `_apply_language()` can reconfigure its text in place — plus full
-   profile CRUD below it). Two independent controls, not one: a
-   server-wide on/off switch, and a per-profile Activo/Pausado switch —
-   because the server has no notion of "the active profile"; any number of
-   enabled profiles can upload concurrently, each isolated to its own
-   folder. Verify this with a real concurrent-upload test (two threads,
-   two profiles, two temp dirs) — it's the core guarantee the multi-profile
+4. **GUI** (`gui/main_window.py`, CustomTkinter, PunkBackup dark theme;
+   `gui/i18n.py` for translations, `gui/dialogs.py` for the custom dark
+   dialogs replacing the native `messagebox`, `gui/autostart.py` for the
+   Windows-launch-at-login registry toggle) — a custom nav bar (not
+   `CTkTabview` — its tab identity is tied to its display text, which
+   breaks live language switching) toggles two screens: "Principal"
+   (server on/off + profile status + connection info + activity log,
+   visible by default, also persisted to
+   `%APPDATA%\PunkBackup\logs\activity.log`) and "⚙ Configuración" (a
+   language switch, ES/EN, applied instantly via `gui/i18n.py`'s
+   `t(key, lang)` — every translatable widget is stored as a `self.xxx`
+   attribute so `_apply_language()` can reconfigure its text in place —
+   then a **Preferences** section: start-with-Windows, auto-start-backup,
+   and a configurable idle-timeout with an explicit Save button, same
+   card/switch visual language as a profile row — then full profile
+   CRUD below that). Two independent controls, not one: a server-wide
+   on/off switch, and a per-profile Activo/Pausado switch — because the
+   server has no notion of "the active profile"; any number of enabled
+   profiles can upload concurrently, each isolated to its own folder.
+   Verify this with a real concurrent-upload test (two threads, two
+   profiles, two temp dirs) — it's the core guarantee the multi-profile
    design exists to provide.
 5. **iOS Shortcut** — build and test on a real device. Do not assume any
    Shortcuts UI behavior without verifying on-device; see section 5.
@@ -108,6 +115,16 @@ a `Profile` server-side. Unknown token → 401. Valid token but
 | POST | `/upload` | **Raw POST body = the file bytes.** Query params: `filename`, `taken_at`, `run_id` | **Not multipart form-data** — see section 5 for why. Returns `{"status": "new"\|"skipped_duplicate"\|"conflict_kept_both", "dest_path": "..."}`. |
 | POST | `/run/finish` | Form: `run_id` | Returns the run's counters: `files_new`, `files_skipped`, `files_conflict`, `files_error`. |
 | GET | `/status` | — | Per-profile: `state`, `last_backup_at`, `total_files_backed_up`, `last_run`. |
+
+`/upload`'s `filename` and `taken_at` are treated as best-effort hints,
+not guarantees: if `filename` has no extension at all, the server sniffs
+the real format from the file's own byte signature (JPEG/PNG/GIF/MOV/MP4/
+HEIC) and appends it — never overriding an extension that IS present. If
+`taken_at` is empty, the server tries reading EXIF `DateTimeOriginal`
+straight from the file (JPEG/HEIC only) before falling back to "now".
+Both cover the same real, narrow class of Photos items that Shortcuts
+sometimes can't report these attributes for — see `server/storage.py`'s
+`_detect_extension()`/`_read_exif_taken_at()` and PLAN.md §5.4.
 
 `server/app.py`'s `configure(profile_store)` / `is_configured()` /
 `_engine_for(profile)` / `forget_profile(id)` pattern: engines are built
@@ -192,7 +209,7 @@ reintroduces these problems.
 
    Remaining known gap: the server can't distinguish "upload never arrived"
    from "genuinely empty file" from a 0-byte POST body alone — it rejects
-   both the same way (see point 8 below). This is a deliberate, safe
+   both the same way (see points 11-12 below). This is a deliberate, safe
    trade-off (never silently recording a broken backup), not a missed edge
    case.
 6. **A stray filter can silently attach to "Find Photos"** (e.g. filtering
@@ -251,6 +268,51 @@ reintroduces these problems.
     delete the DB row and commit it BEFORE deleting the file on disk, not
     after). Simplest real fix when available: just ask the user to close
     the GUI app for the duration of the script.
+11. **A non-2xx HTTP response silently aborts the REST of that loop
+    iteration in Shortcuts — but the outer loop keeps going to the next
+    item.** Confirmed on a real device: `/upload` returning `422` for a
+    rejected 0-byte video caused every subsequent action in that same
+    iteration (the retry logic in point 12 below) to simply never run,
+    with no visible error — 7 videos in a row failed at the exact same
+    point across a live sweep that still kept processing hundreds of
+    other items normally. The SAME mechanism, independently, caused the
+    project's oldest unsolved bug: the final run summary showing blank
+    numbers since day one, because `/run/finish` was rejecting a
+    malformed request (a missing required `run_id` form field) and
+    everything after that call in section 5 of the Shortcut silently
+    never executed. **Design rule this forces**: any endpoint whose
+    result needs to be inspected or acted on by LATER actions in the
+    same Shortcut iteration must return HTTP 200 even when reporting a
+    logical failure, with the failure encoded in the body instead (same
+    idiom as `/check`'s presence-of-key `missing` field, point 3 above)
+    — never rely on a non-2xx status code being something the Shortcut
+    can react to, only on whether it stops silently.
+12. **Videos (not photos) sometimes arrive as a genuinely empty 0-byte
+    body — `Content-Length: 0` on the wire from the very start, not a
+    network drop mid-transfer.** Confirmed via a temporary header-dump
+    (`Content-Length`/`Content-Type`/`User-Agent`) that a real failing
+    upload had `content_type=None`, meaning Shortcuts never actually
+    attached real file data at all. Tried and ruled out: "Save File"
+    (fails identically for imported AND camera-native videos, to any
+    destination including local "On My iPhone" — not an iCloud-sync
+    issue), a `Wait` before upload (rules out "still processing"), no
+    `Limit`/pagination cause. **What works**: an **Encode Media** action
+    (search "Encode", NOT "Convert Video" — that action doesn't exist)
+    with **Size: Passthrough** forces Shortcuts to actually read the
+    full asset data, and its output uploads successfully where the raw
+    `Repeat Item` didn't. Confirmed via `ffprobe` this is a true remux,
+    not a re-encode — identical codec/resolution/framerate/bitrate/frame
+    count against the real original file; only stream order and one
+    metadata tag differ (0.002% file size difference). **Don't apply
+    this to every item** — camera-native videos upload fine directly and
+    Encode Media costs real time/battery; wire it as a conditional retry
+    instead (upload the raw item first, check the response for an error
+    per point 11's pattern, only THEN Encode Media + retry). Quick Look
+    previews of raw/converted video items are NOT a trustworthy pass/
+    fail signal during this kind of debugging (showed blank/"No Items"
+    inconsistently, including for items later proven to have real data)
+    — always verify via the real server response or its DB, never an
+    on-device preview.
 
 ## 6. Testing approach that actually caught bugs
 

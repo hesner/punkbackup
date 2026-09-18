@@ -16,7 +16,7 @@
 ; launch so PunkBackup.exe never runs as admin day-to-day.
 
 #define MyAppName "PunkBackup"
-#define MyAppVersion "1.1.1"
+#define MyAppVersion "1.5.0"
 #define MyAppPublisher "PunkBackup"
 #define MyAppURL "https://github.com/hesner/punkbackup"
 #define MyAppExeName "PunkBackup.exe"
@@ -61,10 +61,26 @@ Source: "..\dist\PunkBackup\*"; DestDir: "{app}"; Flags: ignoreversion recursesu
 ; per server/paths.py's app_root()) — the bundled assets/punkbackup.ico
 ; therefore lives at {app}\_internal\assets\punkbackup.ico, NOT {app}\assets\.
 Name: "{group}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; IconFilename: "{app}\_internal\assets\punkbackup.ico"
-Name: "{group}\{cm:UninstallProgram,{#MyAppName}}"; Filename: "{uninstallexe}"
+; Fixed English name (NOT the localized {cm:UninstallProgram,...} constant):
+; that constant's text changes depending on which setup LANGUAGE was picked
+; on a given install run, so a later reinstall in a different language
+; creates a second, differently-named "Uninstall" shortcut instead of
+; replacing the first one — confirmed leaving an orphaned
+; "Desinstalar PunkBackup.lnk" alongside "Uninstall PunkBackup.lnk" after
+; installing once in Spanish and once in English. A fixed name is
+; upgraded in place every time, regardless of setup language.
+Name: "{group}\Uninstall {#MyAppName}"; Filename: "{uninstallexe}"
 Name: "{autodesktop}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; IconFilename: "{app}\_internal\assets\punkbackup.ico"; Tasks: desktopicon
 
 [Run]
+; Delete before add, every install run — `netsh ... add rule` has no
+; "replace if exists" mode, so re-running the installer (e.g. an update)
+; without this kept piling up duplicate identical rules (confirmed: 10
+; copies after today's several reinstalls). Harmless functionally (they
+; all just Allow), but pure clutter. `delete rule` removes every rule
+; matching this name, so it also cleans up any duplicates left over from
+; a version before this fix.
+Filename: "netsh.exe"; Parameters: "advfirewall firewall delete rule name=""PunkBackup"""; Flags: runhidden; Tasks: firewall
 Filename: "netsh.exe"; Parameters: "advfirewall firewall add rule name=""PunkBackup"" dir=in action=allow protocol=TCP localport=8787 profile=private"; Flags: runhidden; Tasks: firewall
 Filename: "{app}\{#MyAppExeName}"; Description: "{cm:LaunchProgram,{#MyAppName}}"; Flags: nowait postinstall skipifsilent runasoriginaluser
 
@@ -80,6 +96,13 @@ Filename: "netsh.exe"; Parameters: "advfirewall firewall delete rule name=""Punk
 ; there. Deleting it unconditionally on uninstall avoids ever leaving a
 ; dangling shortcut that points at a now-removed PunkBackup.exe.
 Type: files; Name: "{autodesktop}\{#MyAppName}.lnk"
+
+; Also clean up any leftover *localized* uninstall shortcut from a
+; version built before the fixed-English-name fix above (e.g. someone
+; who installed in Spanish under an older build still has
+; "Desinstalar PunkBackup.lnk" sitting alongside the current one).
+Type: files; Name: "{group}\Desinstalar {#MyAppName}.lnk"
+Type: files; Name: "{group}\Uninstall {#MyAppName}.lnk"
 
 ; The app writes its config/profiles under %APPDATA%\PunkBackup (see server/paths.py).
 ; Left in place on uninstall by default — it holds each profile's secret tokens and

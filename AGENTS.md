@@ -269,13 +269,28 @@ reintroduces these problems.
   re-run, and work forward one action at a time — this was the single most
   effective debugging technique used throughout this build. Don't
   guess; ask for the raw response.
+- **`ManifestDB(dest_root)` is not safe for a read-only ad-hoc status
+  check while the real app might be running.** Its `__init__` reaps any
+  run still `finished_at IS NULL` (see section 5's stale-run-reap note),
+  treating whatever process constructs it as a fresh app launch — so a
+  one-off diagnostic script instantiating it against the SAME destination
+  the live app is using can prematurely "finish" a run that's still
+  genuinely in progress, contaminating the very state you're trying to
+  observe (confirmed: this happened during a debugging session, 2026-09-18).
+  For any external/one-off inspection of `index.sqlite`, connect directly
+  and read-only instead: `sqlite3.connect(f"file:{db_path}?mode=ro",
+  uri=True)`.
 
 ## 7. What "done" looks like
 
-- `pytest tests -q` passes (25 tests as of this writing, covering engine
+- `pytest tests -q` passes (35 tests as of this writing, covering engine
   rules, profile isolation/pause/delete, destination-switch correctness,
   concurrent uploads, the `/check` contract, the 0-byte-upload rejection,
-  and its self-healing retry error-count behavior).
+  its self-healing retry error-count behavior, a stale-run reap on
+  reopen (and its distinct log line vs. a genuine `/run/finish`),
+  content-based extension/EXIF-date fallbacks for items Shortcuts sends
+  with no extension or no `taken_at`, and `ServerController`'s bind
+  verification + auto-retry on a transient port conflict).
 - A real iPhone can run the Shortcut manually, and files appear in the
   chosen destination with correct extensions, organized by Year/Month, and
   `<dest>/.iphone_backup_index/index.sqlite`'s `backed_up_files` table

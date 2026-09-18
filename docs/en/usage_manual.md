@@ -13,6 +13,8 @@
 
 Switch between them with the two buttons at the top, right under the app name.
 
+The window opens **maximized** by default every time — resize/un-maximize it as usual if you'd rather have it smaller; that's a normal Windows window control, not something PunkBackup remembers between launches.
+
 ---
 
 ## "⚙ Settings" → Language
@@ -21,6 +23,31 @@ At the very top of Settings there are two buttons: **Español** / **English**.
 Tap one and **the whole app switches language instantly** — buttons,
 titles, messages, everything — no closing or restarting needed. Your
 choice is remembered the next time you open the app.
+
+---
+
+## "⚙ Settings" → Preferences
+
+Right below Language, three cards — same on/off switch style as each
+profile's Active/Paused switch on the "Main" screen. Every change here
+applies immediately, no restart needed.
+
+- **Start PunkBackup with Windows**: adds (or removes) PunkBackup from
+  Windows' own startup programs, so it opens automatically when you log
+  in — no need to find the Desktop icon every time. **Off by default.**
+- **Start backup when opening the app**: as soon as the app finishes
+  opening, it automatically does the same thing as clicking
+  **"🤘 Start backup"** yourself — including the same warnings if no
+  profile is configured yet, or none has a destination folder set. Combine
+  this with the switch above for a PC that starts listening for your
+  iPhone completely hands-off after a reboot. **Off by default.**
+- **Minutes of inactivity before flagging the backup as stopped**: a
+  number field (1–30 minutes) controlling the idle-backup notice
+  described above under "▼ Show activity". Type a new value and click
+  **"Save"** (or press Enter) — the button only lights up while there's
+  an unsaved, valid change, and briefly shows "✓ Saved" once it's
+  applied, so it's always clear whether your edit actually took effect.
+  **5 minutes by default.**
 
 ---
 
@@ -38,7 +65,12 @@ This is the server's main on/off switch — it controls whether the PC is
   from any **Active** profile.
 
 Right next to it, the **"Status: ..."** text confirms the mode: `Stopped`,
-or `Listening on port 8787`.
+`Starting backup...` (briefly, right after clicking — usually just a
+couple seconds, occasionally longer if the port needs a moment to free
+up, e.g. right after antivirus software closes and reopens the app), or
+`Listening on port 8787`. If starting genuinely fails (the port stays
+unavailable), you'll get an error window explaining why instead of a
+false "Listening" status.
 
 > You don't need to "select" which profile is backing up — as long as the
 > server is on, **any Active profile can upload at any time**, even
@@ -89,28 +121,36 @@ backed up recently, without checking each profile individually.
 
 ### "▼ Show activity"
 
-**Hidden by default** to keep the screen uncluttered. Expanding it shows a
-live, terminal-style (green text) log of each file as it arrives: new,
-already existed, or conflict. Useful to confirm something is actually
-happening in real time while you run the Shortcut on your iPhone. It also
-clearly marks when each run **starts** and **finishes** (with the final
-summary: new/already had/conflicts/errors), so you can see at a glance
-where each backup begins and ends in the log history.
+**Visible by default** — collapse it with the same button if you want a
+cleaner screen. It shows a live, terminal-style (green text) log of each
+file as it arrives: new, already existed, or conflict. Useful to confirm
+something is actually happening in real time while you run the Shortcut
+on your iPhone. It also clearly marks when each run **starts** and
+**finishes** (with the final summary: new/already had/conflicts/errors),
+so you can see at a glance where each backup begins and ends in the log
+history.
 
 Every line is stamped with the **local date and time** it happened
 (`DD-MM-YYYY HH:MM:SS`), so a log that spans several days (if you leave the
 app open) still reads clearly — you can tell exactly when each backup ran,
 not just their order.
 
-If a run stays "in progress" without receiving any new file for 5
-straight minutes (e.g. WiFi dropped, or you closed the Shortcut on the
-phone mid-backup), the log shows a notice like `⏸ "[profile]": no
-activity for 5+ minutes — the backup looks like it stopped` — once per
-stretch of inactivity, not repeated while it stays idle.
+If a run stays "in progress" without receiving any new file for a while
+(e.g. WiFi dropped, or you closed the Shortcut on the phone mid-backup),
+the log shows a notice like `⏸ "[profile]": no activity for 5+ minutes —
+the backup looks like it stopped` — once per stretch of inactivity, not
+repeated while it stays idle. How many minutes of inactivity count as
+"stopped" is configurable — see "⚙ Settings" → Preferences below.
 
 Next to that button is a smaller **"⤢ Expand"** button, which opens the
 same log in a separate, larger, resizable window — handy when a long run
 generates more text than the small embedded panel comfortably shows.
+
+Every line is also saved to a file on disk
+(`%APPDATA%\PunkBackup\logs\activity.log`), so past activity can still be
+checked after closing the app — not just what's currently visible on
+screen. It rotates daily and automatically deletes anything older than
+about 6 months, so it never grows forever.
 
 ---
 

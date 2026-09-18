@@ -99,21 +99,31 @@ Backup photos/
 │   ├── app.py                   (FastAPI: /upload, /check, /health, /status, /run/*)
 │   ├── profiles.py              (ProfileStore: perfiles + historial de USB/carpetas)
 │   ├── diskinfo.py              (etiqueta/serie/espacio del volumen de Windows, vía ctypes)
-│   ├── manifest_db.py           (SQLite: índice incremental, uno por perfil)
-│   ├── storage.py               (motor de backup: organiza, deduplica, resuelve conflictos, /check)
-│   ├── runner.py                (arranca/detiene uvicorn bajo demanda)
+│   ├── manifest_db.py           (SQLite: índice incremental, uno por perfil; reapea runs huérfanos)
+│   ├── storage.py               (motor de backup: organiza, deduplica, resuelve conflictos, /check,
+│   │                              detección de extensión por contenido + respaldo de fecha por EXIF)
+│   ├── runner.py                (arranca/detiene uvicorn bajo demanda; verifica el bind de verdad,
+│   │                              reintenta ante conflictos transitorios de puerto)
+│   ├── config.py                (AppConfig: puerto, idioma, preferencias de inicio, timeout de inactividad)
+│   ├── paths.py                 (rutas dev vs. instalado — app_root()/user_data_dir())
 │   └── run_dev.py               (runner manual para pruebas por terminal)
 ├── gui/
-│   └── main_window.py           (CustomTkinter: perfiles, historial USB, iniciar/detener, log colapsable)
+│   ├── main_window.py           (CustomTkinter: perfiles, historial USB, iniciar/detener, log colapsable
+│   │                              + persistido en disco, Preferencias)
+│   ├── i18n.py                  (traducciones ES/EN, cambio de idioma en vivo)
+│   ├── dialogs.py               (diálogos propios oscuros — reemplazan messagebox nativo)
+│   └── autostart.py             (inicio con Windows vía el Run key de HKCU)
 ├── shortcuts/
 │   ├── INSTRUCCIONES_ATAJO.md   (ES — plantilla genérica)
-│   └── SHORTCUT_INSTRUCTIONS.md (EN — plantilla genérica)
+│   ├── SHORTCUT_INSTRUCTIONS.md (EN — plantilla genérica)
+│   └── PunkBackup.shortcut      (Atajo exportado, listo para importar — placeholders genéricos)
 ├── docs/                        (manuales en PDF, landing page GitHub Pages)
 ├── installer/                   (PunkBackup.iss — Inno Setup, empaqueta dist/ de PyInstaller)
 └── tests/
     ├── test_backup_engine.py
     ├── test_api.py
-    └── test_profiles.py
+    ├── test_profiles.py
+    └── test_runner.py
 ```
 
 ## 4.1 Perfiles (multi-usuario / multi-dispositivo)
@@ -395,7 +405,7 @@ new, N already had, N conflicts, N errors ===` que nunca había aparecido
 en todo el historial del proyecto, y la notificación en el teléfono
 muestra los números reales.
 
-### 5.4 Hallazgo acotado: ítems sin `Date Taken` (grabaciones de pantalla, algunos screenshots importados) — DOCUMENTADO, sin arreglar a propósito
+### 5.4 Ítems sin `Date Taken` NI extensión — causa raíz atacada del lado del servidor (2026-09-18)
 
 Se detectaron duplicados repetidos de un mismo `ScreenRecording_09-14-2026`
 (6 copias) y dos versiones del mismo screenshot guardado desde Facebook
@@ -418,14 +428,57 @@ Se detectaron duplicados repetidos de un mismo `ScreenRecording_09-14-2026`
   el sistema los trata como contenido nuevo y genera otra copia con
   sufijo en vez de reconocerlos como ya respaldados.
 
-**Alcance real, medido**: 3 archivos distintos de 2232 en total (0.13%)
-— no es un problema generalizado. **Decisión del usuario**: no modificar
-el Atajo para esto (el arreglo propuesto era usar `Date Created` como
-respaldo cuando `Date Taken` no tiene valor) — se deja documentado como
-limitación conocida y aceptada, dado lo acotado del impacto. Los
-duplicados existentes ya se limpiaron manualmente (se conservó 1 copia
-de cada archivo real, se borraron las copias sobrantes vía script
-puntual, no versionado en el repo).
+**Alcance original, medido (2026-09-16)**: 3 archivos distintos de 2232 en
+total (0.13%) — no parecía un problema generalizado. **Decisión del
+usuario en ese momento**: no modificar el Atajo (el arreglo propuesto era
+usar `Date Created` como respaldo cuando `Date Taken` no tiene valor) —
+quedó documentado como limitación conocida y aceptada.
+
+**Ampliación del hallazgo (2026-09-18)**: una consulta directa a
+`backed_up_files` mostró que el problema es más amplio de lo medido
+originalmente — **37 filas con filename sin NINGÚN punto** (ni una sola
+extensión), no solo las grabaciones de pantalla: también 9 fotos
+`IMG_XXXX` normales y un archivo con nombre UUID, todas con `taken_at
+IS NULL` también. Confirmado leyendo los bytes reales de varios de estos
+archivos (firma binaria): el contenido está intacto (JPEG y MOV
+válidos) — el problema es puramente de metadata que Shortcuts no logra
+leer para ciertos ítems, nunca corrupción de datos.
+
+**Arreglo de causa raíz, del lado del servidor** (`server/storage.py`,
+`finalize_upload()`), en vez de seguir intentando parchar el Atajo
+(que ya ha demostrado fallar en silencio repetidas veces en este
+proyecto):
+- **Extensión faltante → detectada por firma binaria del contenido**
+  (`_detect_extension()`): JPEG (`FF D8 FF`), PNG, GIF, y contenedores
+  `ftyp` (MOV/MP4/HEIC según el "brand" de 4 bytes) — solo se usa cuando
+  el nombre que mandó el Atajo no trae NINGUNA extensión; nunca sobrescribe
+  una que el cliente sí envió, aunque el contenido real no coincida.
+- **`taken_at` faltante → respaldo leyendo el EXIF real del archivo**
+  (`_read_exif_taken_at()`, vía `Pillow` + `pillow-heif`, ya usadas una
+  vez en este proyecto para el script puntual de reorganización de 714
+  archivos): lee `DateTimeOriginal` directo de los bytes, independiente
+  de lo que Shortcuts haya reportado. Solo funciona para formatos con
+  EXIF (JPEG/HEIC) — videos siguen sin fecha real disponible por esta vía,
+  caen en el respaldo de "ahora" como antes.
+- Ambos son best-effort y no rompen nada existente: si no se puede
+  detectar/leer nada, el comportamiento es idéntico al de antes (nombre
+  tal cual llegó, fecha "ahora").
+- 4 tests nuevos en `tests/test_backup_engine.py` (30/30 pasando):
+  detección de extensión para foto y para video, extensión NUNCA
+  sobrescrita cuando ya viene puesta, y respaldo de fecha por EXIF.
+- Nuevas dependencias declaradas en `requirements.txt`: `pillow==12.3.0`,
+  `pillow-heif==1.7.0` (ya estaban instaladas en el entorno de una sesión
+  anterior, solo faltaba declararlas).
+
+**Limpieza retroactiva de los 38 archivos ya existentes**: hecha el mismo
+día con un script puntual (no versionado en el repo, mismo patrón que
+`reorganize_by_exif.py` de una sesión anterior) que reutiliza
+`_detect_extension()`/`_read_exif_taken_at()` tal cual —ninguna lógica
+nueva, solo aplicada retroactivamente. Resultado: **38/38 corregidos, 0
+omitidos** — extensión agregada a todos, y 8 fotos además reubicadas a
+su carpeta de fecha real (recuperada del EXIF). Verificado en disco:
+los archivos nuevos existen con su extensión correcta, los viejos
+sin extensión ya no están.
 
 ### 5.5 Bug: el aviso de inactividad se disparaba solo con abrir la app — RESUELTO
 
@@ -484,6 +537,165 @@ acción correctiva** — el usuario decidió dejarlo así por ahora dado que
 no hay pérdida de datos; queda documentado como comportamiento conocido,
 no como bug a resolver.
 
+### 5.7 Bug real: el aviso de inactividad no siempre se disparaba — CORREGIDO (2026-09-18)
+
+Confirmado con evidencia directa (screenshot con timestamps exactos): con
+el timeout configurado en 10 minutos, una corrida real (`run_id
+d4a613e3...`) tuvo un hueco de **14 minutos 34 segundos** sin ninguna
+línea de log mientras seguía en estado "running" — y el aviso de
+inactividad nunca apareció.
+
+**Causa raíz encontrada**: `_check_idle_backups()` compartía el mismo
+ciclo `after()` cada 1.5s (y el mismo bloque `try/except: pass`) que las
+otras 3 funciones de refresco de estadísticas de la GUI
+(`_refresh_status_loop`). Si cualquiera de esas otras funciones lanzaba
+una excepción (ej. contención de SQLite durante una ráfaga de subidas —
+ya documentado como riesgo real en este proyecto), **toda la
+verificación de inactividad se saltaba en silencio esa vuelta**, sin
+dejar ningún rastro — mientras el log de subidas seguía funcionando
+normal porque es un mecanismo completamente aparte (`_drain_log_queue`,
+alimentado directamente por el logger del servidor).
+
+**Arreglo**: `_check_idle_backups()` ahora corre en su **propio ciclo
+`after()` independiente** (`_idle_check_loop`), separado del refresco de
+estadísticas — una falla en uno nunca puede volver a bloquear al otro.
+Además, **ya no se tragan excepciones en silencio**: tanto
+`_refresh_status_loop` como `_idle_check_loop` ahora registran cualquier
+error real en el log de actividad (visible en pantalla y persistido en
+disco, ver más abajo) en vez de un `except: pass` ciego.
+
+**Confirmado funcionando en producción, el mismo día**: en una corrida
+real, el aviso `⏸ "iphone de Hes": sin actividad hace 10+ minutos...`
+apareció exactamente a los 10 minutos (12:38:06, 10 minutos después de
+la última subida a las 12:28:06) — el timeout configurado por el
+usuario. Cierra el ciclo de este bug de punta a punta: reportado,
+diagnosticado, corregido, y verificado con evidencia real.
+
+### 5.8 Nuevo: log de actividad persistido en disco, con limpieza automática (2026-09-18)
+
+El log de actividad de la GUI vivía únicamente en memoria (el widget de
+texto) — se perdía por completo al cerrar la app, haciendo imposible
+verificar después del hecho si algo como el bug de la sección 5.7
+realmente ocurrió o no. Pedido explícito del usuario tras justo ese caso:
+"guarda el log en algún lugar con autolimpieza para que no sea eterno".
+
+**Regresión encontrada y corregida el mismo día, minutos después de
+publicar el fix de 5.7**: reportar cada excepción real (en vez de
+tragarla en silencio) hizo evidente algo que antes pasaba desapercibido
+— un perfil sin carpeta destino configurada (`HTTPException 409`, una
+condición completamente normal, no un bug) generaba una traza de error
+cada 1.5 segundos, para siempre, inundando el log. Corregido en
+`_check_idle_backups()`: cualquier excepción ahora se registra **una
+sola vez por racha** (se resetea en cuanto la llamada vuelve a tener
+éxito), igual que ya se hacía con el propio aviso de inactividad — así
+un problema real nunca queda en silencio, pero una condición esperada
+tampoco satura el log.
+
+### 5.9 Ambigüedad real: no se podía distinguir un `/run/finish` genuino de un "reap" — CORREGIDO (2026-09-18)
+
+El usuario preguntó cómo sabía que una corrida "terminó limpia". Revisando
+el log completo de hoy, la línea `=== Backup run finished ... ===` (la
+que confirma una llamada real a `/run/finish` desde el Atajo) **nunca
+había aparecido ni una sola vez**, a pesar de que varias corridas sí
+mostraban `finished_at` con valor — es decir, no había forma de saber si
+esas corridas terminaron de verdad o si simplemente fueron cerradas por
+el mecanismo de "reap" (§5.5) al reabrir la app tras cada reinstalación
+de hoy. Ambos casos dejaban el mismo rastro en la base de datos.
+
+**Arreglo**: `ManifestDB.__init__` ahora registra explícitamente en el
+log, vía `logger.warning(...)`, cada vez que reapa una corrida —
+mencionando el `run_id` y aclarando que **no** es un `/run/finish` real,
+así que su conteo final puede estar incompleto. Test:
+`test_reap_logs_a_warning_distinct_from_a_real_run_finish` (31/31
+pasando). Con esto, cualquier corrida futura que termine se puede
+distinguir con certeza: si aparece `=== Backup run finished ... ===`,
+el Atajo llegó al final de verdad; si aparece `!! Run ... was left
+"running" by a previous session ...`, se cerró a la fuerza al reabrir
+la app.
+
+### 5.10 Bug serio: el servidor podía "fallar en silencio" al iniciar — CORREGIDO (2026-09-18)
+
+Reportado en vivo por el usuario: "todo está corriendo" en la PC, pero el
+iPhone decía **"Could not connect to the server"**. Investigado en el
+momento: `netstat` confirmó que **nada** tenía el puerto 8787 abierto,
+aunque el log ya mostraba `Servidor iniciado. A darle.` y la pantalla
+decía "Escuchando en el puerto 8787".
+
+**Causa raíz**: `ServerController.start()` lanza uvicorn en un hilo en
+segundo plano y regresa de inmediato, **sin esperar confirmación** de que
+el bind al puerto haya funcionado. Si falla (puerto ocupado, permisos,
+etc.), uvicorn internamente hace `sys.exit(1)` dentro de ese hilo — una
+`SystemExit`, que ni siquiera un `except Exception` genérico captura. Y
+como la app corre vía `pythonw.exe`, `sys.stderr` está redirigido a un
+buffer en memoria que nadie lee (ver `main.py`) — el error desaparece por
+completo, sin dejar rastro en ningún lado. La GUI, mientras tanto, ya
+había actualizado la pantalla a "Escuchando" un instante antes, sin
+verificar nada.
+
+**Arreglo** (`server/runner.py`, `gui/main_window.py`):
+- `ServerController._run()` ahora captura `BaseException` (no solo
+  `Exception`, precisamente para atrapar el `SystemExit` de uvicorn) y
+  registra el motivo real vía el logger `backup_engine` — visible en el
+  log y persistido en disco.
+- Nuevo `ServerController.wait_until_listening(timeout=5.0)`: bloquea
+  brevemente hasta confirmar que `uvicorn.Server.started` es `True` (el
+  bind realmente ocurrió) o hasta que el hilo muere.
+- `_start_server()` en la GUI ahora **espera esa confirmación antes de
+  decir "Escuchando"** — si falla, revierte a "Detenido" y muestra un
+  diálogo de error real con la causa, en vez de mentir sobre el estado.
+- 2 tests nuevos en `tests/test_runner.py` (33/33 pasando):
+  arranque exitoso confirmado con una conexión real, y conflicto de
+  puerto detectado explícitamente (no en silencio) al levantar dos
+  servidores en el mismo puerto.
+
+**Mejora del mismo día, tras ver el error real en pantalla**: el primer
+diálogo de error mostraba solo `"1"` como detalle — `str(SystemExit(1))`,
+el código de salida que usa uvicorn internamente al fallar el bind, sin
+ningún mensaje humano. Agregado `ServerController._preflight_bind_error()`:
+antes de lanzar uvicorn, intenta un bind de un socket plano al mismo
+host/puerto — si falla, captura el mensaje real de Windows (ej.
+`[WinError 10048] Only one usage of each socket address...`) en vez del
+código genérico. Chequeo síncrono, inmediato, sin necesidad de esperar al
+hilo de uvicorn para el caso de fallo.
+
+**Mejora adicional el mismo día, con hipótesis del usuario confirmada en
+la práctica**: el primer `[WinError 10048]` real capturado en pantalla
+coincidió con Avast interceptando el `.exe` recién lanzado (lo escanea,
+a veces lo cierra y lo reabre — ver la sección de firma de código) — el
+usuario planteó que la segunda apertura probablemente encuentra el
+puerto todavía "ocupado" por el cierre abrupto del primer intento, aunque
+nada lo esté usando realmente unos segundos después. Confirmado: momentos
+después de ese error, el puerto ya estaba completamente libre.
+
+**Arreglo**: `ServerController.start_with_retry(attempts=4,
+retry_delay=2.0)` — reintenta el bind unas pocas veces con una pequeña
+espera entre intentos antes de rendirse. La GUI ahora corre esto en un
+hilo de fondo (no bloquea la ventana) mientras muestra **"Estado:
+Iniciando backup..."** y deshabilita el botón para evitar doble clic;
+solo si los 4 intentos fallan se muestra el diálogo de error real. 2
+tests nuevos en `tests/test_runner.py` (35/35 pasando): uno confirma que
+un conflicto transitorio (el puerto se libera a los 0.3s) se resuelve
+solo vía el reintento, otro confirma que un conflicto permanente sigue
+fallando limpiamente tras agotar los intentos.
+
+**Hallazgo secundario, limpiado de paso**: la regla de Firewall
+"PunkBackup" estaba **duplicada 10 veces** en esta PC — `netsh ... add
+rule` no tiene modo "reemplazar si existe", así que cada reinstalación
+de hoy agregó una copia más. Inofensivo funcionalmente (todas son
+idénticas, Allow), pero acumulaba basura. `installer/PunkBackup.iss`
+ahora borra la regla antes de agregarla en cada instalación, haciendo el
+proceso idempotente.
+
+**Implementación**: cada línea que llega a `_drain_log_queue` (el único
+punto donde confluyen tanto los mensajes del servidor como los propios
+de la GUI) también se escribe a
+`%APPDATA%\PunkBackup\logs\activity.log` vía un
+`logging.handlers.TimedRotatingFileHandler` (rota a medianoche,
+`backupCount=180` → conserva ~6 meses, borra automáticamente lo más
+viejo). Mismo formato de timestamp que la pantalla
+(`dd-MM-yyyy HH:MM:SS`). Best-effort: si escribir a disco falla por
+cualquier razón, no afecta la visualización en vivo.
+
 ## 6. Modelo de datos (índice SQLite, uno por perfil)
 
 Tabla `backed_up_files`:
@@ -518,7 +730,10 @@ Tabla `runs` (una corrida de backup, para `/status`):
   admin — un solo UAC durante la instalación).
 - Crea accesos directos del Escritorio y Menú Inicio, con el ícono real.
 - Agrega/quita la regla de Firewall (`netsh advfirewall`, nombre de regla
-  `"PunkBackup"`) como tarea opcional marcada por defecto.
+  `"PunkBackup"`) como tarea opcional marcada por defecto — **borra antes
+  de agregar** en cada instalación (idempotente; antes se duplicaba en
+  cada reinstalación, llegó a acumular 10 copias idénticas en una sesión
+  de pruebas intensiva).
 - Desinstalador limpio registrado en "Agregar o quitar programas": borra
   programa + accesos directos + regla de Firewall; conserva a propósito
   `%APPDATA%\PunkBackup` (perfiles/tokens) para que sobreviva a una
@@ -536,6 +751,13 @@ Tabla `runs` (una corrida de backup, para `/status`):
   costumbre. Por eso `[UninstallDelete]` borra el acceso directo del
   Escritorio incondicionalmente, sin depender de que Inno lo tenga
   registrado como creado por esa instalación.
+- Mismo problema, variante encontrada después: el acceso directo de
+  **desinstalar** usaba el nombre localizado `{cm:UninstallProgram,...}`,
+  que cambia según el idioma elegido en el instalador — reinstalar en un
+  idioma distinto dejaba un segundo acceso directo huérfano
+  (`Desinstalar PunkBackup.lnk` junto a `Uninstall PunkBackup.lnk`).
+  Arreglado con un nombre fijo en inglés (`Uninstall PunkBackup`),
+  siempre igual sin importar el idioma del instalador.
 
 ## 9. Documentación a entregar
 - `README.md` (GitHub, en inglés, estándar de la plataforma).
@@ -626,5 +848,38 @@ Tabla `runs` (una corrida de backup, para `/status`):
       total de archivos en su carpeta destino y cuántos se guardaron
       específicamente en la última corrida. Ver sección 6 (esquema `runs`)
       y `gui/main_window.py`/`gui/i18n.py`.
-- [ ] Automatización WiFi en el iPhone del usuario (al final).
-- [ ] Compartir el Atajo a otro iPhone/perfil (al final).
+- [x] Automatización WiFi en el iPhone del usuario — configurada y
+      **confirmada corriendo sola** (disparó el Atajo sin tocar el
+      teléfono). Hallazgo aparte, documentado y aceptado sin arreglar:
+      puede re-dispararse tras un corte breve de WiFi. Ver sección 5.6.
+- [x] Archivo `.shortcut` exportado (`shortcuts/PunkBackup.shortcut`) como
+      alternativa de instalación más rápida al armado manual — documentado
+      en ambos manuales de configuración del iPhone.
+- [ ] Segundo perfil ("iphone de Lau") con su propio dispositivo real
+      respaldando de punta a punta — el perfil existe pero todavía no
+      tiene carpeta destino configurada (al final).
+- [x] Detección de backup "en curso" sin actividad — aviso configurable
+      (1–30 min, 10 min por defecto), **confirmado disparando
+      correctamente** a los 10 minutos exactos en una corrida real. Bug
+      real encontrado y corregido en el camino (el chequeo compartía
+      ciclo con otras funciones de refresco y podía quedar huérfano en
+      silencio). Ver secciones 5.7 y 5.9.
+- [x] Arranque del servidor verificado de verdad (no solo asumido) antes
+      de reportar "Escuchando" — con reintento automático (hasta 4
+      intentos) para conflictos de puerto transitorios (ej. Avast
+      cerrando/reabriendo el `.exe`), y mensaje de error real cuando
+      falla de verdad. Ver sección 5.10.
+- [x] Extensión de archivo y fecha real recuperadas por contenido cuando
+      Shortcuts no las reporta (firma binaria + EXIF) — causa raíz
+      atacada del lado del servidor, 38 archivos existentes corregidos
+      retroactivamente. Ver sección 5.4.
+- [x] Log de actividad persistido en disco con limpieza automática (~6
+      meses), además del panel en vivo de la GUI. Ver sección 5.8.
+- [x] Preferencias configurables en la GUI (mismo estilo visual que los
+      perfiles): iniciar con Windows, iniciar backup al abrir el
+      programa, minutos de timeout de inactividad — con botón "Guardar"
+      explícito. Ventana abre maximizada por defecto.
+- [x] Instalador: instalación idempotente (borra antes de re-agregar la
+      regla de Firewall, evita duplicados) y nombre fijo del acceso
+      directo de desinstalación (evita duplicados por idioma del
+      instalador).

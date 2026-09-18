@@ -95,6 +95,16 @@ Download `PunkBackupSetup.exe` from the project's release page:
 4. If you didn't check the Firewall task during install, Windows may show
    the prompt here instead asking to allow the connection — accept it,
    checking at least **"Private networks"**.
+   > ⚠️ **Don't assume you're fine just because no prompt showed up.**
+   > Some PCs have Windows' "notify me when Firewall blocks a new app"
+   > setting turned off (common on work/managed PCs), or the network is
+   > set to "Public" instead of "Private" — in either case Windows can
+   > block the connection silently, with no popup at all. If your iPhone
+   > can't reach the server later and you never saw this prompt, go
+   > straight to the **Troubleshooting Manual**'s "The iPhone can't reach
+   > the server" section and check/add the Firewall rule manually —
+   > don't assume the rule exists just because installation finished
+   > without errors.
 5. It should say **"Status: Listening on port 8787 🤘"**.
 
 ## Step 4 — Set up your iPhone

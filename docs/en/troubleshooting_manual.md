@@ -29,6 +29,11 @@ there).
    (e.g. `http://PC-NAME.local:8787/health`). If it doesn't load, try the
    "Fallback IP" the app also shows.
 3. Confirm the server is on in the PC app ("Status: Listening on port...").
+   If starting the server ever fails (e.g. the port is already used by
+   something else), the app now shows a real error message explaining
+   why instead of falsely claiming it's listening — if you see that
+   error, close whatever else might be using port 8787 (or another copy
+   of PunkBackup) and try again.
 4. Check the Firewall rule exists: PowerShell (as administrator) →
    `Get-NetFirewallRule -DisplayName "PunkBackup"`. If it's missing (e.g.
    you skipped that checkbox during install), add it with

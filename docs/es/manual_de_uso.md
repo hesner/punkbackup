@@ -14,6 +14,11 @@ problemas, el **Manual de solución de problemas**.
 Se cambia entre ellas con los dos botones de arriba, justo debajo del
 nombre de la app.
 
+La ventana se abre **maximizada** por defecto cada vez — puedes
+restaurarla/achicarla como cualquier ventana de Windows si prefieres
+tenerla más pequeña; eso es un control normal de Windows, PunkBackup no
+recuerda ese tamaño entre aperturas.
+
 ---
 
 ## Pantalla "⚙ Configuración" → Idioma
@@ -22,6 +27,33 @@ Arriba de todo en Configuración hay dos botones: **Español** / **English**.
 Tócalo y **toda la app cambia de idioma al instante** — botones, títulos,
 mensajes, todo — sin cerrar ni reiniciar nada. Tu elección se recuerda la
 próxima vez que abras la app.
+
+---
+
+## Pantalla "⚙ Configuración" → Preferencias
+
+Justo debajo de Idioma, tres tarjetas — mismo estilo de interruptor
+on/off que el switch Activo/Pausado de cada perfil en la pantalla
+Principal. Cada cambio aquí se aplica de inmediato, sin reiniciar.
+
+- **Iniciar PunkBackup con Windows**: agrega (o quita) a PunkBackup de los
+  programas de inicio de Windows, para que se abra solo al iniciar
+  sesión — sin tener que buscar el ícono del Escritorio cada vez.
+  **Desactivado por defecto.**
+- **Iniciar backup al abrir el programa**: apenas termina de abrirse la
+  app, hace automáticamente lo mismo que si tú mismo hicieras clic en
+  **"🤘 Iniciar backup"** — incluyendo los mismos avisos si todavía no
+  hay ningún perfil configurado, o ninguno tiene carpeta destino. Combina
+  esto con el interruptor de arriba para que la PC quede escuchando a tu
+  iPhone completamente sola después de reiniciar. **Desactivado por
+  defecto.**
+- **Minutos sin actividad para avisar que el backup se detuvo**: un
+  campo numérico (1 a 30 minutos) que controla el aviso de inactividad
+  descrito arriba en "▼ Mostrar actividad". Escribe un valor nuevo y haz
+  clic en **"Guardar"** (o presiona Enter) — el botón solo se activa
+  mientras hay un cambio válido sin guardar, y muestra brevemente "✓
+  Guardado" una vez aplicado, así siempre queda claro si tu cambio
+  realmente se aplicó. **5 minutos por defecto.**
 
 ---
 
@@ -39,7 +71,12 @@ Es el interruptor general del servidor — controla si la PC está
   fotos y videos de cualquier perfil que tengas **Activo**.
 
 Justo al lado, el texto **"Estado: ..."** confirma en qué modo está:
-`Detenido`, o `Escuchando en el puerto 8787`.
+`Detenido`, `Iniciando backup...` (brevemente, justo después de hacer
+clic — normalmente un par de segundos, a veces un poco más si el puerto
+tarda en liberarse, por ejemplo justo después de que un antivirus cierre
+y reabra la app), o `Escuchando en el puerto 8787`. Si de verdad falla al
+iniciar (el puerto sigue sin liberarse), te sale una ventana de error
+explicando por qué, en vez de un falso "Escuchando".
 
 > No necesitas "seleccionar" qué perfil va a respaldar — mientras el
 > servidor esté encendido, **cualquier perfil Activo puede subir en
@@ -91,14 +128,14 @@ algo se respaldó recientemente, sin entrar a revisar perfil por perfil.
 
 ### "▼ Mostrar actividad"
 
-Está **oculto por defecto** para no saturar la pantalla. Al desplegarlo,
-muestra un registro en vivo (estilo terminal, texto verde) de cada archivo
-que va llegando: nuevo, ya existía, o conflicto. Sirve para confirmar que
-algo está pasando en tiempo real mientras corres un Atajo desde el iPhone.
-También marca claramente cuándo **inicia** y cuándo **termina** cada
-corrida (con el resumen final: nuevos/ya existían/conflictos/errores), así
-que puedes ver de un vistazo dónde empieza y termina cada backup en el
-historial del log.
+Está **visible por defecto** — colápsalo con el mismo botón si quieres
+una pantalla más limpia. Muestra un registro en vivo (estilo terminal,
+texto verde) de cada archivo que va llegando: nuevo, ya existía, o
+conflicto. Sirve para confirmar que algo está pasando en tiempo real
+mientras corres un Atajo desde el iPhone. También marca claramente cuándo
+**inicia** y cuándo **termina** cada corrida (con el resumen final:
+nuevos/ya existían/conflictos/errores), así que puedes ver de un vistazo
+dónde empieza y termina cada backup en el historial del log.
 
 Cada línea lleva la **fecha y hora local** en que ocurrió
 (`DD-MM-AAAA HH:MM:SS`), así que un log que abarca varios días (si dejas la
@@ -106,15 +143,23 @@ app abierta) se sigue leyendo con claridad — puedes saber exactamente
 cuándo corrió cada backup, no solo el orden en que aparecen.
 
 Si una corrida se queda "en curso" sin recibir ningún archivo nuevo
-durante 5 minutos seguidos (por ejemplo, si el WiFi se cortó o cerraste
-el Atajo en el teléfono a medio backup), el log muestra un aviso tipo
-`⏸ "[perfil]": sin actividad hace 5+ minutos — el backup parece haberse
-detenido` — una sola vez por cada corte, no se repite mientras siga
-inactivo.
+durante un rato (por ejemplo, si el WiFi se cortó o cerraste el Atajo en
+el teléfono a medio backup), el log muestra un aviso tipo `⏸ "[perfil]":
+sin actividad hace 5+ minutos — el backup parece haberse detenido` — una
+sola vez por cada corte, no se repite mientras siga inactivo. Cuántos
+minutos de inactividad cuentan como "detenido" es configurable — ver
+"⚙ Configuración" → Preferencias más arriba.
 
 Junto a ese botón hay uno más pequeño, **"⤢ Expandir"**, que abre el mismo
 registro en una ventana aparte, más grande y redimensionable — útil cuando
 una corrida larga genera mucho texto y el panel chico se queda corto.
+
+Cada línea también se guarda en un archivo en disco
+(`%APPDATA%\PunkBackup\logs\activity.log`), así que puedes revisar la
+actividad pasada incluso después de cerrar la app — no solo lo que está
+visible en pantalla en ese momento. Rota diariamente y borra
+automáticamente lo más viejo de unos 6 meses, para que nunca crezca sin
+límite.
 
 ---
 

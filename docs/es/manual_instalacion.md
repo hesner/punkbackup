@@ -96,6 +96,17 @@ Descarga `PunkBackupSetup.exe` desde la página de descargas del proyecto:
 4. Si no marcaste la regla de Firewall durante la instalación, Windows
    puede mostrar aquí el aviso pidiendo permitir la conexión — acepta,
    marcando al menos **"Redes privadas"**.
+   > ⚠️ **No asumas que todo está bien solo porque no salió ningún
+   > aviso.** Algunas PC tienen desactivada la opción "avisarme cuando el
+   > Firewall bloquee una app nueva" de Windows (común en equipos de
+   > trabajo administrados), o la red está configurada como "Pública" en
+   > vez de "Privada" — en cualquiera de los dos casos, Windows puede
+   > bloquear la conexión en silencio, sin ningún aviso. Si más adelante
+   > tu iPhone no puede conectarse al servidor y nunca viste este aviso,
+   > ve directo a la sección "El iPhone no puede conectarse al servidor"
+   > del **Manual de solución de problemas** y revisa/agrega la regla de
+   > Firewall a mano — no asumas que la regla existe solo porque la
+   > instalación terminó sin errores.
 5. Debe decir **"Estado: Escuchando en el puerto 8787 🤘"**.
 
 ## Paso 4 — Configurar tu iPhone

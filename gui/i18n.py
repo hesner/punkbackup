@@ -20,6 +20,7 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
     "btn_start": {"es": "🤘 Iniciar backup", "en": "🤘 Start backup"},
     "btn_stop": {"es": "Detener backup", "en": "Stop backup"},
     "status_stopped": {"es": "Estado: Detenido", "en": "Status: Stopped"},
+    "status_starting": {"es": "Estado: Iniciando backup...", "en": "Status: Starting backup..."},
     "status_listening": {
         "es": "Estado: Escuchando en el puerto {port} 🤘",
         "en": "Status: Listening on port {port} 🤘",
@@ -77,6 +78,25 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
 
     "settings_title": {"es": "Configuración", "en": "Settings"},
     "language_title": {"es": "Idioma", "en": "Language"},
+
+    "settings_preferences_title": {"es": "Preferencias", "en": "Preferences"},
+    "setting_start_with_windows": {
+        "es": "Iniciar PunkBackup con Windows",
+        "en": "Start PunkBackup with Windows",
+    },
+    "setting_auto_start_backup": {
+        "es": "Iniciar backup al abrir el programa",
+        "en": "Start backup when opening the app",
+    },
+    "setting_idle_timeout": {
+        "es": "Minutos sin actividad para avisar que el backup se detuvo",
+        "en": "Minutes of inactivity before flagging the backup as stopped",
+    },
+    "minutes_suffix": {"es": "min", "en": "min"},
+    "toggle_on": {"es": "Activado", "en": "On"},
+    "toggle_off": {"es": "Desactivado", "en": "Off"},
+    "btn_save": {"es": "Guardar", "en": "Save"},
+    "btn_saved": {"es": "✓ Guardado", "en": "✓ Saved"},
 
     "profiles_title": {
         "es": "Perfiles (personas o dispositivos)",
@@ -175,6 +195,10 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         ' "Choose folder..." on at least one.',
     },
 
+    "log_server_starting": {
+        "es": "Iniciando backup... (puede reintentar unos segundos si el puerto tarda en liberarse)",
+        "en": "Starting backup... (may retry for a few seconds if the port takes a moment to free up)",
+    },
     "log_server_started": {"es": "Servidor iniciado. A darle.", "en": "Server started. Let's go."},
     "log_server_stopped": {"es": "Servidor detenido.", "en": "Server stopped."},
     "log_profile_activated": {"es": 'Perfil "{name}" activado.', "en": 'Profile "{name}" activated.'},
@@ -187,6 +211,20 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
     "err_toggle_server": {
         "es": "Ocurrió un error al iniciar/detener el servidor:\n\n{details}",
         "en": "An error occurred starting/stopping the server:\n\n{details}",
+    },
+    "err_server_start_unknown": {
+        "es": "no se pudo confirmar que el servidor quedó escuchando (razón desconocida)",
+        "en": "could not confirm the server started listening (unknown reason)",
+    },
+    "log_server_start_failed": {
+        "es": "El servidor NO quedó escuchando — {details}",
+        "en": "The server did NOT start listening — {details}",
+    },
+    "err_server_start_failed": {
+        "es": "No se pudo iniciar el servidor:\n\n{details}\n\nSi el puerto {port} ya está en uso "
+        "por otro programa (u otra copia de PunkBackup), ciérralo e inténtalo de nuevo.",
+        "en": "Could not start the server:\n\n{details}\n\nIf port {port} is already in use by "
+        "another program (or another copy of PunkBackup), close it and try again.",
     },
     "err_unexpected": {
         "es": "Ocurrió un error inesperado:\n\n{val}",

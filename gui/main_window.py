@@ -29,6 +29,7 @@ import logging
 import logging.handlers
 import queue
 import socket
+import threading
 from datetime import datetime, timezone
 from tkinter import filedialog, messagebox
 
@@ -37,10 +38,11 @@ import customtkinter as ctk
 from server import app as app_module
 from server.config import AppConfig
 from server.diskinfo import format_bytes
-from server.paths import app_root
+from server.paths import app_root, user_data_dir
 from server.profiles import Profile, ProfileStore
 from server.runner import ServerController
 
+from .autostart import set_start_with_windows
 from .dialogs import ask_input, ask_yes_no, show_error, show_info, show_warning
 from .i18n import LANGUAGES, LANGUAGE_NAMES, t as _t
 
@@ -51,8 +53,6 @@ ctk.set_appearance_mode("dark")
 ctk.set_default_color_theme("blue")
 
 APP_TITLE = "PunkBackup"  # brand name — stays the same in every language
-
-IDLE_BACKUP_SECONDS = 300  # 5 min of no new files while a run is "running" -> log a one-time notice
 
 BG = "#0c0c0e"            # near-black window background
 CARD_BG = "#19191d"        # card/panel background
@@ -267,6 +267,133 @@ class ProfileManageRow(ctk.CTkFrame):
             self._apply_button_text()
 
 
+class SettingSwitchRow(ctk.CTkFrame):
+    """Used on the "⚙ Configuración" screen for a single global on/off
+    setting — same card + switch visual language as ProfileStatusRow."""
+
+    def __init__(self, master, label_key: str, lang: str, initial: bool, on_toggle):
+        super().__init__(master, fg_color=CARD_BG, border_width=1, border_color=BORDER, corner_radius=8)
+        self.grid_columnconfigure(0, weight=1)
+        self.label_key = label_key
+        self.lang = lang
+        self._on_toggle = on_toggle
+
+        self.name_label = ctk.CTkLabel(
+            self, text=_t(label_key, lang), font=ctk.CTkFont(weight="bold"), text_color=TEXT_MAIN,
+            wraplength=520, justify="left",
+        )
+        self.name_label.grid(row=0, column=0, sticky="w", padx=12, pady=12)
+
+        switch_frame = ctk.CTkFrame(self, fg_color="transparent")
+        switch_frame.grid(row=0, column=1, padx=12, pady=8, sticky="e")
+        self.state_label = ctk.CTkLabel(switch_frame, text=self._state_text(initial), text_color=TEXT_MUTED, width=70)
+        self.state_label.pack(side="left", padx=(0, 6))
+        self.switch_var = ctk.BooleanVar(value=initial)
+        self.switch = ctk.CTkSwitch(
+            switch_frame, text="", variable=self.switch_var, progress_color=ACCENT,
+            command=self._toggled,
+        )
+        self.switch.pack(side="left")
+
+    def _state_text(self, value: bool) -> str:
+        return _t("toggle_on", self.lang) if value else _t("toggle_off", self.lang)
+
+    def _toggled(self) -> None:
+        value = self.switch_var.get()
+        self.state_label.configure(text=self._state_text(value))
+        self._on_toggle(value)
+
+    def set_lang(self, lang: str) -> None:
+        self.lang = lang
+        self.name_label.configure(text=_t(self.label_key, lang))
+        self.state_label.configure(text=self._state_text(self.switch_var.get()))
+
+
+class SettingNumberRow(ctk.CTkFrame):
+    """Like SettingSwitchRow, but for a small bounded-integer setting
+    (e.g. idle-timeout minutes) instead of an on/off switch.
+
+    Explicit "Save" button instead of silent save-on-blur — the button
+    is only enabled while the field holds an unsaved, valid change, and
+    briefly confirms after a save, so it's always visually obvious
+    whether a typed value actually took effect."""
+
+    def __init__(
+        self, master, label_key: str, lang: str, initial: int, on_change,
+        minimum: int = 1, maximum: int | None = None,
+    ):
+        super().__init__(master, fg_color=CARD_BG, border_width=1, border_color=BORDER, corner_radius=8)
+        self.grid_columnconfigure(0, weight=1)
+        self.label_key = label_key
+        self.lang = lang
+        self._on_change = on_change
+        self._minimum = minimum
+        self._maximum = maximum
+        self._value = initial
+
+        self.name_label = ctk.CTkLabel(
+            self, text=_t(label_key, lang), font=ctk.CTkFont(weight="bold"), text_color=TEXT_MAIN,
+            wraplength=520, justify="left",
+        )
+        self.name_label.grid(row=0, column=0, sticky="w", padx=12, pady=12)
+
+        entry_frame = ctk.CTkFrame(self, fg_color="transparent")
+        entry_frame.grid(row=0, column=1, padx=12, pady=8, sticky="e")
+        self.entry_var = ctk.StringVar(value=str(initial))
+        self.entry = ctk.CTkEntry(
+            entry_frame, textvariable=self.entry_var, width=56, justify="center",
+            fg_color=BG, border_color=BORDER, text_color=TEXT_MAIN, corner_radius=8,
+        )
+        self.entry.pack(side="left")
+        self.entry.bind("<Return>", lambda _e: self._commit())
+        self.entry_var.trace_add("write", lambda *_a: self._on_entry_changed())
+        self.suffix_label = ctk.CTkLabel(entry_frame, text=_t("minutes_suffix", lang), text_color=TEXT_MUTED)
+        self.suffix_label.pack(side="left", padx=(6, 10))
+        self.save_btn = ctk.CTkButton(
+            entry_frame, text=_t("btn_save", lang), width=72, command=self._commit,
+            fg_color=ACCENT, hover_color=ACCENT_HOVER, text_color=ACCENT_INK,
+            state="disabled",
+        )
+        self.save_btn.pack(side="left")
+
+    def _is_valid(self, raw: str) -> int | None:
+        try:
+            value = int(raw.strip())
+        except ValueError:
+            return None
+        if value < self._minimum or (self._maximum is not None and value > self._maximum):
+            return None
+        return value
+
+    def _on_entry_changed(self) -> None:
+        value = self._is_valid(self.entry_var.get())
+        dirty = value is not None and value != self._value
+        self.save_btn.configure(
+            state="normal" if dirty else "disabled",
+            text=_t("btn_save", self.lang),
+            fg_color=ACCENT, hover_color=ACCENT_HOVER,
+        )
+
+    def _commit(self) -> None:
+        value = self._is_valid(self.entry_var.get())
+        if value is None:
+            self.entry_var.set(str(self._value))  # revert — out of range or not a number
+            return
+        self.entry_var.set(str(value))
+        if value != self._value:
+            self._value = value
+            self._on_change(value)
+        self.save_btn.configure(state="disabled", text=_t("btn_saved", self.lang), fg_color=GREEN, hover_color=GREEN)
+        self.after(1200, lambda: self.save_btn.configure(text=_t("btn_save", self.lang), fg_color=ACCENT, hover_color=ACCENT_HOVER))
+
+    def set_lang(self, lang: str) -> None:
+        self.lang = lang
+        self.name_label.configure(text=_t(self.label_key, lang))
+        self.suffix_label.configure(text=_t("minutes_suffix", lang))
+        if self.save_btn.cget("state") == "normal":
+            self.save_btn.configure(text=_t("btn_save", lang))
+
+
 class MainWindow(ctk.CTk):
     def __init__(self):
         super().__init__()
@@ -285,8 +412,9 @@ class MainWindow(ctk.CTk):
 
         self.profile_store = ProfileStore()
         self.controller: ServerController | None = None
+        self._server_starting = False  # true only during start_with_retry()'s background attempt
         self.log_queue: "queue.Queue[str]" = queue.Queue()
-        self.log_visible = False
+        self.log_visible = True
         self._extra_log_widgets: list[ctk.CTkTextbox] = []  # expanded-log popups also live-fed
         self._log_popup: ctk.CTkToplevel | None = None  # only one expanded window at a time
         # Per-profile idle-backup tracking, keyed by profile id: last seen
@@ -321,6 +449,31 @@ class MainWindow(ctk.CTk):
         self.protocol("WM_DELETE_WINDOW", self._on_close)
         self.after(300, self._drain_log_queue)
         self.after(1500, self._refresh_status_loop)
+        self.after(1500, self._idle_check_loop)
+
+        def _maximize() -> None:
+            try:
+                self.state("zoomed")  # open maximized by default (Windows)
+            except Exception:
+                pass  # cosmetic — never let this stop the app from opening
+
+        # Setting "zoomed" synchronously during __init__() does nothing —
+        # the OS window isn't actually mapped by the window manager until
+        # mainloop() starts running (main() calls MainWindow() fully, THEN
+        # mainloop()) — so this has to be deferred to right after the event
+        # loop starts, once there's a real window for "zoomed" to apply to.
+        self.after(10, _maximize)
+
+        try:
+            # Self-heals the registry entry's target path on every launch —
+            # e.g. after a reinstall moves the .exe, or a dev/dist copy was
+            # running last time this was toggled on.
+            set_start_with_windows(self.cfg.start_with_windows)
+        except Exception:
+            pass  # best-effort; never block startup over a registry write
+
+        if self.cfg.auto_start_backup:
+            self._toggle_server()  # same behavior as clicking "Iniciar backup" by hand
 
     def t(self, key: str, **kwargs) -> str:
         return _t(key, self.lang, **kwargs)
@@ -415,7 +568,9 @@ class MainWindow(ctk.CTk):
         log_btn_row.grid_columnconfigure(0, weight=1)
 
         self.log_toggle_btn = ctk.CTkButton(
-            log_btn_row, text=self.t("show_activity"), command=self._toggle_log, anchor="w",
+            log_btn_row,
+            text=self.t("hide_activity") if self.log_visible else self.t("show_activity"),
+            command=self._toggle_log, anchor="w",
             fg_color=CARD_BG, hover_color=CARD_BG_ALT, border_width=1, border_color=BORDER, text_color=TEXT_MAIN,
         )
         self.log_toggle_btn.grid(row=0, column=0, sticky="ew")
@@ -427,13 +582,14 @@ class MainWindow(ctk.CTk):
         self.log_expand_btn.grid(row=0, column=1, padx=(8, 0))
 
         self.log_frame = ctk.CTkFrame(parent, fg_color=CARD_BG_ALT, border_width=1, border_color=BORDER)
-        # not packed yet — starts hidden
         self.log_box = ctk.CTkTextbox(
             self.log_frame, wrap="word", font=ctk.CTkFont(family="Consolas", size=12),
             fg_color="#050505", text_color=TERMINAL_GREEN,
         )
         self.log_box.pack(fill="both", expand=True, padx=8, pady=8)
         self.log_box.configure(state="disabled")
+        if self.log_visible:  # visible by default — see self.log_visible above
+            self.log_frame.pack(fill="both", expand=True, padx=12, pady=(0, 12))
 
     # ------------------------------------------------------------------
     # "⚙ Configuración" (Settings) screen — language + profile management
@@ -457,6 +613,30 @@ class MainWindow(ctk.CTk):
             btn.pack(side="left", padx=(0, 8))
             self.lang_buttons[code] = btn
         self._refresh_language_buttons()
+
+        self.preferences_title_label = ctk.CTkLabel(
+            parent, text=self.t("settings_preferences_title"), font=ctk.CTkFont(size=16, weight="bold"),
+            text_color=TEXT_MAIN,
+        )
+        self.preferences_title_label.pack(anchor="w", padx=12, pady=(8, 4))
+
+        self.start_with_windows_row = SettingSwitchRow(
+            parent, "setting_start_with_windows", self.lang,
+            self.cfg.start_with_windows, self._on_toggle_start_with_windows,
+        )
+        self.start_with_windows_row.pack(fill="x", padx=12, pady=(0, 6))
+
+        self.auto_start_backup_row = SettingSwitchRow(
+            parent, "setting_auto_start_backup", self.lang,
+            self.cfg.auto_start_backup, self._on_toggle_auto_start_backup,
+        )
+        self.auto_start_backup_row.pack(fill="x", padx=12, pady=(0, 6))
+
+        self.idle_timeout_row = SettingNumberRow(
+            parent, "setting_idle_timeout", self.lang,
+            self.cfg.idle_timeout_minutes, self._on_change_idle_timeout, minimum=1, maximum=30,
+        )
+        self.idle_timeout_row.pack(fill="x", padx=12, pady=(0, 10))
 
         header_row = ctk.CTkFrame(parent, fg_color="transparent")
         header_row.pack(fill="x", padx=12, pady=(8, 4))
@@ -497,6 +677,26 @@ class MainWindow(ctk.CTk):
         self.cfg.save()
         self._apply_language()
 
+    def _on_toggle_start_with_windows(self, enabled: bool) -> None:
+        self.cfg.start_with_windows = enabled
+        self.cfg.save()
+        try:
+            set_start_with_windows(enabled)
+        except Exception:
+            import traceback
+
+            details = traceback.format_exc()
+            self._log_local(f"ERROR:\n{details}")
+            show_error(self, self.lang, self.t("dlg_title_error"), self.t("err_unexpected", val=details))
+
+    def _on_toggle_auto_start_backup(self, enabled: bool) -> None:
+        self.cfg.auto_start_backup = enabled
+        self.cfg.save()
+
+    def _on_change_idle_timeout(self, minutes: int) -> None:
+        self.cfg.idle_timeout_minutes = minutes
+        self.cfg.save()
+
     def _apply_language(self) -> None:
         """Re-applies every translatable widget's text in place — no restart."""
         self.tagline_label.configure(text=self.t("tagline"))
@@ -505,9 +705,12 @@ class MainWindow(ctk.CTk):
 
         running = bool(self.controller and self.controller.running)
         self.start_btn.configure(text=self.t("btn_stop") if running else self.t("btn_start"))
-        self.status_label.configure(
-            text=self.t("status_listening", port=self.cfg.port) if running else self.t("status_stopped")
-        )
+        if self._server_starting:
+            self.status_label.configure(text=self.t("status_starting"))
+        else:
+            self.status_label.configure(
+                text=self.t("status_listening", port=self.cfg.port) if running else self.t("status_stopped")
+            )
 
         self.server_address_title_label.configure(text=self.t("server_address_title"))
         self._update_connection_info()
@@ -518,6 +721,10 @@ class MainWindow(ctk.CTk):
 
         self.language_title_label.configure(text=self.t("language_title"))
         self._refresh_language_buttons()
+        self.preferences_title_label.configure(text=self.t("settings_preferences_title"))
+        self.start_with_windows_row.set_lang(self.lang)
+        self.auto_start_backup_row.set_lang(self.lang)
+        self.idle_timeout_row.set_lang(self.lang)
         self.profiles_title_label.configure(text=self.t("profiles_title"))
         self.add_profile_btn.configure(text=self.t("add_profile"))
         self.profiles_hint_label.configure(text=self.t("profiles_hint"))
@@ -535,6 +742,22 @@ class MainWindow(ctk.CTk):
         handler.setLevel(logging.INFO)
         logging.getLogger("backup_engine").addHandler(handler)
         logging.getLogger("backup_engine").setLevel(logging.INFO)
+
+        # Persists every line that ever reaches the on-screen activity log
+        # (both server-side "backup_engine" records and GUI-only messages
+        # like "Servidor iniciado" or the idle notice) so past activity can
+        # be checked after the fact — the on-screen textbox alone is lost
+        # the moment the app closes. Rotates daily, keeps ~6 months.
+        log_dir = user_data_dir() / "logs"
+        log_dir.mkdir(parents=True, exist_ok=True)
+        file_handler = logging.handlers.TimedRotatingFileHandler(
+            log_dir / "activity.log", when="midnight", backupCount=180, encoding="utf-8",
+        )
+        file_handler.setFormatter(logging.Formatter("%(asctime)s > %(message)s", datefmt="%d-%m-%Y %H:%M:%S"))
+        self._file_logger = logging.getLogger("punkbackup.activity_file")
+        self._file_logger.setLevel(logging.INFO)
+        self._file_logger.addHandler(file_handler)
+        self._file_logger.propagate = False  # never feed into the root logger/console
 
     # ------------------------------------------------------------------
     # Destination / server control
@@ -571,9 +794,48 @@ class MainWindow(ctk.CTk):
             return
 
         app_module.configure(self.profile_store)
-        self.controller = ServerController(app_module.app, host="0.0.0.0", port=self.cfg.port)
-        self.controller.start()
+        controller = ServerController(app_module.app, host="0.0.0.0", port=self.cfg.port)
 
+        # A silent bind failure (port conflict, permission issue) used to
+        # leave the GUI showing "Escuchando..." while nothing was really
+        # listening, with no way for the user (or the iPhone) to tell
+        # until "Could not connect to the server" showed up on the phone.
+        # The retry below additionally covers a real, recurring cause of
+        # that conflict: Avast intercepting the freshly-launched unsigned
+        # exe, killing it, and relaunching it — during that brief window
+        # Windows can still refuse to rebind the just-released port even
+        # though nothing is genuinely holding it a few seconds later. The
+        # retry loop blocks for a few seconds, so it runs off the Tkinter
+        # thread; the button is disabled meanwhile so a double-click can't
+        # start two attempts at once.
+        self.start_btn.configure(state="disabled")
+        self._server_starting = True
+        self.status_label.configure(text=self.t("status_starting"), text_color=TEXT_MUTED)
+        self._log_local(self.t("log_server_starting"))
+
+        def worker() -> None:
+            ok = controller.start_with_retry()
+            self.after(0, lambda: self._on_server_start_result(controller, ok))
+
+        threading.Thread(target=worker, daemon=True).start()
+
+    def _on_server_start_result(self, controller: ServerController, ok: bool) -> None:
+        self.start_btn.configure(state="normal")
+        self._server_starting = False
+        if not ok:
+            details = controller.start_error or self.t("err_server_start_unknown")
+            self.start_btn.configure(
+                text=self.t("btn_start"), fg_color=GREEN, hover_color=GREEN_HOVER, text_color="#08120b"
+            )
+            self.status_label.configure(text=self.t("status_stopped"), text_color=TEXT_MUTED)
+            self._log_local(f"ERROR: {self.t('log_server_start_failed', details=details)}")
+            show_error(
+                self, self.lang, self.t("dlg_title_error"),
+                self.t("err_server_start_failed", details=details, port=self.cfg.port),
+            )
+            return
+
+        self.controller = controller
         self.start_btn.configure(text=self.t("btn_stop"), fg_color=RED, hover_color=RED_HOVER, text_color=TEXT_MAIN)
         self.status_label.configure(text=self.t("status_listening", port=self.cfg.port), text_color=GREEN)
         self._log_local(self.t("log_server_started"))
@@ -859,6 +1121,10 @@ class MainWindow(ctk.CTk):
             text = record.getMessage() if isinstance(record, logging.LogRecord) else str(record)
             stamp = datetime.now().strftime("%d-%m-%Y %H:%M:%S")
             line = f"{stamp} > {text}\n"
+            try:
+                self._file_logger.info(text)
+            except Exception:
+                pass  # persisting to disk is best-effort — never block the live display over it
             self.log_box.configure(state="normal")
             self.log_box.insert("end", line)
             self.log_box.see("end")
@@ -890,10 +1156,28 @@ class MainWindow(ctk.CTk):
                 self._refresh_aggregate_stats()
                 self._refresh_principal_profiles()
                 self._refresh_settings_profiles()
-                self._check_idle_backups()
             except Exception:
-                pass
+                import traceback
+
+                self._log_local(f"ERROR in _refresh_status_loop:\n{traceback.format_exc()}")
         self.after(1500, self._refresh_status_loop)
+
+    def _idle_check_loop(self) -> None:
+        """Deliberately its OWN after()-scheduled loop, separate from
+        _refresh_status_loop above — a slow/failing stats refresh (e.g. a
+        transient SQLite lock during a heavy upload burst) must never be
+        able to silently starve idle detection of ticks just because they
+        used to share one try/except block. Confirmed via a real missed
+        notice (2026-09-18): a 14+ minute gap with zero log activity while
+        a run stayed "running" produced no notice at all, with no error
+        visible anywhere — see PLAN.md for the write-up."""
+        try:
+            self._check_idle_backups()
+        except Exception:
+            import traceback
+
+            self._log_local(f"ERROR in _idle_check_loop:\n{traceback.format_exc()}")
+        self.after(1500, self._idle_check_loop)
 
     def _check_idle_backups(self) -> None:
         """A run has no persistent connection to watch — the server can
@@ -903,14 +1187,26 @@ class MainWindow(ctk.CTk):
         resets the moment new activity shows up or the run finishes."""
         now = datetime.now(timezone.utc)
         for profile in self.profile_store.list():
+            tracking = self._idle_tracking.setdefault(
+                profile.id, {"last_backup_at": None, "seen_at": now, "notified": False, "error_logged": False}
+            )
+
             try:
                 st = app_module.get_status_for_profile(profile)
             except Exception:
-                continue
+                # Routine, expected conditions (e.g. a brand-new profile
+                # with no destination folder chosen yet) raise here too —
+                # not bugs. Log any exception only ONCE per stretch of
+                # failures (not every 1.5s forever) so a real, unexpected
+                # error is still never silent, but a normal "not set up
+                # yet" state doesn't flood the log either.
+                if not tracking["error_logged"]:
+                    tracking["error_logged"] = True
+                    import traceback
 
-            tracking = self._idle_tracking.setdefault(
-                profile.id, {"last_backup_at": None, "seen_at": now, "notified": False}
-            )
+                    self._log_local(f"ERROR checking idle status for {profile.name}:\n{traceback.format_exc()}")
+                continue
+            tracking["error_logged"] = False
 
             if st["state"] != "running":
                 tracking["last_backup_at"] = None
@@ -925,10 +1221,10 @@ class MainWindow(ctk.CTk):
                 continue
 
             idle_seconds = (now - tracking["seen_at"]).total_seconds()
-            if idle_seconds >= IDLE_BACKUP_SECONDS and not tracking["notified"]:
+            if idle_seconds >= self.cfg.idle_timeout_minutes * 60 and not tracking["notified"]:
                 tracking["notified"] = True
                 self._log_local(
-                    self.t("log_backup_idle", name=profile.name, minutes=IDLE_BACKUP_SECONDS // 60)
+                    self.t("log_backup_idle", name=profile.name, minutes=self.cfg.idle_timeout_minutes)
                 )
 
     def report_callback_exception(self, exc, val, tb) -> None:

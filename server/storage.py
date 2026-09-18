@@ -27,6 +27,7 @@ from PIL import Image
 import pillow_heif
 
 from .manifest_db import ManifestDB
+from .video_metadata import VIDEO_EXTENSIONS, fix_creation_time
 
 pillow_heif.register_heif_opener()  # lets PIL.Image.open() read .heic/.heif too
 
@@ -221,6 +222,7 @@ class BackupEngine:
                 self.db.record_file(safe_name, sha256, taken_at, str(final_path), size)
                 self._resolve_error_both(run_id, safe_name, original_name)
                 self.db.bump_run(run_id, "files_conflict")
+                self._maybe_fix_video_creation_time(final_path, taken_at)
                 logger.warning("! %s: name conflict, kept both -> %s", safe_name, final_path.name)
                 return {"status": "conflict_kept_both", "dest_path": str(final_path)}
 
@@ -228,10 +230,24 @@ class BackupEngine:
             self.db.record_file(safe_name, sha256, taken_at, str(candidate_path), size)
             self._resolve_error_both(run_id, safe_name, original_name)
             self.db.bump_run(run_id, "files_new")
+            self._maybe_fix_video_creation_time(candidate_path, taken_at)
             logger.info("+ %s backed up (%.1f MB)", safe_name, size / (1024 * 1024))
             return {"status": "new", "dest_path": str(candidate_path)}
         finally:
             staging_path.unlink(missing_ok=True)  # no-op once moved
+
+    def _maybe_fix_video_creation_time(self, path: Path, taken_at: Optional[str]) -> None:
+        """Best-effort — see video_metadata.py's docstring for why this
+        exists. Only worth attempting for video containers, and only when
+        a real taken_at is known (writing "now" into the file would just
+        recreate the same problem for a different reason)."""
+        if not taken_at or path.suffix.lower() not in VIDEO_EXTENSIONS:
+            return
+        try:
+            dt = datetime.fromisoformat(taken_at.replace("Z", "+00:00"))
+        except ValueError:
+            return
+        fix_creation_time(path, dt)
 
     def _resolve_error_both(self, run_id: Optional[str], safe_name: str, original_name: str) -> None:
         """resolve_error() under both names a same-run mark_error() could

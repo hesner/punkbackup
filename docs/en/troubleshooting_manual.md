@@ -102,6 +102,20 @@ taken.
   real date directly from each file, or forcing a re-send from the
   phone), not something the Shortcut or server fixes automatically.
 
+## A video shows today's date in another app (PhotoPrism, Finder...), even though it's in the right Year/Month folder
+
+This is expected and already fixed automatically — nothing you need to
+do. Some videos (mainly ones imported from other apps, not straight from
+the camera) need an automatic retry to upload correctly at all; that
+retry process used to leave the video's own internal date stamp set to
+the day it was retried, instead of the real recording date — even though
+the folder it landed in was always correct. The server now corrects that
+internal date automatically for every video it receives, and already
+went back and fixed every video backed up before this correction existed.
+If you still see a wrong date in another app after this, that app may
+simply be reading a different field than the one being corrected — not
+something to chase further on the PunkBackup side.
+
 ## My library is huge (thousands of photos) — will the full backup ever finish?
 
 The Shortcut sweeps your library backward in bounded blocks of 50, newest

@@ -101,6 +101,21 @@ realmente.
   directamente del archivo o forzar un re-envío desde el teléfono); no es
   algo que el Atajo o el servidor corrijan automáticamente.
 
+## Un video sale con la fecha de hoy en otra app (PhotoPrism, Finder...), aunque esté en la carpeta Año/Mes correcta
+
+Esto es esperado y ya está corregido automáticamente — no necesitas hacer
+nada. Algunos videos (principalmente los importados de otras apps, no los
+grabados directo con la cámara) necesitan un reintento automático para
+subir correctamente; ese proceso de reintento dejaba la fecha interna
+propia del video con el día del reintento, no la fecha real de grabación
+— aunque la carpeta donde cayó siempre fue la correcta. El servidor ahora
+corrige esa fecha interna automáticamente en cada video que recibe, y ya
+corrigió retroactivamente todos los videos respaldados antes de que
+existiera esta corrección. Si de todas formas sigues viendo una fecha
+incorrecta en otra app después de esto, es posible que esa app esté
+leyendo un campo distinto al que se corrige — no es algo que valga la
+pena perseguir más del lado de PunkBackup.
+
 ## Mi biblioteca es enorme (miles de fotos) — ¿llegará a terminar el respaldo completo?
 
 El Atajo barre tu biblioteca hacia atrás en bloques acotados de 50 fotos,

@@ -125,6 +125,10 @@ straight from the file (JPEG/HEIC only) before falling back to "now".
 Both cover the same real, narrow class of Photos items that Shortcuts
 sometimes can't report these attributes for — see `server/storage.py`'s
 `_detect_extension()`/`_read_exif_taken_at()` and PLAN.md §5.4.
+Separately, every successfully-received video (`.mov`/`.mp4`/`.m4v`) with
+a known `taken_at` gets its own embedded container metadata
+(`creation_time` in `mvhd`/every `mdhd`) patched to match — see
+`server/video_metadata.py` and PLAN.md §5.11.
 
 `server/app.py`'s `configure(profile_store)` / `is_configured()` /
 `_engine_for(profile)` / `forget_profile(id)` pattern: engines are built
@@ -314,6 +318,25 @@ reintroduces these problems.
     — always verify via the real server response or its DB, never an
     on-device preview.
 
+    **Downstream consequence, found later (real user report via
+    PhotoPrism)**: Encode Media's Passthrough remux also stamps the
+    container's OWN `creation_time` metadata (in `moov/mvhd` and every
+    `moov/trak/mdia/mdhd`) with the moment of the re-encode — not the
+    real capture date — even though PunkBackup's `taken_at` (captured
+    independently before Encode Media ever runs) stays correct the whole
+    time for folder placement and the DB. External tools that trust the
+    file's own embedded date (PhotoPrism, Finder, etc.) show the wrong
+    ("today") date as a result. Fixed server-side, not Shortcut-side, in
+    keeping with this project's general preference (see point 11's
+    "prefer surfacing/fixing on the server" pattern and PLAN.md §5.4's
+    extension/EXIF fix): `server/video_metadata.py` patches those exact
+    fields back to the real `taken_at` via direct ISO-BMFF box editing —
+    a pure-Python, dependency-free, surgical in-place patch (no resize,
+    no re-encode) — rather than bundling `ffmpeg` just for a metadata
+    rewrite. See PLAN.md §5.11 for the full validation (byte-level diff
+    proof against a real device file) before trusting this kind of fix
+    on real backup data.
+
 ## 6. Testing approach that actually caught bugs
 
 - Unit tests against `BackupEngine`/`ManifestDB` directly (no HTTP) for the
@@ -345,14 +368,16 @@ reintroduces these problems.
 
 ## 7. What "done" looks like
 
-- `pytest tests -q` passes (35 tests as of this writing, covering engine
+- `pytest tests -q` passes (39 tests as of this writing, covering engine
   rules, profile isolation/pause/delete, destination-switch correctness,
   concurrent uploads, the `/check` contract, the 0-byte-upload rejection,
   its self-healing retry error-count behavior, a stale-run reap on
   reopen (and its distinct log line vs. a genuine `/run/finish`),
   content-based extension/EXIF-date fallbacks for items Shortcuts sends
-  with no extension or no `taken_at`, and `ServerController`'s bind
-  verification + auto-retry on a transient port conflict).
+  with no extension or no `taken_at`, `ServerController`'s bind
+  verification + auto-retry on a transient port conflict, and the
+  in-place video `creation_time` metadata patch against a synthetic
+  ISO-BMFF fixture).
 - A real iPhone can run the Shortcut manually, and files appear in the
   chosen destination with correct extensions, organized by Year/Month, and
   `<dest>/.iphone_backup_index/index.sqlite`'s `backed_up_files` table

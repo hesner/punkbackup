@@ -104,6 +104,7 @@ Backup photos/
 │   │                              detección de extensión por contenido + respaldo de fecha por EXIF)
 │   ├── runner.py                (arranca/detiene uvicorn bajo demanda; verifica el bind de verdad,
 │   │                              reintenta ante conflictos transitorios de puerto)
+│   ├── video_metadata.py        (corrige el creation_time real dentro del contenedor de video)
 │   ├── config.py                (AppConfig: puerto, idioma, preferencias de inicio, timeout de inactividad)
 │   ├── paths.py                 (rutas dev vs. instalado — app_root()/user_data_dir())
 │   └── run_dev.py               (runner manual para pruebas por terminal)
@@ -123,7 +124,8 @@ Backup photos/
     ├── test_backup_engine.py
     ├── test_api.py
     ├── test_profiles.py
-    └── test_runner.py
+    ├── test_runner.py
+    └── test_video_metadata.py
 ```
 
 ## 4.1 Perfiles (multi-usuario / multi-dispositivo)
@@ -696,6 +698,53 @@ viejo). Mismo formato de timestamp que la pantalla
 (`dd-MM-yyyy HH:MM:SS`). Best-effort: si escribir a disco falla por
 cualquier razón, no afecta la visualización en vivo.
 
+### 5.11 Bug real: videos con fecha "hoy" en apps externas (PhotoPrism) — CORREGIDO (2026-09-18)
+
+Reportado por el usuario: en PhotoPrism, muchos videos de hoy aparecían
+con fecha de creación "hoy", aunque la carpeta Año/Mes donde quedaron
+guardados sí era la correcta.
+
+**Causa raíz**: cuando un video falla en 0 bytes y se reintenta con
+**Encode Media (Passthrough)** (§5.1/AGENTS.md lección 12), ese proceso
+reescribe el contenedor del video y **estampa el campo `creation_time`
+del contenedor con el momento del reintento** (hoy), no la fecha real de
+grabación — aunque el video/audio en sí queden sin pérdida. `taken_at` (lo
+que usa PunkBackup para la carpeta y la base de datos) se captura de
+Shortcuts *antes* de tocar el video, así que siempre fue correcto — el
+problema es que herramientas externas como PhotoPrism leen la fecha
+**dentro del archivo**, no la carpeta.
+
+**Investigación**: `mutagen` no sirve — esos campos no son tags estilo
+iTunes, son campos binarios dentro de la estructura ISO-BMFF (`moov >
+mvhd` y `moov > trak > mdia > mdhd`, uno de estos últimos por cada pista
+— 7 en total en un video típico de iPhone: video, audio, y 5 pistas de
+metadata). Dos caminos evaluados: empaquetar `ffmpeg.exe` (simple pero
+~80-100MB extra + complejidad de licencia), o parchar el contenedor
+directamente en Python puro (sin dependencias nuevas). Se eligió la
+segunda, validada con una prueba de calidad rigurosa antes de aplicarla a
+cualquier archivo real: sobre un video real de 18.5MB, el parche cambió
+**exactamente 64 bytes** (8 campos de fecha de 8 bytes cada uno), tamaño
+de archivo idéntico, resto del `ffprobe` (códec, resolución, bitrate,
+duración, todas las pistas) **100% idéntico**, y decodificación completa
+sin errores.
+
+**Arreglo**: `server/video_metadata.py` — `fix_creation_time()` reescribe
+`mvhd` + cada `mdhd` en el mismo lugar (sin redimensionar, sin tocar
+`mdat`/los datos reales del video), soporta boxes versión 0 y 1
+(campos de 32 y 64 bits), y nunca lanza excepción (best-effort: si el
+archivo no es un contenedor ISO-BMFF reconocible, simplemente no hace
+nada). Conectado en `finalize_upload()` (`server/storage.py`): se aplica
+a toda subida de video nueva con `taken_at` conocido, justo después de
+que el archivo llega a su carpeta final. 4 tests nuevos con un archivo
+MP4 sintético construido a mano (39/39 pasando).
+
+**Corrección retroactiva**: script puntual (no versionado, mismo patrón
+que los anteriores) aplicado a los 387 videos existentes con `taken_at`
+conocido — **376 corregidos**, 0 archivos faltantes, 0 fechas
+no interpretables, 11 sin caja `moov` (no son contenedores ISO-BMFF
+reconocibles — pendiente de investigar si vale la pena, alcance menor al
+2% del total).
+
 ## 6. Modelo de datos (índice SQLite, uno por perfil)
 
 Tabla `backed_up_files`:
@@ -875,6 +924,11 @@ Tabla `runs` (una corrida de backup, para `/status`):
       retroactivamente. Ver sección 5.4.
 - [x] Log de actividad persistido en disco con limpieza automática (~6
       meses), además del panel en vivo de la GUI. Ver sección 5.8.
+- [x] Fecha real (`creation_time`) corregida dentro del propio contenedor
+      de video, no solo en la carpeta/base de datos — parche binario
+      quirúrgico en Python puro, validado con diff de bytes contra un
+      video real antes de aplicarlo a producción. 376/387 videos
+      existentes corregidos retroactivamente. Ver sección 5.11.
 - [x] Preferencias configurables en la GUI (mismo estilo visual que los
       perfiles): iniciar con Windows, iniciar backup al abrir el
       programa, minutos de timeout de inactividad — con botón "Guardar"

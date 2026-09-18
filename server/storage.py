@@ -23,7 +23,12 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import BinaryIO, Optional
 
+from PIL import Image
+import pillow_heif
+
 from .manifest_db import ManifestDB
+
+pillow_heif.register_heif_opener()  # lets PIL.Image.open() read .heic/.heif too
 
 CHUNK_SIZE = 1024 * 1024  # 1 MiB — keeps memory use flat regardless of file size
 
@@ -31,6 +36,63 @@ CHUNK_SIZE = 1024 * 1024  # 1 MiB — keeps memory use flat regardless of file s
 # activity to the user; it is equally usable headless (just prints/logs
 # normally if nothing is attached).
 logger = logging.getLogger("backup_engine")
+
+# Sniffs the REAL file format from its own bytes — used only when the
+# Shortcut sends a filename with no extension at all. Seen in practice
+# (2026-09-17/18) for a handful of Photos items — always the same ones
+# that also arrive with no `taken_at` (see PLAN.md §5.4) — where
+# Shortcuts' own "File Extension" attribute comes back empty. Detecting
+# from content instead of trusting the client is strictly more robust:
+# it doesn't depend on any particular Shortcuts attribute being reliable,
+# for this case or any future one. Never overrides an extension the
+# client DID send, even if it looks wrong — only fills in a MISSING one.
+_MAGIC_SIGNATURES: list[tuple[bytes, str]] = [
+    (b"\xff\xd8\xff", ".jpg"),
+    (b"\x89PNG\r\n\x1a\n", ".png"),
+    (b"GIF87a", ".gif"),
+    (b"GIF89a", ".gif"),
+]
+_FTYP_BRAND_EXTENSIONS = {
+    b"qt  ": ".mov",
+    b"heic": ".heic",
+    b"heix": ".heic",
+    b"hevc": ".heic",
+    b"hevx": ".heic",
+    b"mif1": ".heic",
+    b"msf1": ".heic",
+}
+
+
+def _detect_extension(staging_path: Path) -> Optional[str]:
+    try:
+        with open(staging_path, "rb") as f:
+            head = f.read(16)
+    except OSError:
+        return None
+    for signature, ext in _MAGIC_SIGNATURES:
+        if head.startswith(signature):
+            return ext
+    if head[4:8] == b"ftyp":
+        return _FTYP_BRAND_EXTENSIONS.get(head[8:12], ".mp4")  # any other brand: some MP4-family video
+    return None
+
+
+def _read_exif_taken_at(staging_path: Path) -> Optional[str]:
+    """Best-effort fallback for when the Shortcut sends no `taken_at` at
+    all — reads the real capture date straight from the file's own EXIF
+    (DateTimeOriginal), independent of whatever Shortcuts reported. Only
+    works for formats that carry EXIF (JPEG/HEIC); returns None for
+    anything else (e.g. video) rather than guessing — same items this
+    tends to affect are documented in PLAN.md §5.4."""
+    try:
+        with Image.open(staging_path) as img:
+            exif = img.getexif()
+        raw = exif.get(36867) or exif.get(306)  # DateTimeOriginal, else DateTime
+        if not raw:
+            return None
+        return datetime.strptime(raw, "%Y:%m:%d %H:%M:%S").isoformat()
+    except Exception:
+        return None
 
 
 class BackupEngine:
@@ -133,6 +195,15 @@ class BackupEngine:
             raise ValueError(f'"{filename}" arrived empty (0 bytes) — not recorded, will retry on the next run.')
 
         safe_name = Path(filename).name  # strip any path components — never trust client paths
+        original_name = safe_name  # pre-extension-fix name — mark_error() on a 0-byte retry used this
+        if not Path(safe_name).suffix:
+            detected_ext = _detect_extension(staging_path)
+            if detected_ext:
+                logger.warning("%s: no extension from the Shortcut, detected %s from content", safe_name, detected_ext)
+                safe_name = f"{safe_name}{detected_ext}"
+        if not taken_at:
+            taken_at = _read_exif_taken_at(staging_path)
+
         target_dir = self._year_month_dir(taken_at)
         target_dir.mkdir(parents=True, exist_ok=True)
         candidate_path = target_dir / safe_name
@@ -140,7 +211,7 @@ class BackupEngine:
         try:
             if candidate_path.exists():
                 if self._hash_existing(candidate_path) == sha256:
-                    self.db.resolve_error(run_id, safe_name)
+                    self._resolve_error_both(run_id, safe_name, original_name)
                     self.db.bump_run(run_id, "files_skipped")
                     logger.info("= %s already backed up, skipped", safe_name)
                     return {"status": "skipped_duplicate", "dest_path": str(candidate_path)}
@@ -148,19 +219,28 @@ class BackupEngine:
                 final_path = self._next_conflict_name(target_dir, candidate_path)
                 shutil.move(str(staging_path), str(final_path))
                 self.db.record_file(safe_name, sha256, taken_at, str(final_path), size)
-                self.db.resolve_error(run_id, safe_name)
+                self._resolve_error_both(run_id, safe_name, original_name)
                 self.db.bump_run(run_id, "files_conflict")
                 logger.warning("! %s: name conflict, kept both -> %s", safe_name, final_path.name)
                 return {"status": "conflict_kept_both", "dest_path": str(final_path)}
 
             shutil.move(str(staging_path), str(candidate_path))
             self.db.record_file(safe_name, sha256, taken_at, str(candidate_path), size)
-            self.db.resolve_error(run_id, safe_name)
+            self._resolve_error_both(run_id, safe_name, original_name)
             self.db.bump_run(run_id, "files_new")
             logger.info("+ %s backed up (%.1f MB)", safe_name, size / (1024 * 1024))
             return {"status": "new", "dest_path": str(candidate_path)}
         finally:
             staging_path.unlink(missing_ok=True)  # no-op once moved
+
+    def _resolve_error_both(self, run_id: Optional[str], safe_name: str, original_name: str) -> None:
+        """resolve_error() under both names a same-run mark_error() could
+        have used — a 0-byte retry marks the error under the name it was
+        UPLOADED with, which may be the pre-extension-detection name (see
+        finalize_upload's `original_name`)."""
+        self.db.resolve_error(run_id, safe_name)
+        if original_name != safe_name:
+            self.db.resolve_error(run_id, original_name)
 
     @staticmethod
     def _next_conflict_name(target_dir: Path, candidate_path: Path) -> Path:

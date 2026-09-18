@@ -10,12 +10,18 @@ Schema:
 """
 from __future__ import annotations
 
+import logging
 import sqlite3
 import threading
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
+
+# Same logger the GUI's queue handler already listens to (see storage.py) —
+# reusing it means a reaped run shows up in the activity log for free,
+# right alongside real upload/run-finish lines, instead of being invisible.
+logger = logging.getLogger("backup_engine")
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS backed_up_files (
@@ -75,10 +81,21 @@ class ManifestDB:
             # reports "running" indefinitely for a run nobody is actually
             # running, which then falsely trips the GUI's idle-backup notice
             # a few minutes after simply opening the app.
-            self._conn.execute(
-                "UPDATE runs SET finished_at = ? WHERE finished_at IS NULL", (_now(),)
-            )
-            self._conn.commit()
+            dangling = self._conn.execute(
+                "SELECT id FROM runs WHERE finished_at IS NULL"
+            ).fetchall()
+            if dangling:
+                self._conn.execute(
+                    "UPDATE runs SET finished_at = ? WHERE finished_at IS NULL", (_now(),)
+                )
+                self._conn.commit()
+                for row in dangling:
+                    logger.warning(
+                        "!! Run %s was left \"running\" by a previous session (app closed/crashed "
+                        "mid-run) — auto-closed on reopen. This is NOT a real /run/finish from the "
+                        "Shortcut; its final tally may be incomplete.",
+                        row["id"],
+                    )
         # In-memory only (reset on restart) — which filenames currently have
         # an unresolved mark_error() in a given run, so a same-run retry that
         # later succeeds for that exact filename can un-count it. See

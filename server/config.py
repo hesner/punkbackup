@@ -19,11 +19,17 @@ CONFIG_PATH = CONFIG_DIR / "config.json"
 DEFAULT_PORT = 8787
 
 
+DEFAULT_IDLE_TIMEOUT_MINUTES = 5
+
+
 @dataclass
 class AppConfig:
     port: int = DEFAULT_PORT
     last_destination_dir: str | None = None
     language: str = "es"  # "es" or "en" — GUI display language, switchable live
+    start_with_windows: bool = False  # launch PunkBackup.exe at Windows login
+    auto_start_backup: bool = False  # call "Start backup" automatically right after opening
+    idle_timeout_minutes: int = DEFAULT_IDLE_TIMEOUT_MINUTES  # see MainWindow._check_idle_backups
 
     @staticmethod
     def load() -> "AppConfig":

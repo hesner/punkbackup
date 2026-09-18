@@ -144,3 +144,73 @@ def test_reopening_reaps_a_run_left_running_by_a_previous_process(tmp_path):
     assert db2.get_status()["state"] == "idle"
     assert db2.get_status()["last_run"]["id"] == run_id
     assert db2.get_status()["last_run"]["finished_at"] is not None
+
+
+def test_reap_logs_a_warning_distinct_from_a_real_run_finish(tmp_path, caplog):
+    """A reaped run must be visibly distinguishable in the activity log
+    from a genuine /run/finish call — otherwise there's no way to tell
+    afterward whether a run actually completed on its own or was just
+    auto-closed because the app got closed mid-run (confirmed source of
+    real user confusion, 2026-09-18)."""
+    dest = tmp_path / "dest"
+    dest.mkdir()
+    db1 = ManifestDB(dest)
+    run_id = db1.start_run()
+    db1.close()
+
+    with caplog.at_level("WARNING", logger="backup_engine"):
+        ManifestDB(dest)
+
+    assert any(run_id in record.getMessage() for record in caplog.records)
+    assert any("previous session" in record.getMessage() for record in caplog.records)
+
+
+def _fake_jpeg_bytes(exif_datetime_original: str | None = None) -> bytes:
+    """A real, tiny, valid JPEG — optionally with a DateTimeOriginal EXIF
+    tag — for testing the content-sniffing/EXIF-fallback paths without a
+    real photo file. See PLAN.md §5.4 for why this matters: some Photos
+    items arrive with neither a filename extension nor a `taken_at`."""
+    from PIL import Image
+
+    img = Image.new("RGB", (2, 2), color="red")
+    buf = io.BytesIO()
+    if exif_datetime_original:
+        exif = img.getexif()
+        exif[36867] = exif_datetime_original  # DateTimeOriginal
+        img.save(buf, format="JPEG", exif=exif)
+    else:
+        img.save(buf, format="JPEG")
+    return buf.getvalue()
+
+
+def test_missing_extension_is_detected_from_jpeg_content(tmp_path):
+    engine = make_engine(tmp_path)
+    result = engine.process_upload("IMG_9001", io.BytesIO(_fake_jpeg_bytes()), "2026-05-01T00:00:00", None)
+    assert result["dest_path"].endswith("IMG_9001.jpg")
+
+
+def test_missing_extension_is_detected_from_video_content(tmp_path):
+    engine = make_engine(tmp_path)
+    # Real QuickTime .mov signature (confirmed against an actual
+    # ScreenRecording file) padded out to a non-trivial size.
+    fake_mov = b"\x00\x00\x00\x14ftypqt  \x00\x00\x00\x00" + b"\x00" * 64
+    result = engine.process_upload("ScreenRecording_01-01-2026", io.BytesIO(fake_mov), "2026-05-01T00:00:00", None)
+    assert result["dest_path"].endswith("ScreenRecording_01-01-2026.mov")
+
+
+def test_extension_is_never_overridden_when_already_present(tmp_path):
+    """Content-sniffing only fills in a MISSING extension — it must never
+    second-guess or replace one the client actually sent, even if the
+    real bytes look like a different format."""
+    engine = make_engine(tmp_path)
+    result = engine.process_upload("photo.png", io.BytesIO(_fake_jpeg_bytes()), "2026-05-01T00:00:00", None)
+    assert result["dest_path"].endswith("photo.png")
+
+
+def test_missing_taken_at_falls_back_to_exif_date_when_present(tmp_path):
+    engine = make_engine(tmp_path)
+    result = engine.process_upload(
+        "IMG_9002.jpg", io.BytesIO(_fake_jpeg_bytes("2019:03:15 08:00:00")), None, None
+    )
+    assert result["status"] == "new"
+    assert str(Path(result["dest_path"]).parent).endswith(str(Path("2019") / "03"))

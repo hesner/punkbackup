@@ -260,10 +260,17 @@ advance the sweep to the next block:
   `Limite` from the list, don't create a new one with the same name) →
   value: the result of the `Adjust Date` above.
 
-> **Tuning `Repeticiones`**: each block of 50 that's already fully backed up
-> checks fast (no file transfer); a block with real new content takes
-> longer. Confirmed working with `Repeticiones` up to 50 (≈2500 photos
-> checked in one run) in real testing.
+> **Tuning `Repeticiones`**: confirmed working with `Repeticiones` up to 50
+> (≈2,500 photos checked in one run) in real testing; `Repeticiones = 180`
+> (≈9,000 photos) has also been confirmed not to crash or fail the
+> Shortcut itself. ⚠️ Don't assume a block that's already fully backed up
+> is fast just because it transfers no file — measured directly from real
+> activity logs, an "already backed up" check can still take a real
+> double-digit number of seconds per item, not a near-instant round trip.
+> See the Troubleshooting Manual's "How fast is a backup, really?" section
+> for the measured numbers (including a per-`Repeticiones` time table) and
+> why a run that's mostly re-checking already-backed-up content can take
+> longer than one uploading the same number of brand-new items.
 >
 > ⚠️ **Important, non-obvious limitation**: `Limite` always resets to
 > "tomorrow" at the start of every run — there is no memory of where a

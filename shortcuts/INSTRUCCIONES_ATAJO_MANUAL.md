@@ -271,10 +271,18 @@ sección 3 — estas dos acciones avanzan el barrido al siguiente bloque:
   variable `Limite` ya existente en la lista, no crees una nueva con el
   mismo nombre) → valor: el resultado del `Ajustar fecha` de arriba.
 
-> **Ajustando `Repeticiones`**: un bloque de 50 que ya está completo se
-> revisa rápido (sin transferir archivos); un bloque con contenido nuevo
-> de verdad tarda más. Comprobado funcionando con `Repeticiones` hasta 50
-> (≈2500 fotos revisadas en una sola corrida) en pruebas reales.
+> **Ajustando `Repeticiones`**: comprobado funcionando con `Repeticiones`
+> hasta 50 (≈2.500 fotos revisadas en una sola corrida) en pruebas reales;
+> `Repeticiones = 180` (≈9.000 fotos) también fue confirmado sin que el
+> Atajo mismo falle ni se cuelgue. ⚠️ No asumas que un bloque ya
+> respaldado es rápido solo porque no transfiere ningún archivo — medido
+> directamente de logs de actividad reales, un chequeo de "ya respaldado"
+> puede tardar igual varios segundos por elemento, no un ida-y-vuelta casi
+> instantáneo. Ver la sección "¿Qué tan rápido es un respaldo, en la
+> práctica?" del Manual de solución de problemas para los números medidos
+> (incluye una tabla de tiempo por `Repeticiones`) y por qué una corrida
+> que está mayormente re-revisando contenido ya respaldado puede tardar
+> más que una que sube la misma cantidad de elementos totalmente nuevos.
 >
 > ⚠️ **Limitación importante, no obvia**: `Limite` siempre se reinicia a
 > "mañana" al empezar cada corrida — no hay memoria de dónde quedó la

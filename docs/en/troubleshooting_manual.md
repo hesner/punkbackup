@@ -147,8 +147,10 @@ forever (a plain `Limit` with no way to advance).
 - If a run gets interrupted (you leave home, or tap Stop), nothing is lost
   — anything already uploaded stays backed up permanently. The next run
   just starts sweeping from your newest photos again rather than exactly
-  where it left off; the already-completed blocks re-check quickly (no
-  file transfer) before it reaches new ground.
+  where it left off. Re-checking those already-completed blocks never
+  transfers any file again, but — see the "How fast is a backup, really?"
+  section right below — it isn't necessarily fast either; budget real time
+  for it, not zero.
 - If the Shortcut itself appears to freeze with no error and no visible
   cause (rare, but a known Shortcuts app quirk unrelated to this system),
   force-quit it from the app switcher and run it again — nothing gets
@@ -159,16 +161,17 @@ forever (a plain `Limit` with no way to advance).
 These numbers come from real production uploads on this project's own
 setup — an **iPhone 15**, a **home WiFi network**, and a **Windows PC
 (Dell)** — derived directly from the server's own timestamps for every
-file it has ever received (over 7,200 real photos/videos), not a lab
-benchmark.
+file it has ever received, refreshed using only the **most recent few
+days** of real uploads (about 1,340 files) so the numbers reflect current
+conditions rather than an average blended with the very first test runs.
 
 | File type | Share of a typical library | Avg. file size | Typical time per file |
 |---|---|---|---|
-| JPEG | ~55% | 0.24 MB | ~2 s |
-| HEIC | ~33% | 2.1 MB | ~5.5 s |
-| PNG | ~5% | 2.4 MB | ~5.3 s |
-| MP4 | ~4% | 8.0 MB | ~10 s |
-| MOV | ~3% | 31.5 MB | ~19 s |
+| JPEG | ~57% | 0.24 MB | ~1.7 s |
+| HEIC | ~30% | 2.0 MB | ~6.5 s |
+| PNG | ~5.5% | 2.9 MB | ~6.6 s |
+| MP4 | ~3% | 8.3 MB | ~9.7 s |
+| MOV | ~4% | 23.6 MB | ~16.7 s |
 
 Most of the time for a small photo is **not** network transfer — it's the
 fixed overhead of the Shortcut's two requests per item (`/check`, then
@@ -176,24 +179,56 @@ fixed overhead of the Shortcut's two requests per item (`/check`, then
 small photos and matters less and less for bigger videos, where actual
 transfer speed becomes the main factor.
 
-**Projection**, assuming a library with a similar photo/video mix as the
-one measured above (mostly photos, roughly 1 in 14 items a video):
+**Projection by `Repeticiones`** (the variable that controls how many
+50-item blocks one Shortcut run sweeps — see the "Tuning `Repeticiones`"
+note in the iPhone Setup Manual), split out by file type using this same
+real mix, for a **first-time backup of brand-new files**:
 
-| Library size | First-time full backup (approx.) |
-|---|---|
-| 1,000 new items | ~1 h 10 min |
-| 5,000 new items | ~5 h 50 min |
-| 10,000 new items | ~11 h 45 min |
+| Repeticiones | Total items | JPEG | HEIC | PNG | MP4 | MOV | Time (new items only) |
+|---|---|---|---|---|---|---|---|
+| 10 | 500 | 287 | 152 | 27 | 16 | 18 | ~35 min |
+| 20 | 1,000 | 574 | 303 | 55 | 31 | 37 | ~1 h 10 min |
+| 30 | 1,500 | 861 | 455 | 82 | 47 | 55 | ~1 h 45 min |
+| 40 | 2,000 | 1,148 | 607 | 109 | 63 | 73 | ~2 h 20 min |
+| 50 | 2,500 | 1,435 | 759 | 136 | 78 | 92 | ~2 h 56 min |
+| 75 | 3,750 | 2,152 | 1,138 | 205 | 118 | 137 | ~4 h 24 min |
+| 100 | 5,000 | 2,870 | 1,517 | 273 | 157 | 183 | ~5 h 52 min |
+| 150 | 7,500 | 4,305 | 2,276 | 409 | 235 | 275 | ~8 h 48 min |
+| 180 | 9,000 | 5,166 | 2,731 | 491 | 283 | 330 | ~10 h 34 min |
+| 200 | 10,000 | 5,740 | 3,034 | 546 | 314 | 366 | ~11 h 44 min |
+| 250 | 12,500 | 7,175 | 3,793 | 682 | 392 | 458 | ~14 h 40 min |
 
-Caveats:
-- This is for the **first** backup of brand-new files. Routine backups
-  (re-checking files already backed up) are much faster per item, since
-  most items get skipped after a quick `/check` with no file transfer.
+`Repeticiones` up to **50** (≈2,500 items) is confirmed reliable on a real
+device by this project's own original testing. **`Repeticiones = 180`
+(≈9,000 items) has since also been confirmed reliable on a real device**
+— the Shortcut itself doesn't fail or crash at that size. Values above 50
+that haven't been separately confirmed are still shown here for reference,
+but treat them as unverified until tested.
+
+> ⚠️ **Important, found while investigating a real backup that hadn't
+> finished after several sessions**: the table above only models time for
+> **new** files. It assumes every item in the sweep needs a real upload —
+> but once part of your library is already backed up (from an earlier,
+> interrupted run), most of each new block's 50 items are "already backed
+> up, skip" instead. Measured directly from the activity log: a skip
+> (`/check` comes back "already backed up," no file transfer at all) still
+> took a **median of about 20 seconds** in real recent runs — not the
+> near-instant round trip you'd expect for a plain HTTP check with nothing
+> to transfer (sample size is still small, and it's noisy — anywhere from
+> a few seconds to several minutes). **This means a run that's mostly
+> re-checking already-backed-up content can take noticeably longer than
+> the table above suggests**, not shorter — likely explains why a large
+> backup that gets stopped and resumed repeatedly can take much longer in
+> wall-clock time to finish than the "new items only" estimate implies.
+> The exact cause isn't confirmed yet (candidates: per-action overhead in
+> the Shortcuts app itself, or `Find Photos` re-scanning a large library on
+> every block) — treat the skip-heavy case as **slower, not faster**, than
+> a first-time backfill of the same item count until this is narrowed down
+> further.
+
+Other caveats:
 - Your own photo/video mix shifts these numbers — a video-heavy library
   takes noticeably longer per item than a photo-heavy one.
-- One Shortcut run is capped by `Repeticiones` (confirmed working up to
-  50 blocks, ≈2,500 items, in one run) — a 10,000-item first backfill
-  needs roughly 4 separate runs, not one continuous run.
 - Your own WiFi signal strength and other devices competing for bandwidth
   at the same time will shift these numbers in either direction.
 

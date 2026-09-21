@@ -150,8 +150,10 @@ conjunto fijo sin avanzar (`Limit` fijo sin forma de avanzar).
 - Si una corrida se interrumpe (sales de casa, o le das Stop), no se pierde
   nada — todo lo ya subido queda respaldado para siempre. La siguiente
   corrida simplemente vuelve a empezar desde tus fotos más recientes, no
-  exactamente donde quedó — los bloques ya completos se revisan rápido
-  (sin transferir archivos) antes de llegar a terreno nuevo.
+  exactamente donde quedó. Revisar de nuevo esos bloques ya completos
+  nunca vuelve a transferir ningún archivo, pero — ver la sección "¿Qué tan
+  rápido es un respaldo, en la práctica?" justo abajo — tampoco es
+  necesariamente rápido; calcula tiempo real para eso, no cero.
 - Si el Atajo mismo parece congelarse sin ningún error ni causa visible
   (raro, pero una falla conocida de la app Atajos sin relación con este
   sistema), fuérzalo a cerrar desde el selector de apps y vuelve a
@@ -163,16 +165,17 @@ conjunto fijo sin avanzar (`Limit` fijo sin forma de avanzar).
 Estos números vienen de subidas reales de producción en el ambiente propio
 de este proyecto — un **iPhone 15**, una **red WiFi de casa**, y una **PC
 Windows (Dell)** — calculados directamente de las marcas de tiempo propias
-del servidor para cada archivo que ha recibido (más de 7.200 fotos/videos
-reales), no un benchmark de laboratorio.
+del servidor, usando solo los **últimos días** de subidas reales (cerca de
+1.340 archivos) para que los números reflejen las condiciones actuales, no
+un promedio mezclado con las primeras corridas de prueba del proyecto.
 
 | Tipo de archivo | % típico de una biblioteca | Tamaño promedio | Tiempo típico por archivo |
 |---|---|---|---|
-| JPEG | ~55% | 0.24 MB | ~2 s |
-| HEIC | ~33% | 2.1 MB | ~5.5 s |
-| PNG | ~5% | 2.4 MB | ~5.3 s |
-| MP4 | ~4% | 8.0 MB | ~10 s |
-| MOV | ~3% | 31.5 MB | ~19 s |
+| JPEG | ~57% | 0.24 MB | ~1.7 s |
+| HEIC | ~30% | 2.0 MB | ~6.5 s |
+| PNG | ~5.5% | 2.9 MB | ~6.6 s |
+| MP4 | ~3% | 8.3 MB | ~9.7 s |
+| MOV | ~4% | 23.6 MB | ~16.7 s |
 
 La mayor parte del tiempo de una foto chica **no** es transferencia por
 red — es el costo fijo de las dos peticiones por archivo que hace el Atajo
@@ -180,27 +183,61 @@ red — es el costo fijo de las dos peticiones por archivo que hace el Atajo
 así que domina en fotos chicas y pesa cada vez menos en videos grandes,
 donde la velocidad real de transferencia pasa a ser el factor principal.
 
-**Proyección**, asumiendo una biblioteca con una mezcla de fotos/videos
-parecida a la medida arriba (mayoría fotos, aproximadamente 1 de cada 14
-elementos un video):
+**Proyección por `Repeticiones`** (la variable que controla cuántos
+bloques de 50 elementos barre una sola corrida — ver la nota "Ajustando
+`Repeticiones`" del Manual de configuración del iPhone), desglosada por
+tipo de archivo con esta misma mezcla real, para un **primer respaldo de
+archivos totalmente nuevos**:
 
-| Tamaño de biblioteca | Respaldo completo inicial (aprox.) |
-|---|---|
-| 1.000 elementos nuevos | ~1 h 10 min |
-| 5.000 elementos nuevos | ~5 h 50 min |
-| 10.000 elementos nuevos | ~11 h 45 min |
+| Repeticiones | Total elementos | JPEG | HEIC | PNG | MP4 | MOV | Tiempo (solo elementos nuevos) |
+|---|---|---|---|---|---|---|---|
+| 10 | 500 | 287 | 152 | 27 | 16 | 18 | ~35 min |
+| 20 | 1.000 | 574 | 303 | 55 | 31 | 37 | ~1 h 10 min |
+| 30 | 1.500 | 861 | 455 | 82 | 47 | 55 | ~1 h 45 min |
+| 40 | 2.000 | 1.148 | 607 | 109 | 63 | 73 | ~2 h 20 min |
+| 50 | 2.500 | 1.435 | 759 | 136 | 78 | 92 | ~2 h 56 min |
+| 75 | 3.750 | 2.152 | 1.138 | 205 | 118 | 137 | ~4 h 24 min |
+| 100 | 5.000 | 2.870 | 1.517 | 273 | 157 | 183 | ~5 h 52 min |
+| 150 | 7.500 | 4.305 | 2.276 | 409 | 235 | 275 | ~8 h 48 min |
+| 180 | 9.000 | 5.166 | 2.731 | 491 | 283 | 330 | ~10 h 34 min |
+| 200 | 10.000 | 5.740 | 3.034 | 546 | 314 | 366 | ~11 h 44 min |
+| 250 | 12.500 | 7.175 | 3.793 | 682 | 392 | 458 | ~14 h 40 min |
 
-Salvedades:
-- Esto aplica al **primer** respaldo de archivos totalmente nuevos. Los
-  respaldos de rutina (revisar archivos que ya están respaldados) son
-  mucho más rápidos por elemento, porque la mayoría se salta después de un
-  `/check` rápido, sin transferir ningún archivo.
+`Repeticiones` hasta **50** (≈2.500 elementos) está confirmado funcionando
+en un dispositivo real desde las pruebas originales de este proyecto.
+**`Repeticiones = 180` (≈9.000 elementos) también fue confirmado
+funcionando en un dispositivo real** — el Atajo en sí no falla ni se
+cuelga a ese tamaño. Los valores por encima de 50 que no se han confirmado
+por separado se muestran igual como referencia, pero trátalos como no
+verificados hasta probarlos.
+
+> ⚠️ **Importante, encontrado investigando un respaldo real que no había
+> terminado después de varias sesiones**: la tabla de arriba solo modela
+> el tiempo de archivos **nuevos**. Asume que cada elemento del barrido
+> necesita una subida real — pero una vez que parte de tu biblioteca ya
+> está respaldada (de una corrida anterior interrumpida), la mayoría de
+> los 50 elementos de cada bloque nuevo van a ser "ya respaldado, se
+> salta" en vez de subidas reales. Medido directamente del log de
+> actividad: un salto (el `/check` responde "ya está respaldado", sin
+> transferir ningún archivo) tardó una **mediana de unos 20 segundos** en
+> corridas reales recientes — no el ida-y-vuelta casi instantáneo que
+> esperarías de un chequeo HTTP simple sin nada que transferir (la muestra
+> todavía es chica y tiene ruido — desde unos segundos hasta varios
+> minutos). **Esto significa que una corrida que está mayormente
+> re-revisando contenido ya respaldado puede tardar notablemente más que
+> lo que sugiere la tabla de arriba**, no menos — probablemente explica
+> por qué un respaldo grande que se detiene y se retoma varias veces puede
+> tardar mucho más en tiempo real que lo que estima la proyección de "solo
+> elementos nuevos". La causa exacta todavía no está confirmada
+> (candidatos: costo fijo propio de cada acción dentro de la app Atajos, o
+> que `Find Photos` vuelve a escanear una biblioteca grande en cada
+> bloque) — trata el caso de mayoría-saltos como **más lento, no más
+> rápido**, que un primer respaldo del mismo número de elementos, hasta
+> que esto se investigue más a fondo.
+
+Otras salvedades:
 - Tu propia mezcla de fotos/videos cambia estos números — una biblioteca
   con más videos tarda notablemente más por elemento que una con más fotos.
-- Una sola corrida del Atajo está limitada por `Repeticiones` (comprobado
-  funcionando hasta 50 bloques, ≈2.500 elementos, en una corrida) — un
-  respaldo inicial de 10.000 elementos necesita aproximadamente 4 corridas
-  separadas, no una sola corrida continua.
 - La fuerza de tu propia señal WiFi y otros dispositivos compitiendo por
   el ancho de banda al mismo tiempo pueden mover estos números en
   cualquier dirección.

@@ -774,18 +774,49 @@ reabrir la app (ver sección 5.9), no tiempo real de backup. Por eso el
 análisis usa únicamente los timestamps de archivo individual
 (`received_at`), que no sufren ese problema.
 
-**Resultado** (ver tabla completa y proyección en el Manual de solución de
-problemas, sección "¿Qué tan rápido es un respaldo, en la práctica?"):
-tiempo mediano por archivo — JPEG ~2s, HEIC ~5.5s, PNG ~5.3s, MP4 ~10s,
-MOV ~19s. La mayor parte del tiempo en fotos chicas es overhead fijo de las
-2 peticiones HTTP por elemento (no transferencia de red pura) — por eso el
-tiempo por archivo no escala linealmente con el tamaño. Con la mezcla real
-de esta biblioteca (55% JPEG, 33% HEIC, 5% PNG, 4% MP4, 3% MOV), el
-promedio ponderado da **~4.2s/elemento**, proyectando ~1h10m para 1.000
-elementos nuevos, ~5h50m para 5.000, ~11h45m para 10.000 (todo para un
-primer respaldo completo de archivos nuevos — los respaldos de rutina,
-donde la mayoría de archivos ya está respaldada, son mucho más rápidos por
-elemento).
+**Resultado inicial** (con todo el histórico, 7.223 archivos desde
+2026-09-10): tiempo mediano por archivo — JPEG ~2s, HEIC ~5.5s, PNG ~5.3s,
+MP4 ~10s, MOV ~19s. La mayor parte del tiempo en fotos chicas es overhead
+fijo de las 2 peticiones HTTP por elemento (no transferencia de red pura)
+— por eso el tiempo por archivo no escala linealmente con el tamaño. Con
+la mezcla real de esta biblioteca (55% JPEG, 33% HEIC, 5% PNG, 4% MP4, 3%
+MOV), el promedio ponderado dio **~4.2s/elemento**.
+
+**Corrección posterior (mismo día, misma conversación)**: el usuario pidió
+rectificar con los logs más recientes (en vez de todo el histórico) y
+desglosar la proyección por `Repeticiones` en vez de por tamaño de
+biblioteca genérico, con columnas por tipo de archivo. Se recalculó usando
+solo los últimos ~3 días (≥2026-09-19, 1.338 archivos) — el promedio
+ponderado resultante fue casi idéntico (~4.23s/elemento), aunque los
+tiempos por tipo individual sí cambiaron de forma notable (JPEG bajó a
+~1.7s, HEIC subió a ~6.5s, MOV bajó a ~16.7s) — variación esperable entre
+ventanas de tiempo distintas, no un error de metodología. Se publicó una
+tabla `Repeticiones → elementos totales → desglose por tipo → tiempo`
+(10 a 250 repeticiones) en el Manual de solución de problemas (EN/ES),
+marcando 50 y 180 como los únicos valores confirmados funcionando de
+verdad en un dispositivo real (180 confirmado por el usuario ese mismo
+día — corre sin fallar, aunque el usuario no ha dejado una corrida
+terminar completa por detenerla seguido).
+
+**Hallazgo real, no resuelto, encontrado durante esta corrección**: se
+midieron también los intervalos entre líneas de log consecutivas de tipo
+"ya respaldado, se salta" (`activity.log`, patrón `> = `), no solo las de
+archivo nuevo (`> + `). Resultado: salto→salto tiene una mediana de
+**~20.5s** (n=26, ruidoso, máximo 496s) — nada cercano a "casi instantáneo,
+sin transferir archivo" como asumía la documentación anterior de
+`Repeticiones`. Esto **contradice** la suposición de que re-revisar
+bloques ya completos es prácticamente gratis, y es la explicación más
+probable de por qué las corridas del usuario con `Repeticiones = 180` no
+han llegado a terminar en sesiones normales de uso, más allá de haberlas
+detenido manualmente. Causa raíz no confirmada — candidatos: overhead fijo
+por acción de la propia app Atajos (cada `Get Contents of URL` tiene
+latencia propia, documentado ya en AGENTS.md punto 2 para "File Size"),
+o que `Find Photos` re-escanea la biblioteca completa en cada bloque
+conforme el límite de fecha se mueve más atrás. **Pendiente**: investigar
+la causa con más muestra antes de intentar arreglarlo — por ahora solo
+está documentado como advertencia honesta en el Manual de solución de
+problemas y en la nota "Tuning `Repeticiones`" de ambos manuales de
+construcción manual.
 
 **Decisión**: sí vale la pena documentarlo — responde una pregunta real
 ("¿esto se va a demorar para siempre?") con datos reales de producción, no

@@ -216,6 +216,25 @@ reintroduces these problems.
    both the same way (see points 11-12 below). This is a deliberate, safe
    trade-off (never silently recording a broken backup), not a missed edge
    case.
+
+   **Open finding (2026-09-21, unconfirmed root cause)**: "already backed
+   up, skip" is NOT near-instant in practice, contrary to what you'd
+   expect from a `/check`-only round trip with zero file transfer.
+   Measured from real `activity.log` timestamps (consecutive "already
+   backed up" lines): median ~20.5s per skip (n=26, noisy — up to several
+   minutes). This means a re-sweep of blocks that are mostly already
+   backed up (e.g. resuming an interrupted large backfill) can take
+   *longer* wall-clock time than uploading the same number of brand-new
+   items, not less — the opposite of what earlier guidance in this file
+   and PLAN.md §5.1 assumed. Root cause not yet isolated: candidates are
+   per-action overhead inherent to the Shortcuts app itself (each `Get
+   Contents of URL` action has its own fixed latency, independent of
+   payload size — plausible given point 2's confirmed `File Size` oddity
+   is in the same family of "Shortcuts actions aren't free/instant"
+   surprises), or `Find Photos` itself re-scanning the whole library on
+   every block as `Limite` moves further back. See PLAN.md §5.12 for the
+   full measurement and the user-facing writeup in the Troubleshooting
+   Manual's "How fast is a backup, really?" section.
 6. **A stray filter can silently attach to "Find Photos"** (e.g. filtering
    against an unrelated variable like a `run_id`) if a filter row gets
    added by accident while configuring the action — always visually

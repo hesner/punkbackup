@@ -115,8 +115,10 @@ Backup photos/
 │   ├── dialogs.py               (diálogos propios oscuros — reemplazan messagebox nativo)
 │   └── autostart.py             (inicio con Windows vía el Run key de HKCU)
 ├── shortcuts/
-│   ├── INSTRUCCIONES_ATAJO.md   (ES — plantilla genérica)
-│   ├── SHORTCUT_INSTRUCTIONS.md (EN — plantilla genérica)
+│   ├── INSTRUCCIONES_ATAJO.md         (ES — manual principal, instala el .shortcut)
+│   ├── SHORTCUT_INSTRUCTIONS.md       (EN — manual principal, instala el .shortcut)
+│   ├── INSTRUCCIONES_ATAJO_MANUAL.md  (ES — manual alternativo, construcción a mano)
+│   ├── MANUAL_BUILD_INSTRUCTIONS.md   (EN — manual alternativo, construcción a mano)
 │   └── PunkBackup.shortcut      (Atajo exportado, listo para importar — placeholders genéricos)
 ├── docs/                        (manuales en PDF, landing page GitHub Pages)
 ├── installer/                   (PunkBackup.iss — Inno Setup, empaqueta dist/ de PyInstaller)
@@ -901,9 +903,28 @@ Tabla `runs` (una corrida de backup, para `/status`):
       **confirmada corriendo sola** (disparó el Atajo sin tocar el
       teléfono). Hallazgo aparte, documentado y aceptado sin arreglar:
       puede re-dispararse tras un corte breve de WiFi. Ver sección 5.6.
-- [x] Archivo `.shortcut` exportado (`shortcuts/PunkBackup.shortcut`) como
-      alternativa de instalación más rápida al armado manual — documentado
-      en ambos manuales de configuración del iPhone.
+- [x] Archivo `.shortcut` exportado (`shortcuts/PunkBackup.shortcut`) es
+      ahora el método **principal** de instalación (manual de configuración
+      del iPhone reescrito para llevar a esto primero); el armado manual
+      paso a paso se movió a un manual **alternativo** aparte
+      (`shortcuts/MANUAL_BUILD_INSTRUCTIONS.md` /
+      `shortcuts/INSTRUCCIONES_ATAJO_MANUAL.md`, con su propio PDF).
+      Auditoría de usabilidad (2026-09-21) encontró que el archivo no tenía
+      forma real de descargarse (no estaba en el release de GitHub, ni
+      había link directo en ningún manual) y que el paso de iOS "Permitir
+      atajos no confiables" no estaba documentado en ningún lado — ambos
+      corregidos: el archivo ahora se sube como asset en cada release de
+      GitHub (⚠️ **recordatorio para releases futuros**: `gh release upload
+      vX.Y.Z shortcuts/PunkBackup.shortcut` — si se omite, el link
+      evergreen `releases/latest/download/PunkBackup.shortcut` que usan
+      ambos manuales principales da 404), y el manual principal ahora
+      explica el paso de Ajustes → Atajos → Avanzado → "Permitir atajos no
+      confiables" explícitamente. También se corrigió una referencia
+      rota: el manual principal decía "salta a la sección 'Is it
+      working?'" pero esa sección nunca existió en este archivo (estaba en
+      el manual de instalación de la PC, sobre un tema distinto) — ahora
+      tiene su propia sección real "Step 3 — Test it" / "Paso 3 —
+      Pruébalo".
 - [ ] Segundo perfil ("iphone de Lau") con su propio dispositivo real
       respaldando de punta a punta — el perfil existe pero todavía no
       tiene carpeta destino configurada (al final).

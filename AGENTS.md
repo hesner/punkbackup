@@ -337,6 +337,26 @@ reintroduces these problems.
     proof against a real device file) before trusting this kind of fix
     on real backup data.
 
+13. **A "download this file from the repo" instruction in a manual is not
+    a real distribution path for a non-technical user**, even when the
+    file is already committed and public — a usability audit (2026-09-21)
+    found `shortcuts/PunkBackup.shortcut` had been referenced in both
+    iPhone setup manuals for months as a "faster alternative" with no
+    actual download link anywhere, and wasn't attached to the GitHub
+    release either (only `PunkBackupSetup.exe` was). Fixed by
+    `gh release upload vX.Y.Z shortcuts/PunkBackup.shortcut` and linking
+    the evergreen `https://github.com/<repo>/releases/latest/download/
+    PunkBackup.shortcut` URL directly in the manual — **this evergreen
+    link requires the file to be re-uploaded to every future release**
+    (there's no "carry over from last release" default); forgetting it
+    makes that link 404 silently for every reader until caught. Also
+    found in the same audit: iOS's "Allow Untrusted Shortcuts" gate
+    (Settings → Shortcuts → Advanced) is a real, common blocker when
+    importing a `.shortcut` file from outside the built-in gallery, and
+    is easy to forget to document since it never comes up when *you're*
+    the one testing (you already flipped that switch on your own device
+    ages ago).
+
 ## 6. Testing approach that actually caught bugs
 
 - Unit tests against `BackupEngine`/`ManifestDB` directly (no HTTP) for the

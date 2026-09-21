@@ -90,11 +90,13 @@ MANUALS = [
     (ROOT / "docs" / "es" / "manual_troubleshooting.md", "PunkBackup - Manual de Solucion de Problemas (ES).pdf"),
     (ROOT / "docs" / "es" / "manual_desinstalacion.md", "PunkBackup - Manual de Desinstalacion (ES).pdf"),
     (ROOT / "shortcuts" / "INSTRUCCIONES_ATAJO.md", "PunkBackup - Configuracion del iPhone (ES).pdf"),
+    (ROOT / "shortcuts" / "INSTRUCCIONES_ATAJO_MANUAL.md", "PunkBackup - Configuracion del iPhone - Construccion Manual (ES).pdf"),
     (ROOT / "docs" / "en" / "installation_manual.md", "PunkBackup - Installation Manual (EN).pdf"),
     (ROOT / "docs" / "en" / "usage_manual.md", "PunkBackup - Usage Manual (EN).pdf"),
     (ROOT / "docs" / "en" / "troubleshooting_manual.md", "PunkBackup - Troubleshooting Manual (EN).pdf"),
     (ROOT / "docs" / "en" / "uninstallation_manual.md", "PunkBackup - Uninstallation Manual (EN).pdf"),
     (ROOT / "shortcuts" / "SHORTCUT_INSTRUCTIONS.md", "PunkBackup - iPhone Setup Manual (EN).pdf"),
+    (ROOT / "shortcuts" / "MANUAL_BUILD_INSTRUCTIONS.md", "PunkBackup - iPhone Setup Manual - Manual Build (EN).pdf"),
 ]
 
 

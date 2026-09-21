@@ -154,6 +154,49 @@ forever (a plain `Limit` with no way to advance).
   force-quit it from the app switcher and run it again — nothing gets
   corrupted by an interrupted run, see the point above.
 
+## How fast is a backup, really? (measured in this environment)
+
+These numbers come from real production uploads on this project's own
+setup — an **iPhone 15**, a **home WiFi network**, and a **Windows PC
+(Dell)** — derived directly from the server's own timestamps for every
+file it has ever received (over 7,200 real photos/videos), not a lab
+benchmark.
+
+| File type | Share of a typical library | Avg. file size | Typical time per file |
+|---|---|---|---|
+| JPEG | ~55% | 0.24 MB | ~2 s |
+| HEIC | ~33% | 2.1 MB | ~5.5 s |
+| PNG | ~5% | 2.4 MB | ~5.3 s |
+| MP4 | ~4% | 8.0 MB | ~10 s |
+| MOV | ~3% | 31.5 MB | ~19 s |
+
+Most of the time for a small photo is **not** network transfer — it's the
+fixed overhead of the Shortcut's two requests per item (`/check`, then
+`/upload`). That overhead barely changes with file size, so it dominates
+small photos and matters less and less for bigger videos, where actual
+transfer speed becomes the main factor.
+
+**Projection**, assuming a library with a similar photo/video mix as the
+one measured above (mostly photos, roughly 1 in 14 items a video):
+
+| Library size | First-time full backup (approx.) |
+|---|---|
+| 1,000 new items | ~1 h 10 min |
+| 5,000 new items | ~5 h 50 min |
+| 10,000 new items | ~11 h 45 min |
+
+Caveats:
+- This is for the **first** backup of brand-new files. Routine backups
+  (re-checking files already backed up) are much faster per item, since
+  most items get skipped after a quick `/check` with no file transfer.
+- Your own photo/video mix shifts these numbers — a video-heavy library
+  takes noticeably longer per item than a photo-heavy one.
+- One Shortcut run is capped by `Repeticiones` (confirmed working up to
+  50 blocks, ≈2,500 items, in one run) — a 10,000-item first backfill
+  needs roughly 4 separate runs, not one continuous run.
+- Your own WiFi signal strength and other devices competing for bandwidth
+  at the same time will shift these numbers in either direction.
+
 ## The phone freezes while the Shortcut runs
 
 - Go to **iPhone Settings → Display & Brightness → Auto-Lock → Never**

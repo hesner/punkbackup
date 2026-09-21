@@ -158,6 +158,53 @@ conjunto fijo sin avanzar (`Limit` fijo sin forma de avanzar).
   correrlo — nada se corrompe por una corrida interrumpida, ver el punto
   anterior.
 
+## ¿Qué tan rápido es un respaldo, en la práctica? (medido en este ambiente)
+
+Estos números vienen de subidas reales de producción en el ambiente propio
+de este proyecto — un **iPhone 15**, una **red WiFi de casa**, y una **PC
+Windows (Dell)** — calculados directamente de las marcas de tiempo propias
+del servidor para cada archivo que ha recibido (más de 7.200 fotos/videos
+reales), no un benchmark de laboratorio.
+
+| Tipo de archivo | % típico de una biblioteca | Tamaño promedio | Tiempo típico por archivo |
+|---|---|---|---|
+| JPEG | ~55% | 0.24 MB | ~2 s |
+| HEIC | ~33% | 2.1 MB | ~5.5 s |
+| PNG | ~5% | 2.4 MB | ~5.3 s |
+| MP4 | ~4% | 8.0 MB | ~10 s |
+| MOV | ~3% | 31.5 MB | ~19 s |
+
+La mayor parte del tiempo de una foto chica **no** es transferencia por
+red — es el costo fijo de las dos peticiones por archivo que hace el Atajo
+(`/check`, luego `/upload`). Ese costo fijo casi no cambia según el tamaño,
+así que domina en fotos chicas y pesa cada vez menos en videos grandes,
+donde la velocidad real de transferencia pasa a ser el factor principal.
+
+**Proyección**, asumiendo una biblioteca con una mezcla de fotos/videos
+parecida a la medida arriba (mayoría fotos, aproximadamente 1 de cada 14
+elementos un video):
+
+| Tamaño de biblioteca | Respaldo completo inicial (aprox.) |
+|---|---|
+| 1.000 elementos nuevos | ~1 h 10 min |
+| 5.000 elementos nuevos | ~5 h 50 min |
+| 10.000 elementos nuevos | ~11 h 45 min |
+
+Salvedades:
+- Esto aplica al **primer** respaldo de archivos totalmente nuevos. Los
+  respaldos de rutina (revisar archivos que ya están respaldados) son
+  mucho más rápidos por elemento, porque la mayoría se salta después de un
+  `/check` rápido, sin transferir ningún archivo.
+- Tu propia mezcla de fotos/videos cambia estos números — una biblioteca
+  con más videos tarda notablemente más por elemento que una con más fotos.
+- Una sola corrida del Atajo está limitada por `Repeticiones` (comprobado
+  funcionando hasta 50 bloques, ≈2.500 elementos, en una corrida) — un
+  respaldo inicial de 10.000 elementos necesita aproximadamente 4 corridas
+  separadas, no una sola corrida continua.
+- La fuerza de tu propia señal WiFi y otros dispositivos compitiendo por
+  el ancho de banda al mismo tiempo pueden mover estos números en
+  cualquier dirección.
+
 ## El teléfono se traba mientras corre el Atajo
 
 - Ve a Configuración → Pantalla y brillo → Auto-bloqueo → **Nunca**

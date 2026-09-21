@@ -747,6 +747,52 @@ no interpretables, 11 sin caja `moov` (no son contenedores ISO-BMFF
 reconocibles — pendiente de investigar si vale la pena, alcance menor al
 2% del total).
 
+### 5.12 Velocidad de subida medida en el ambiente real (2026-09-21)
+
+Petición del usuario: documentar cuánto tarda un respaldo de verdad en el
+ambiente de prueba actual — iPhone 15, WiFi de casa, PC Dell — con un
+cuadro por tipo de archivo y una proyección para bibliotecas de 1.000,
+5.000 y 10.000 elementos.
+
+**Metodología** (datos reales, no estimación): se consultó de forma
+solo-lectura (`sqlite3.connect(f"file:{path}?mode=ro", uri=True)` — nunca
+`ManifestDB()` directo, ver punto de la sección 6/AGENTS.md sobre el efecto
+secundario de "reap") la tabla `backed_up_files` del índice SQLite real de
+este proyecto (`D:\Backup Fotos y Videos\.iphone_backup_index\index.sqlite`,
+7.223 archivos reales acumulados desde el 2026-09-10). Para cada extensión,
+se calculó la mediana del intervalo entre `received_at` de archivos
+consecutivos (filtrando saltos >120s, que corresponden a huecos entre
+corridas distintas, no a tiempo de subida real) — esto aproxima el tiempo
+real punta a punta por archivo (incluye el round-trip de `/check` +
+`/upload`, no solo la transferencia de red pura).
+
+**Nota metodológica importante, descartada a propósito**: la duración
+`started_at`→`finished_at` de la tabla `runs` NO es confiable para esto —
+varias corridas muestran duraciones de horas/días que en realidad
+corresponden a corridas nunca cerradas por el Atajo y luego "reapeadas" al
+reabrir la app (ver sección 5.9), no tiempo real de backup. Por eso el
+análisis usa únicamente los timestamps de archivo individual
+(`received_at`), que no sufren ese problema.
+
+**Resultado** (ver tabla completa y proyección en el Manual de solución de
+problemas, sección "¿Qué tan rápido es un respaldo, en la práctica?"):
+tiempo mediano por archivo — JPEG ~2s, HEIC ~5.5s, PNG ~5.3s, MP4 ~10s,
+MOV ~19s. La mayor parte del tiempo en fotos chicas es overhead fijo de las
+2 peticiones HTTP por elemento (no transferencia de red pura) — por eso el
+tiempo por archivo no escala linealmente con el tamaño. Con la mezcla real
+de esta biblioteca (55% JPEG, 33% HEIC, 5% PNG, 4% MP4, 3% MOV), el
+promedio ponderado da **~4.2s/elemento**, proyectando ~1h10m para 1.000
+elementos nuevos, ~5h50m para 5.000, ~11h45m para 10.000 (todo para un
+primer respaldo completo de archivos nuevos — los respaldos de rutina,
+donde la mayoría de archivos ya está respaldada, son mucho más rápidos por
+elemento).
+
+**Decisión**: sí vale la pena documentarlo — responde una pregunta real
+("¿esto se va a demorar para siempre?") con datos reales de producción, no
+una promesa genérica. Publicado en ambos manuales de troubleshooting
+(EN/ES) con las salvedades correspondientes (varía según mezcla foto/video
+del usuario, señal WiFi, y el límite de `Repeticiones` por corrida).
+
 ## 6. Modelo de datos (índice SQLite, uno por perfil)
 
 Tabla `backed_up_files`:

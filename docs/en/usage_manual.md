@@ -180,6 +180,34 @@ person or device.
 | **Regenerate token** | Generates a new token for that profile. That device's Shortcut stops working until you paste the new token in — only use this if you suspect the token leaked. |
 | **Delete** | Revokes that profile's access (its token stops working). **Does not delete any already-backed-up file.** |
 
+### Second copy (optional)
+
+Below the buttons, each profile can have a **second copy** — a copy of
+everything on its main destination, kept on a different folder/USB. Not
+required, and off by default; it's for anyone who wants their photos on
+more than one physical drive.
+
+- **"+ Configure second copy (optional)"** — appears when you haven't set
+  one up yet. Tap it, choose a folder (it can't be the same folder as your
+  main destination), and you're done configuring it.
+- Once configured, you'll see how many files it has and how much free
+  space is left on it, plus a **"🔄 Sync now"** button.
+- Tapping **"🔄 Sync now"** copies whatever's missing from your main
+  destination to the second copy — newest photos first — and verifies
+  each one after copying, so a bad USB write gets caught and retried
+  automatically instead of silently leaving a broken copy. This never
+  runs on its own; you decide when to sync.
+- While it's syncing, that same button turns into **"⏹ Stop"** — use it
+  if you need to unplug the second drive before a sync finishes. Nothing
+  is lost either way: whatever was already copied and verified stays, and
+  the next sync picks up exactly where it left off.
+- **"Remove"** stops syncing to that folder — it does **not** delete any
+  file already copied there.
+- If your main drive is ever lost or damaged, this second copy is a real,
+  independent backup: just point your profile's main destination at that
+  folder (using "Choose folder..." above) and the app recognizes exactly
+  what it already has — nothing needs to be re-uploaded from the phone.
+
 ---
 
 ## Typical daily use

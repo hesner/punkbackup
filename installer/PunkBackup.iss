@@ -16,7 +16,7 @@
 ; launch so PunkBackup.exe never runs as admin day-to-day.
 
 #define MyAppName "PunkBackup"
-#define MyAppVersion "1.6.0"
+#define MyAppVersion "1.7.0"
 #define MyAppPublisher "PunkBackup"
 #define MyAppURL "https://github.com/hesner/punkbackup"
 #define MyAppExeName "PunkBackup.exe"

@@ -311,6 +311,39 @@ podrías llegar a ver:
   desde cero — el conteo que ves ya refleja todo lo que hay en esa
   unidad, lo viejo y lo nuevo combinados.
 
+## ¿Qué tan rápido es la sincronización de la segunda copia (espejo)?
+
+Mismo método de medición real que la velocidad de subida por WiFi de
+arriba, pero para la copia local USB-a-USB — medido de una corrida real
+en el ambiente propio de este proyecto (607 archivos reales, 3.11 GB,
+copiados y verificados).
+
+| Tipo de archivo | Cantidad | Tamaño prom. | Tiempo típico | Velocidad aprox. |
+|---|---|---|---|---|
+| JPEG | 349 | 0.21 MB | ~1.35 s | ~0.15 MB/s |
+| HEIC | 117 | 2.23 MB | ~2.24 s | ~0.99 MB/s |
+| PNG | 57 | 1.75 MB | ~1.70 s | ~1.03 MB/s |
+| MOV | 82 | 32.62 MB | ~8.27 s | ~3.94 MB/s |
+
+La copia local es en general más rápida que subir el mismo archivo por
+WiFi — sobre todo en videos (~8 s local vs. ~17-19 s por WiFi) — pero en
+fotos JPEG chicas casi no hay diferencia (~1.35 s local vs. ~1.7-2 s por
+WiFi). Misma razón de fondo que los números de WiFi: la mayor parte del
+tiempo de un archivo chico es costo fijo por archivo (abrirlo, copiarlo,
+releerlo para verificar, registrarlo), no transferencia de datos en sí —
+la velocidad de transferencia real solo empieza a pesar cuando el archivo
+ya es grande (videos).
+
+**Salvedad importante**: esto se midió en una USB chica (4 GB) y casi
+llena — no en una unidad nueva con espacio de sobra. Una unidad flash con
+poco espacio libre puede comportarse peor que estos números en
+condiciones reales (esta misma corrida terminó porque se quedó sin
+espacio de verdad, con una tasa notablemente más alta de copias que
+fallaron la verificación justo al final — 58 de 289, contra 7 la primera
+vez que se probó la misma USB con más espacio disponible). Espera que una
+USB sana con espacio real rinda al menos así de bien, probablemente
+mejor — pero no esperes que una USB casi llena aguante el ritmo.
+
 ## Sigue sin funcionar
 
 Contacta a quien te ayudó a instalar el sistema, o revisa el repositorio del

@@ -1409,3 +1409,50 @@ completa de ~7,228 archivos reales hacia una segunda USB (en curso),
 segunda sincronización sin cambios, desconexión/reconexión real,
 validación de "misma carpeta", y la prueba de cambio de rol A↔B con datos
 reales.
+
+### 14.1 Velocidad de copia de la segunda copia, medida en el ambiente real (2026-09-22)
+
+Petición del usuario: documentar la velocidad de copia de la segunda
+copia, como parte de la misma evaluación de velocidad que ya existe para
+el respaldo principal por WiFi (sección 5.12).
+
+**Metodología** (idéntica a la de la sección 5.12, aplicada esta vez a la
+base de datos propia de la segunda copia): consulta solo-lectura
+(`file:{path}?mode=ro`) contra
+`E:\Backup Fotos y Videos\.iphone_backup_index\index.sqlite` de una
+corrida real de producción (instalador v1.7.0 ya instalado, perfil real
+"iphone de Hes") — 607 filas totales, mediana del intervalo entre
+`received_at` consecutivos por extensión.
+
+**Resultado**: JPEG ~1.35s, HEIC ~2.24s, PNG ~1.70s, MOV ~8.27s por
+archivo — más rápido que la subida por WiFi en general (sobre todo
+videos, ~8s local contra ~17-19s por WiFi), pero casi sin diferencia en
+JPEG chicos (mismo patrón: el costo fijo por archivo domina en archivos
+chicos, no la transferencia en sí). Publicado en ambos manuales de
+troubleshooting (EN/ES), sección nueva "¿Qué tan rápido es la
+sincronización de la segunda copia (espejo)?", justo después de la
+sección de velocidad por WiFi ya existente.
+
+**Salvedad honesta incluida en la documentación**: la medición se hizo
+sobre la USB de prueba de 4 GB, casi llena (quedaban 0.25 GB libres al
+momento de medir) — esta misma corrida terminó realmente sin espacio
+(`[WinError 112]`), con una tasa de corrupción detectada por la
+verificación mucho más alta que la vez anterior (58 de 289 archivos
+fallaron la verificación, contra 7 la primera vez que se probó la misma
+unidad con más espacio libre) — evidencia real de que una unidad flash
+casi llena se comporta peor, no solo más lento. Comparé la primera mitad
+de la corrida contra la segunda mitad y NO hay una degradación gradual
+clara (1.74s vs 1.65s de mediana) — el fallo fue un límite duro al
+final, no una lenta degradación progresiva. Los números de esta tabla
+deben leerse como "lo que se puede esperar de una USB chica y casi
+llena", no como el rendimiento típico de una unidad sana con espacio de
+sobra.
+
+**Analizado y descartado a propósito**: acelerar el proceso quitando el
+paso de re-leer y verificar por hash después de copiar (eliminaría
+exactamente la comprobación que atrapó las 7 y 58 copias corruptas reales
+de arriba) — el usuario pidió explícitamente "que siga siendo preciso",
+así que no se implementó. La conclusión honesta es que el cuello de
+botella real es la propia unidad USB (pequeña, casi llena), no el
+algoritmo — una USB más grande y con más espacio libre es la mejora real,
+no un cambio de código.

@@ -294,6 +294,38 @@ feature normally works. These are the messages you might see:
   counter from zero — the running count you see already reflects
   everything on that drive, old and new combined.
 
+## How fast is the second copy (mirror) sync?
+
+Same real-measurement approach as the WiFi upload speeds above, but for
+the local USB-to-USB copy instead — measured from a real sync run in this
+project's own environment (607 real files, 3.11 GB, copied and verified).
+
+| File type | Count | Avg. size | Typical time | Approx. speed |
+|---|---|---|---|---|
+| JPEG | 349 | 0.21 MB | ~1.35 s | ~0.15 MB/s |
+| HEIC | 117 | 2.23 MB | ~2.24 s | ~0.99 MB/s |
+| PNG | 57 | 1.75 MB | ~1.70 s | ~1.03 MB/s |
+| MOV | 82 | 32.62 MB | ~8.27 s | ~3.94 MB/s |
+
+The local copy is generally faster than a WiFi upload of the same file —
+especially for videos (~8 s locally vs. ~17-19 s over WiFi) — but for
+small JPEGs there's barely any difference (~1.35 s locally vs. ~1.7-2 s
+over WiFi). Same underlying reason as the WiFi numbers: most of the time
+for a small file is fixed per-file overhead (opening it, copying it,
+reading it back to verify, recording it), not actual data transfer —
+transfer speed only starts to matter once the file itself is big enough
+(videos).
+
+**Important caveat**: this was measured on a small (4 GB), nearly-full
+USB stick — not a fresh, spacious drive. A flash drive with little free
+space left can behave worse than these numbers under real conditions
+(this test run itself ended by genuinely running out of space, with a
+noticeably higher rate of failed-verification copies right at the end —
+58 out of 289, compared to 7 the first time the same drive was tested
+with more room to spare). Expect a healthy drive with real free space to
+do at least this well, likely better — but don't expect a nearly-full
+drive to keep up.
+
 ## Still not working
 
 Contact whoever helped you install the system, or check the project's

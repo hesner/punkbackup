@@ -28,6 +28,11 @@ Tócalo y **toda la app cambia de idioma al instante** — botones, títulos,
 mensajes, todo — sin cerrar ni reiniciar nada. Tu elección se recuerda la
 próxima vez que abras la app.
 
+En la esquina superior derecha de esa misma tarjeta, y también en la
+barra de título de la ventana, vas a ver qué versión tienes instalada
+(ej. "PunkBackup v1.7.3") — útil para comparar contra este manual o para
+reportar un problema.
+
 ---
 
 ## Pantalla "⚙ Configuración" → Preferencias

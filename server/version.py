@@ -8,4 +8,4 @@ parse Python) — installer/PunkBackup.iss's `MyAppVersion` is a SEPARATE
 value that must be bumped by hand alongside this one. Keep both in sync
 whenever either changes.
 """
-APP_VERSION = "1.7.3"
+APP_VERSION = "1.7.4"

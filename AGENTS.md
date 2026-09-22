@@ -504,6 +504,43 @@ reintroduces these problems.
     continue` before the exception-prone call, rather than only
     softening how the exception gets logged afterward.
 
+18. **When two files "should be the same content" but a container format
+    lets an intermediate step re-stamp arbitrary metadata, compare the
+    actual payload — never try to enumerate and mask every metadata field
+    that might change.** Point 12's Encode Media retry doesn't just touch
+    `mvhd`/`mdhd` `creation_time` (already known and patched by
+    `video_metadata.py::fix_creation_time`) — real-world duplicate copies
+    (2026-09-22, 54 copies of one video, 2.46GB wasted) proved it rewrites
+    more of `moov` than that. A first fix attempt that hashed the whole
+    file with just those two known fields zeroed out was verified against
+    the real duplicates and still produced 55 distinct "signatures" for
+    55 byte-for-byte-the-same-content files — enumerating fields is a losing
+    game against a black-box encoder. The fix that actually worked
+    (verified: 1 signature for all 55 real files) was to stop trying to
+    identify what metadata changes and instead hash only the `mdat` box —
+    the actual audio/video sample data, which passthrough re-encoding
+    never touches. See `server/video_metadata.py::content_signature()` and
+    PLAN.md §5.4.1. **General lesson: when "same content, different
+    wrapper" needs detecting, look for the part of the format that's
+    guaranteed stable (the payload) rather than the part that's
+    guaranteed to vary (the metadata) — masking the latter is fragile even
+    when a docstring says it's been "confirmed."**
+
+19. **After editing code that a PyInstaller `--onedir` build already
+    packaged, the installed `.exe` still runs the OLD code until you
+    rebuild AND reinstall — an edit + a live phone test is not evidence
+    the fix works.** Cost real debugging time (2026-09-22): a fix was
+    committed, then "tested live" against the already-open, already-built
+    app from earlier that session — it reproduced the exact bug the fix
+    was supposed to solve, because the running `.exe` predated the commit
+    by over an hour. Confirmed by comparing `Program Files\PunkBackup\
+    PunkBackup.exe`'s mtime against the source files' mtime. **Before
+    declaring any server/GUI code fix "confirmed working" against the
+    installed app, check the installed `.exe`'s build time against the
+    fix's commit/edit time — if the exe is older, rebuild
+    (`pyinstaller --onedir ...`) and reinstall
+    (`installer/output/PunkBackupSetup.exe`) first.**
+
 ## 6. Testing approach that actually caught bugs
 
 - Unit tests against `BackupEngine`/`ManifestDB` directly (no HTTP) for the
@@ -535,7 +572,7 @@ reintroduces these problems.
 
 ## 7. What "done" looks like
 
-- `pytest tests -q` passes (59 tests as of this writing, covering engine
+- `pytest tests -q` passes (65 tests as of this writing, covering engine
   rules, profile isolation/pause/delete, destination-switch correctness,
   concurrent uploads, the `/check` contract, the 0-byte-upload rejection,
   its self-healing retry error-count behavior, a stale-run reap on

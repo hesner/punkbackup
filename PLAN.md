@@ -486,6 +486,68 @@ su carpeta de fecha real (recuperada del EXIF). Verificado en disco:
 los archivos nuevos existen con su extensión correcta, los viejos
 sin extensión ya no están.
 
+### 5.4.1 Hipótesis del §5.4 confirmada y corregida de raíz: duplicados sin fin de video por `Encode Media` (2026-09-22)
+
+La hipótesis del "Efecto 2" de arriba (no confirmada en 2026-09-18) se
+confirmó con evidencia real: el usuario reportó timeouts todo el día
+2026-09-22 y, revisando la base de datos, `ScreenRecording_09-14-2026.mov`
+tenía **54 copias duplicadas (2.46 GB desperdiciados)** — cada barrido
+del Atajo lo volvía a encontrar cerca del principio (sin `taken_at`,
+siempre "reciente"), pasaba por el reintento de `Encode Media`, y como
+la lógica de conflicto (`server/storage.py`) compara `sha256` crudo, un
+hash distinto en cada re-encode se traducía en "contenido diferente,
+conservar ambos" — sin límite.
+
+**Verificación byte a byte contra los 54 duplicados reales** (antes de
+tocar código): tamaño idéntico en los 54, y las únicas diferencias caían
+en el `moov` (metadata del contenedor) — el `mdat` (los bytes reales de
+audio/video) era **100% idéntico** en los 55 archivos. Primer intento de
+arreglo (enmascarar solo los campos `creation_time`/`modification_time`
+de `mvhd`/`mdhd`, reutilizando el parser de `video_metadata.py` ya
+existente para `fix_creation_time`) **no fue suficiente** — verificado
+contra los 55 archivos reales, seguía dando 55 firmas distintas: Encode
+Media reescribe más metadata de la que esos dos campos cubren. El
+arreglo correcto y robusto, confirmado con los mismos 55 archivos reales
+(**1 sola firma para los 55**): comparar solo el contenido de `mdat`,
+ignorando el contenedor completo.
+
+**Arreglo (`server/video_metadata.py::content_signature()`,
+`server/storage.py::finalize_upload()`, v1.7.4)**: cuando el `sha256`
+crudo no coincide Y la extensión es de video, se compara además el
+`content_signature` (hash de solo `mdat`) del archivo entrante contra el
+ya existente — si coinciden, se trata como "ya respaldado" (se descarta
+la subida entrante, no se crea copia nueva) en vez de "conservar ambos".
+6 tests nuevos (`tests/test_video_metadata.py`,
+`tests/test_backup_engine.py`, sintéticos — nunca contenido real de
+usuario en el repo): mismo contenido con timestamps distintos → misma
+firma; contenido genuinamente distinto → firma distinta (para no volverse
+demasiado permisivo); `None` para archivos no-ISO-BMFF.
+
+**Limpieza retroactiva de los 54 duplicados**: verificados con
+`content_signature` (55/55 idénticos, confirmado antes de borrar nada),
+conservado solo `ScreenRecording_09-14-2026.mov` (el nombre canónico sin
+sufijo), borrados los otros 54 archivos + sus 54 filas en
+`backed_up_files`. **2.46 GB liberados en D:**. Verificado
+post-limpieza: 1 fila en la base de datos, 1 archivo en disco.
+
+**Validado en vivo el mismo día, con la app reconstruida e instalada
+(v1.7.4)**: durante una prueba real desde el iPhone, tanto
+`ScreenRecording_09-14-2026` como otro video previamente problemático
+(`ScreenRecording_02-16-2026`) pasaron por el reintento de `Encode
+Media` y salieron correctamente como `already backed up (re-encoded
+copy, content unchanged), skipped` — cero duplicados nuevos.
+
+**Nota operativa importante que costó tiempo real este día**: el primer
+intento de probar el fix en vivo pareció fallar (se generó OTRO
+duplicado) — la causa no era el código sino que **la app instalada
+(`C:\Program Files\PunkBackup`) seguía siendo el build de antes del
+fix** (el commit del fix quedó después del último build/instalación).
+Sin reconstruir (`PyInstaller`) y reinstalar (`Inno Setup`), cualquier
+cambio de código no tiene ningún efecto en la app que corre de verdad —
+lección ya existía implícitamente en el proyecto pero vale la pena
+tenerla explícita: **antes de dar un fix por probado en vivo, confirmar
+la fecha de build del `.exe` instalado contra la fecha del commit.**
+
 ### 5.5 Bug: el aviso de inactividad se disparaba solo con abrir la app — RESUELTO
 
 Tras agregar el aviso de "backup inactivo 5+ minutos" (§ este mismo doc,
@@ -1045,6 +1107,12 @@ Tabla `runs` (una corrida de backup, para `/status`):
 - [ ] Segundo perfil ("iphone de Lau") con su propio dispositivo real
       respaldando de punta a punta — el perfil existe pero todavía no
       tiene carpeta destino configurada (al final).
+- [ ] Pendiente anotado 2026-09-22: crear un perfil NUEVO (carpeta destino
+      distinta, nunca usada antes) y verificar de punta a punta con un
+      dispositivo real adicional — el usuario mencionó un iPad como
+      candidato. Objetivo: confirmar que el flujo de alta de un perfil
+      "desde cero" (sin ningún archivo previo, sin historial) funciona
+      igual de bien que los perfiles ya establecidos probados hoy.
 - [x] Detección de backup "en curso" sin actividad — aviso configurable
       (1–30 min, 10 min por defecto), **confirmado disparando
       correctamente** a los 10 minutos exactos en una corrida real. Bug
@@ -1397,18 +1465,36 @@ las pruebas ya corregidos:
 
 **Pendiente real, no técnico**: probar con una segunda USB de mayor
 capacidad para completar una sincronización 100% completa de los ~16 GB
-reales (la USB de 4 GB usada en las pruebas nunca alcanzó a terminar),
-y los escenarios 4/6/7 del plan de pruebas manuales (desconexión física
-real, validación de "misma carpeta", cambio de rol A↔B) que quedaron
-pendientes de ejecutar en vivo por priorizar los bugs encontrados en el
-camino.
+reales (la USB de 4 GB usada en las pruebas nunca alcanzó a terminar), y
+el escenario manual de desconexión física real (sacar la USB a mitad de
+una sincronización) que sigue pendiente de ejecutar en vivo.
 
-**Pendiente de terminar en la prueba en vivo** (ver el plan de pruebas
-manuales que se está siguiendo en conversación): sincronización inicial
-completa de ~7,228 archivos reales hacia una segunda USB (en curso),
-segunda sincronización sin cambios, desconexión/reconexión real,
-validación de "misma carpeta", y la prueba de cambio de rol A↔B con datos
-reales.
+### 14.6 Prueba en vivo del cambio de rol A↔B, con USB sana (2026-09-22)
+
+Completada de punta a punta, con datos reales, USB por USB, guiada por
+el usuario:
+
+1. USB E: (sana, 7.5 GB, vacía) configurada primero como segunda copia
+   de D: — sincronización manual copió 121 archivos antes de detenerse
+   manualmente; confirma que "Detener" deja el progreso consistente
+   (retomable, sin corrupción).
+2. **Cambio de rol**: segunda copia quitada, E: promovida a destino
+   principal, D: reconfigurada como nueva segunda copia — sin ningún
+   botón ni código de "promoción" (por diseño, ver §13.2). Backup real
+   desde el iPhone subió ~10 archivos nuevos directo a E: sin errores.
+   Sincronización E:→D: salió **0 nuevos, 0 fallidos** — confirma que
+   D: (al haber sido la principal original) ya reconocía correctamente
+   todo el contenido presente en E:, sin re-copiar ni duplicar nada.
+3. **Vuelta atrás**: D: restaurada como principal, E: reconfigurada como
+   segunda copia de nuevo — mismo patrón sin errores. Sincronización
+   D:→E: y backup real desde el iPhone corriendo en simultáneo
+   (validación adicional, no buscada a propósito, de que la
+   sincronización de la segunda copia no interfiere con una corrida
+   real en curso — el mismo invariante del bug de §14.2).
+
+Con esto, los escenarios manuales de validación "misma carpeta" (ya
+cubierto también por `set_mirror_destination`'s guard) y cambio de rol
+A↔B quedan confirmados con datos reales, no solo con tests sintéticos.
 
 ### 14.1 Velocidad de copia de la segunda copia, medida en el ambiente real (2026-09-22)
 

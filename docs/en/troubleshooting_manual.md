@@ -65,9 +65,9 @@ there).
 ## The Shortcut runs but doesn't upload any new photo
 
 - Check **"Find Photos"** has no stray filter beyond the `Date Taken is
-  before Limite` one described in the iPhone Setup Manual — a different
-  filter sneaking in makes it return 0 results silently, with no visible
-  error.
+  before Limite` one (see the alternate Manual Build guide's step 3 for
+  what this should look like) — a different filter sneaking in makes it
+  return 0 results silently, with no visible error.
 - Check **`Limit`** is turned **on** and set to **50** on `Find Photos` —
   this is mandatory (not optional): without it, `Find Photos` fails outright
   on a large library, even doing nothing but counting results.
@@ -84,9 +84,9 @@ the current month's folder regardless of when the photo was actually
 taken.
 
 - **Almost always confirmed cause**: the chip inside the **Format Date**
-  action (the one that builds the `TakenAt` variable, section 4 of the
-  iPhone Setup Manual) got silently reconfigured to point at a different
-  attribute (e.g. "Name") instead of **Date Taken**. This usually happens
+  action (the one that builds the `TakenAt` variable — see step 4 of the
+  alternate Manual Build guide) got silently reconfigured to point at a
+  different attribute (e.g. "Name") instead of **Date Taken**. This usually happens
   with no visible error, right after adding or moving another action
   inside the same "Repeat" block — Shortcuts sometimes silently
   reconfigures neighboring chips.
@@ -120,8 +120,11 @@ something to chase further on the PunkBackup side.
 
 The Shortcut sweeps your library backward in bounded blocks of 50, newest
 photos first, advancing automatically block after block within one run —
-see the "Set up the backward block-sweep" step of the iPhone Setup Manual.
-This is what makes a large library actually finish, instead of either
+this is already built into the ready-made Shortcut file from the iPhone
+Setup Manual, no setup needed on your end. (If you built the Shortcut by
+hand instead, or just want to understand exactly how this works, see the
+"Set up the backward block-sweep" step of the alternate Manual Build
+guide.) This is what makes a large library actually finish, instead of either
 timing out (no `Limit`) or getting stuck re-checking the same fixed set
 forever (a plain `Limit` with no way to advance).
 
@@ -246,7 +249,7 @@ Other caveats:
 **This never affects the actual backup** — files keep uploading and
 saving correctly even when the notification comes back blank. If it
 happens, check the **"Get Contents of URL"** action pointing at
-`/run/finish` (section 5 of the iPhone Setup Manual):
+`/run/finish` (see step 5 of the alternate Manual Build guide):
 
 - The `X-Backup-Token` header must be under **Headers**, not inside
   **Request Body → Form**.
@@ -263,6 +266,33 @@ destination folder directly (see next section).
 No technical steps needed: open the destination folder you chose in
 Windows Explorer — you should see Year/Month subfolders with your photos
 and videos inside.
+
+## Second copy (mirror) — messages and what they mean
+
+See the Usage Manual's "Second copy (optional)" section for how this
+feature normally works. These are the messages you might see:
+
+- **"Can't use that folder"** — you tried to set the second copy to the
+  exact same folder as your main destination. Choose a different one.
+- **"🔄 Second copy: [path] (not connected)"**, sync button greyed out —
+  normal, expected state whenever that drive isn't plugged in right now.
+  Not an error; plug it back in and it'll be ready to sync again.
+- **"The second copy doesn't have enough space for everything pending"**
+  — a heads-up shown before syncing, not something that stops it: it
+  still copies what fits, starting with your newest photos, and picks up
+  the rest once you free up space or swap in a bigger drive.
+- **"The sync stopped before finishing ([error])"** — something
+  interrupted a file mid-copy, usually either the drive filling up for
+  real or getting unplugged instead of safely ejected. Nothing is lost —
+  whatever copied successfully before that stays valid — just check the
+  drive and tap "🔄 Sync now" again; it resumes exactly where it stopped.
+- **"Couldn't complete the second-copy sync: [error]"** — a real, one-off
+  failure (rare). The activity log (▼ Show activity) has the exact error
+  text right after this line in the log.
+- Reconnecting a second-copy drive that already has some files on it
+  never re-copies what's already there, and never restarts the visible
+  counter from zero — the running count you see already reflects
+  everything on that drive, old and new combined.
 
 ## Still not working
 

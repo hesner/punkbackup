@@ -63,9 +63,10 @@ Cuarentena/Virus Chest si quedó ahí).
 ## El Atajo corre pero no sube ninguna foto nueva
 
 - Revisa que **"Find Photos"** no tenga ningún filtro raro además del
-  `Date Taken is before Limite` descrito en el Manual de configuración del
-  iPhone — otro filtro distinto que se cuele hace que dé 0 resultados en
-  silencio, sin ningún error visible.
+  `Date Taken is before Limite` (ver el paso 3 de la guía alternativa de
+  Construcción Manual para ver cómo debería quedar) — otro filtro
+  distinto que se cuele hace que dé 0 resultados en silencio, sin ningún
+  error visible.
 - Revisa que **`Limit`** esté activado y en **50** en "Find Photos" — esto
   es obligatorio, no opcional: sin él, "Find Photos" falla directamente en
   una biblioteca grande, incluso solo contando resultados.
@@ -82,14 +83,14 @@ en la carpeta del mes en curso sin importar cuándo se tomó la foto
 realmente.
 
 - **Causa casi siempre confirmada**: el chip dentro de la acción
-  **Formatear fecha** (la que construye la variable `TomadaEn`, en la
-  sección 4 del Manual de configuración del iPhone) se desconfiguró en
+  **Formatear fecha** (la que construye la variable `TomadaEn` — ver el
+  paso 4 de la guía alternativa de Construcción Manual) se desconfiguró en
   silencio y quedó apuntando a otro atributo (por ejemplo "Nombre") en vez
   de **Fecha de captura**. Esto suele pasar sin ningún error visible,
   justo después de agregar o mover otra acción dentro del mismo bloque
   "Repetir" — Shortcuts a veces reconfigura chips vecinos sin avisar.
 - **Cómo confirmarlo**: dentro del Atajo, abre la acción "Formatear fecha"
-  de la sección 4 y toca su chip — debe decir **Fecha de captura**. Si
+  y toca su chip — debe decir **Fecha de captura**. Si
   dice cualquier otra cosa, ese es el problema.
 - **Arreglo**: vuelve a seleccionar "Fecha de captura" en ese chip. Las
   fotos que subas DESPUÉS de este arreglo van a quedar en su carpeta
@@ -120,9 +121,12 @@ pena perseguir más del lado de PunkBackup.
 
 El Atajo barre tu biblioteca hacia atrás en bloques acotados de 50 fotos,
 empezando por las más recientes, avanzando automáticamente bloque por
-bloque dentro de una sola corrida — ver el paso "Armar el barrido en
-bloques hacia atrás" del Manual de configuración del iPhone. Esto es lo
-que permite que una biblioteca grande de verdad llegue a terminar, en vez
+bloque dentro de una sola corrida — esto ya viene armado dentro del
+archivo de Atajo ya hecho del Manual de configuración del iPhone, no hace
+falta configurar nada de tu parte. (Si construiste el Atajo a mano, o
+solo quieres entender exactamente cómo funciona, ver el paso "Armar el
+barrido en bloques hacia atrás" de la guía alternativa de Construcción
+Manual.) Esto es lo que permite que una biblioteca grande de verdad llegue a terminar, en vez
 de fallar por tiempo (sin `Limit`) o quedarse revisando siempre el mismo
 conjunto fijo sin avanzar (`Limit` fijo sin forma de avanzar).
 
@@ -256,7 +260,8 @@ Otras salvedades:
 **No afecta el respaldo real** en ningún caso — las fotos se siguen
 subiendo y guardando correctamente aunque la notificación salga vacía.
 Si te pasa, revisa la acción **"Obtener contenido de URL"** hacia
-`/run/finish` (sección 5 del Manual de configuración del iPhone):
+`/run/finish` (ver el paso 5 de la guía alternativa de Construcción
+Manual):
 
 - El header `X-Backup-Token` debe estar en **Headers**, no dentro de
   **Request Body → Form**.
@@ -273,6 +278,38 @@ destino directamente (ver siguiente sección).
 Sin necesidad de nada técnico: abre la carpeta destino que elegiste en el
 Explorador de Windows — deberías ver subcarpetas por Año y Mes con tus
 fotos y videos dentro.
+
+## Segunda copia (espejo) — mensajes y qué significan
+
+Ver la sección "Segunda copia (opcional)" del Manual de uso para cómo
+funciona normalmente esta funcionalidad. Estos son los mensajes que
+podrías llegar a ver:
+
+- **"No se puede usar esa carpeta"** — intentaste poner la segunda copia
+  exactamente en la misma carpeta que tu destino principal. Elige otra.
+- **"🔄 Segunda copia: [ruta] (no conectada)"**, botón de sincronizar en
+  gris — estado normal y esperado cuando esa unidad no está conectada en
+  este momento. No es un error; conéctala de nuevo y vuelve a estar lista
+  para sincronizar.
+- **"La segunda copia no tiene espacio suficiente para todo lo
+  pendiente"** — un aviso que aparece antes de sincronizar, no algo que
+  detiene el proceso: igual copia lo que alcance, empezando por tus fotos
+  más recientes, y retoma el resto cuando liberes espacio o pongas una
+  USB más grande.
+- **"La sincronización se detuvo antes de terminar ([error])"** — algo
+  interrumpió un archivo a mitad de copiarlo, casi siempre porque la
+  unidad se llenó de verdad o se desconectó en vez de expulsarse de forma
+  segura. No se pierde nada — lo que ya se copió con éxito antes de eso
+  queda válido — solo revisa la unidad y toca "🔄 Sincronizar ahora" de
+  nuevo; retoma exactamente donde se detuvo.
+- **"No se pudo completar la sincronización de la segunda copia:
+  [error]"** — una falla real, puntual (poco común). El log de actividad
+  (▼ Mostrar actividad) tiene el texto exacto del error justo después de
+  esta línea en el log.
+- Reconectar una USB de segunda copia que ya tiene algunos archivos nunca
+  vuelve a copiar lo que ya está ahí, y nunca reinicia el contador visible
+  desde cero — el conteo que ves ya refleja todo lo que hay en esa
+  unidad, lo viejo y lo nuevo combinados.
 
 ## Sigue sin funcionar
 

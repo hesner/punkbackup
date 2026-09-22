@@ -31,6 +31,9 @@ iPhone's built-in Shortcuts app and a small Python server on your own PC.
 4. Nothing is ever deleted, moved, or modified on the iPhone. Nothing is
    ever silently overwritten at the destination — a genuine name+content
    conflict keeps both files.
+5. Optionally, each profile can also keep a **second copy** on a
+   different drive — a manual, verified, one-way sync, so your photos
+   don't live on only one piece of hardware.
 
 See [`PLAN.md`](PLAN.md) for the full architecture and design decisions, and
 [`AGENTS.md`](AGENTS.md) if you're an AI agent (or a human) rebuilding or

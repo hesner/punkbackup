@@ -105,6 +105,7 @@ Backup photos/
 │   ├── runner.py                (arranca/detiene uvicorn bajo demanda; verifica el bind de verdad,
 │   │                              reintenta ante conflictos transitorios de puerto)
 │   ├── video_metadata.py        (corrige el creation_time real dentro del contenedor de video)
+│   ├── mirror.py                (segunda copia opcional: sync_mirror() PC-side, hacia otra carpeta/USB)
 │   ├── config.py                (AppConfig: puerto, idioma, preferencias de inicio, timeout de inactividad)
 │   ├── paths.py                 (rutas dev vs. instalado — app_root()/user_data_dir())
 │   └── run_dev.py               (runner manual para pruebas por terminal)
@@ -127,7 +128,8 @@ Backup photos/
     ├── test_api.py
     ├── test_profiles.py
     ├── test_runner.py
-    └── test_video_metadata.py
+    ├── test_video_metadata.py
+    └── test_mirror.py
 ```
 
 ## 4.1 Perfiles (multi-usuario / multi-dispositivo)

@@ -1073,3 +1073,152 @@ Tabla `runs` (una corrida de backup, para `/status`):
       regla de Firewall, evita duplicados) y nombre fijo del acceso
       directo de desinstalación (evita duplicados por idioma del
       instalador).
+- [ ] Segunda copia de respaldo (USB secundaria) — diseño cerrado
+      (2026-09-21), pendiente de implementar. Ver sección 13.
+
+## 13. Segunda copia de respaldo (USB secundaria) — diseño (2026-09-21)
+
+**Motivación**: el usuario quiere que las fotos/videos respaldados no
+vivan solo en una USB — poder mantener una segunda copia física,
+sincronizada de forma incremental, sin depender de la nube.
+
+### 13.1 Decisiones de diseño (resueltas en conversación con el usuario)
+
+- **Una segunda copia por perfil**, no una combinada para todos los
+  perfiles (cada perfil elige su propia carpeta/USB secundaria, igual que
+  ya elige su carpeta principal).
+- **La USB secundaria se conecta de vez en cuando**, no permanece
+  conectada siempre — este es el estado NORMAL, nunca un error. Por lo
+  tanto, la sincronización es **manual** (un botón "Sincronizar ahora"),
+  no automática ni programada.
+- **Se verifica por hash después de copiar cada archivo** (más lento que
+  confiar solo en el tamaño, pero detecta corrupción real de la USB o de
+  la copia — justo lo que esta funcionalidad existe para prevenir).
+- **Ninguna USB se formatea. No se seleccionan "unidades", se seleccionan
+  carpetas** — exactamente la misma premisa que ya rige la carpeta
+  destino principal hoy (`Path(profile.destination_dir)` funciona igual
+  para una raíz de unidad como `F:\` que para una subcarpeta como
+  `F:\Respaldos\Fotos` — confirmado en `server/app.py::_engine_for`, sin
+  ningún caso especial).
+
+### 13.2 Modelo de datos: la segunda copia tiene su PROPIA base de datos real
+
+Decisión clave (propuesta por el usuario, mejor que la idea original de
+"carpeta muda sin memoria propia" que se descartó): la USB secundaria B
+recibe su propia base de datos `.iphone_backup_index/index.sqlite`, con
+el MISMO esquema `backed_up_files` que ya usa cualquier destino principal
+— "el índice vive dentro de la carpeta destino, viaja con la unidad"
+(mismo principio ya documentado en `manifest_db.py`, aplicado ahora
+también a la segunda copia).
+
+Cada vez que un archivo se copia de A a B y pasa la verificación por
+hash, se inserta su fila correspondiente en la base de datos de B (mismo
+`sha256`, `taken_at`, `size_bytes`; `dest_path` ajustado a la ruta dentro
+de B). Esto evita guardar cualquier "bandera de ya sincronizado" en un
+lugar separado que se pueda desincronizar — la verdad de "qué tiene B" es
+literalmente su propia base de datos, construida solo a partir de copias
+ya verificadas.
+
+**Por qué esto resuelve gratis el escenario de "USB A se pierde, promover
+B a principal"**: no hace falta ninguna función de "promoción" ni
+reconciliación — confirmado leyendo `server/app.py::_engine_for` y
+`forget_profile()` (ya existente, comentario textual: *"call this
+whenever a profile's destination_dir changes"*): cambiar la carpeta
+destino de un perfil a la de B, con el botón "Elegir carpeta..." que YA
+EXISTE, hace que el sistema abra la base de datos que B ya tiene y
+responda correctamente al iPhone sobre qué falta — sin ningún paso nuevo.
+La antigua A, si se reconecta después, queda intacta y sin ser
+modificada nunca (la sincronización siempre va en una sola dirección,
+de la principal actual hacia la secundaria actual, nunca al revés).
+
+### 13.3 Algoritmo de sincronización
+
+1. Verificar espacio libre real en B (`shutil.disk_usage`, no un valor
+   cacheado) contra el tamaño total de lo que falta copiar. Si no
+   alcanza, mostrar una alerta chica no bloqueante y continuar de todas
+   formas (ver 13.4).
+2. Recorrer las filas de `backed_up_files` de A que NO tengan ya una fila
+   equivalente (mismo `sha256`) en la base de datos de B, **ordenadas por
+   `COALESCE(taken_at, received_at) DESC`** (más reciente primero —
+   confirmado con datos reales de producción que así es como el propio
+   Atajo entrega las fotos a A, ver sección 5.1; aquí es una decisión
+   deliberada de prioridad, no una necesidad técnica como en el Atajo).
+   Prioriza lo más reciente/valioso si la sincronización se corta o si no
+   alcanza el espacio.
+3. Para cada archivo: copiar los bytes a la ruta equivalente dentro de B,
+   releer el archivo copiado y calcular su hash, compararlo contra el
+   `sha256` de A. Si coincide, insertar la fila en la base de datos de B.
+   Si no coincide, no registrar nada y reintentar en la siguiente
+   sincronización.
+4. Si un archivo específico falla por espacio agotado a mitad de copiar,
+   descartar el archivo parcial (nunca lo deja a medias ni lo registra).
+
+**Resiliencia sin guardar estado adicional**: como cada fila de B solo se
+escribe DESPUÉS de copiar y verificar con éxito, cualquier interrupción
+(desconexión física, cierre de la app, apagón, disco lleno) dejando el
+proceso a mitad de camino nunca deja a B en un estado falso — la
+siguiente sincronización simplemente retoma lo que falte, sin importar en
+qué punto exacto se cortó. Única ventana conocida y aceptada: si la app
+se cierra justo entre que termina de copiar y de verificar un archivo
+específico, ese archivo podría quedar sin verificar (tamaño correcto,
+pero sin la confirmación de hash) — mitigado por una acción manual aparte
+"Verificar todo" (re-hashea ambas copias completas), no parte del flujo
+normal.
+
+### 13.4 Manejo de espacio en disco
+
+- **USB A (principal) sin espacio suficiente para toda la biblioteca**:
+  ya es el comportamiento actual, sin cambios — el sistema nunca
+  precalcula el total, simplemente intenta archivo por archivo (ver
+  sección 5.13 para el bug relacionado, ya corregido: antes fallaba en
+  silencio cuando el disco se llenaba de verdad a mitad de un archivo,
+  ahora responde con un error claro y reintentable).
+- **USB B (segunda copia) con menos espacio que lo necesario**: alerta
+  chica no bloqueante al iniciar la sincronización, pero el proceso
+  continúa copiando en orden de prioridad (13.3) hasta llenarse. Lo que
+  no alcanzó a copiarse queda pendiente para la próxima vez que haya más
+  espacio disponible (nueva USB más grande, o se libera espacio).
+
+### 13.5 Interfaz — dentro de la tarjeta de cada perfil, en "⚙ Configuración"
+
+Sin cambios en la pantalla Principal (el monitoreo en vivo del respaldo
+del iPhone). Dentro de `ProfileManageRow` (`gui/main_window.py`), debajo
+de los botones ya existentes (Elegir carpeta / Historial USB / Copiar
+token / Renombrar / Renovar token / Eliminar), una sub-sección opcional:
+
+- **Sin configurar**: link discreto "+ Configurar segunda copia
+  (opcional)" — no le agrega ruido a quien no usa la función.
+- **Configurada, USB conectada**: "🔄 Segunda copia: [ruta] — [N]/[total]
+  archivos · última sync: [fecha]" + botón "🔄 Sincronizar ahora" + botón
+  "⚙ Cambiar".
+- **Configurada, USB desconectada**: mismo texto, botón de sincronizar
+  inactivo con la leyenda "no conectada" — nunca se muestra como un
+  error, es el estado normal de esta función.
+- **Sincronizando**: barra de progreso en vivo "Sincronizando... X / Y
+  archivos", mismo patrón visual que "Iniciando backup..." ya usado para
+  el arranque del servidor.
+
+**Sin ningún botón nuevo de "promover a principal"** — ese cambio de rol
+usa el botón "Elegir carpeta..." que ya existe (ver 13.2).
+
+### 13.6 Validaciones nuevas necesarias
+
+- Bloquear seleccionar la MISMA carpeta como destino principal y como
+  segunda copia del mismo perfil (evitaría "sincronizar una carpeta
+  consigo misma").
+
+### 13.7 Plan de pruebas
+
+Ver la lista completa acordada con el usuario (categorías: camino feliz,
+desconexión/reconexión, verificación e integridad, espacio en disco,
+cierre abrupto de la app, cambio de rol A↔B, validaciones de
+configuración, concurrencia) — 24 escenarios en total, todos simulables
+sin un dispositivo iPhone real (solo con `tmp_path`/`monkeypatch`, mismo
+patrón que sección 5.13).
+
+### 13.8 Trabajo relacionado ya completado antes de empezar
+
+- **Sección 5.13**: el bug de disco lleno en la USB A fallando en
+  silencio — corregido y probado ANTES de empezar esta funcionalidad,
+  porque el mismo patrón de error aplica igual de fuerte a la segunda
+  copia.

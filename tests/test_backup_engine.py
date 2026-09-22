@@ -210,6 +210,63 @@ def _fake_jpeg_bytes(exif_datetime_original: str | None = None) -> bytes:
     return buf.getvalue()
 
 
+def _synthetic_mov(mvhd_creation: int, mdhd_creation: int, mdat: bytes) -> bytes:
+    """Same box builder as test_video_metadata.py's _build_synthetic_mov,
+    parameterized so tests here can vary just the timestamp fields or just
+    the media payload."""
+    import struct
+
+    def box(box_type: str, payload: bytes) -> bytes:
+        return struct.pack(">I4s", 8 + len(payload), box_type.encode("ascii")) + payload
+
+    def hdr(version0_creation: int) -> bytes:
+        return struct.pack(">B3sII", 0, b"\x00\x00\x00", version0_creation, version0_creation) + b"\x00" * 20
+
+    mvhd = box("mvhd", hdr(mvhd_creation))
+    mdhd = box("mdhd", hdr(mdhd_creation))
+    mdia = box("mdia", mdhd)
+    trak = box("trak", mdia)
+    moov = box("moov", mvhd + trak)
+    ftyp = box("ftyp", b"qt  " + b"\x00" * 12)
+    return ftyp + moov + box("mdat", mdat)
+
+
+def test_reencoded_video_with_same_content_is_deduped_not_kept_both(tmp_path):
+    """The real bug (2026-09-22, 54 duplicate copies / 2.46GB wasted):
+    Shortcuts' "Encode Media" 0-byte retry re-stamps the container's own
+    creation_time on every pass over the SAME source video, so its raw
+    sha256 differs each time even though the actual video content is
+    unchanged. Two "encode passes" of the same source must be treated as
+    the same backed-up file, not kept as separate copies."""
+    engine = make_engine(tmp_path)
+    mdat = b"\xde\xad\xbe\xef" * 8
+    pass_1 = _synthetic_mov(mvhd_creation=1000, mdhd_creation=2000, mdat=mdat)
+    pass_2 = _synthetic_mov(mvhd_creation=9999999, mdhd_creation=8888888, mdat=mdat)
+    assert pass_1 != pass_2  # genuinely different bytes, same content
+
+    first = engine.process_upload("ScreenRecording_01-01-2026.mov", io.BytesIO(pass_1), None, None)
+    second = engine.process_upload("ScreenRecording_01-01-2026.mov", io.BytesIO(pass_2), None, None)
+
+    assert first["status"] == "new"
+    assert second["status"] == "skipped_duplicate"
+    files = list((Path(engine.dest_root)).rglob("ScreenRecording_01-01-2026*"))
+    assert len(files) == 1  # no wasted duplicate copy
+
+
+def test_reencoded_video_with_different_content_still_kept_both(tmp_path):
+    """A genuine content difference in an mdat-bearing video must still be
+    kept as a separate file — content_signature must not be over-broad."""
+    engine = make_engine(tmp_path)
+    pass_1 = _synthetic_mov(mvhd_creation=1000, mdhd_creation=2000, mdat=b"\xde\xad\xbe\xef" * 8)
+    pass_2 = _synthetic_mov(mvhd_creation=1000, mdhd_creation=2000, mdat=b"\xff\xff\xff\xff" * 8)
+
+    first = engine.process_upload("ScreenRecording_02-02-2026.mov", io.BytesIO(pass_1), None, None)
+    second = engine.process_upload("ScreenRecording_02-02-2026.mov", io.BytesIO(pass_2), None, None)
+
+    assert first["status"] == "new"
+    assert second["status"] == "conflict_kept_both"
+
+
 def test_missing_extension_is_detected_from_jpeg_content(tmp_path):
     engine = make_engine(tmp_path)
     result = engine.process_upload("IMG_9001", io.BytesIO(_fake_jpeg_bytes()), "2026-05-01T00:00:00", None)

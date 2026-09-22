@@ -27,11 +27,12 @@ Box layout reference (ISO/IEC 14496-12):
 """
 from __future__ import annotations
 
+import hashlib
 import logging
 import struct
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import BinaryIO, Iterator
+from typing import BinaryIO, Iterator, Optional
 
 logger = logging.getLogger("backup_engine")
 
@@ -133,3 +134,51 @@ def fix_creation_time(path: Path, real_taken_at: datetime) -> bool:
     except Exception as exc:
         logger.warning("Could not fix video creation_time for %s: %s", path, exc)
         return False
+
+
+def content_signature(path: Path) -> Optional[str]:
+    """sha256 of just the file's `mdat` box(es) — the actual audio/video
+    sample data — ignoring the entire surrounding container (ftyp/moov,
+    every timestamp field anywhere inside it) . i.e. "same video content,
+    regardless of what Encode Media last re-stamped in the container".
+
+    This is deliberately NOT "hash everything except mvhd/mdhd's
+    creation_time/modification_time": an earlier version of this function
+    tried exactly that and still produced 55 distinct signatures for 55
+    real duplicate copies of the same source video (2026-09-22) — Encode
+    Media's passthrough re-encode rewrites more of `moov` than just those
+    two fields (unidentified further — didn't matter once mdat-only
+    comparison was tried). Real-evidence check on that same set of 54/55
+    duplicates confirmed the fix that matters: `mdat` was 100% byte
+    identical on every single pair, and every differing byte fell inside
+    `moov` — so mdat-only comparison is both correct (an actual content
+    change still changes mdat, see storage.py's tests) and robust to
+    however much of the container Apple's encoder chooses to touch.
+
+    Returns None for anything without a top-level `mdat` box (not a
+    recognizable ISO-BMFF container, or unreadable) — callers must fall
+    back to a plain content hash in that case, never treat None as a
+    match."""
+    try:
+        hasher = hashlib.sha256()
+        found_any = False
+        with open(path, "rb") as f:
+            file_size = f.seek(0, 2)
+            for box_type, p_start, p_end in _iter_boxes(f, 0, file_size):
+                if box_type != "mdat":
+                    continue
+                found_any = True
+                f.seek(p_start)
+                remaining = p_end - p_start
+                while remaining > 0:
+                    chunk = f.read(min(1024 * 1024, remaining))
+                    if not chunk:
+                        break
+                    hasher.update(chunk)
+                    remaining -= len(chunk)
+        if not found_any:
+            return None
+        return hasher.hexdigest()
+    except Exception as exc:
+        logger.warning("Could not compute content_signature for %s: %s", path, exc)
+        return None

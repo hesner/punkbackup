@@ -20,7 +20,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from server.video_metadata import MAC_EPOCH, fix_creation_time
+from server.video_metadata import MAC_EPOCH, content_signature, fix_creation_time
 
 
 def _box(box_type: str, payload: bytes) -> bytes:
@@ -105,3 +105,57 @@ def test_fix_creation_time_never_raises_on_garbage(tmp_path):
     path = tmp_path / "garbage.mov"
     path.write_bytes(b"\x00" * 4)  # truncated/malformed — shorter than one box header
     assert fix_creation_time(path, datetime.now(timezone.utc)) is False
+
+
+def test_content_signature_ignores_reencode_timestamp_drift(tmp_path):
+    """The real bug (2026-09-22): Shortcuts' "Encode Media" retry re-stamps
+    container metadata on every pass over the SAME source video, so its raw
+    sha256 changes every time with no real content (mdat) change —
+    confirmed against 54 real duplicate copies where mdat was byte-identical
+    but moov differed. content_signature must treat them as identical."""
+    pass_1 = tmp_path / "pass1.mov"
+    pass_2 = tmp_path / "pass2.mov"
+    pass_1.write_bytes(_build_synthetic_mov())  # creation=1000, modification=1000
+    # Build a second "encode pass" with different mvhd/mdhd timestamps but
+    # byte-identical mdat (the actual video content).
+    mvhd = _box("mvhd", _mvhd_or_mdhd_payload(0, 9999999, 8888888))
+    mdhd = _box("mdhd", _mvhd_or_mdhd_payload(0, 7777777, 6666666))
+    mdia = _box("mdia", mdhd)
+    trak = _box("trak", mdia)
+    moov = _box("moov", mvhd + trak)
+    ftyp = _box("ftyp", b"qt  " + b"\x00" * 12)
+    mdat = _box("mdat", b"\xde\xad\xbe\xef" * 8)
+    pass_2.write_bytes(ftyp + moov + mdat)
+
+    assert pass_1.read_bytes() != pass_2.read_bytes()  # raw bytes genuinely differ
+    sig_1, sig_2 = content_signature(pass_1), content_signature(pass_2)
+    assert sig_1 is not None
+    assert sig_1 == sig_2
+
+
+def test_content_signature_differs_on_real_content_change(tmp_path):
+    path_a = tmp_path / "a.mov"
+    path_b = tmp_path / "b.mov"
+    path_a.write_bytes(_build_synthetic_mov())
+    mvhd = _box("mvhd", _mvhd_or_mdhd_payload(0, 1000, 1000))
+    mdhd = _box("mdhd", _mvhd_or_mdhd_payload(0, 2000, 2000))
+    mdia = _box("mdia", mdhd)
+    trak = _box("trak", mdia)
+    moov = _box("moov", mvhd + trak)
+    ftyp = _box("ftyp", b"qt  " + b"\x00" * 12)
+    mdat = _box("mdat", b"\xff\xff\xff\xff" * 8)  # genuinely different media data
+    path_b.write_bytes(ftyp + moov + mdat)
+
+    assert content_signature(path_a) != content_signature(path_b)
+
+
+def test_content_signature_returns_none_for_non_iso_bmff_file(tmp_path):
+    path = tmp_path / "not_a_video.mov"
+    path.write_bytes(b"\xff\xd8\xff\xe0plain jpeg-like bytes, no moov box here")
+    assert content_signature(path) is None
+
+
+def test_content_signature_never_raises_on_garbage(tmp_path):
+    path = tmp_path / "garbage.mov"
+    path.write_bytes(b"\x00" * 4)
+    assert content_signature(path) is None

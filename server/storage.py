@@ -27,7 +27,7 @@ from PIL import Image
 import pillow_heif
 
 from .manifest_db import ManifestDB
-from .video_metadata import VIDEO_EXTENSIONS, fix_creation_time
+from .video_metadata import VIDEO_EXTENSIONS, content_signature, fix_creation_time
 
 pillow_heif.register_heif_opener()  # lets PIL.Image.open() read .heic/.heif too
 
@@ -232,6 +232,22 @@ class BackupEngine:
                     self.db.bump_run(run_id, "files_skipped")
                     logger.info("= %s already backed up, skipped", safe_name)
                     return {"status": "skipped_duplicate", "dest_path": str(candidate_path)}
+
+                if candidate_path.suffix.lower() in VIDEO_EXTENSIONS:
+                    # Raw sha256 differs, but Shortcuts' "Encode Media" 0-byte
+                    # retry re-stamps the container's own metadata on every
+                    # pass over the SAME source video, changing its hash every
+                    # time with no real content change (confirmed 2026-09-22
+                    # against 54 real duplicate copies — see
+                    # video_metadata.content_signature's docstring). Compare
+                    # by actual sample data (mdat) before concluding
+                    # "different content, keep both".
+                    existing_sig = content_signature(candidate_path)
+                    if existing_sig is not None and existing_sig == content_signature(staging_path):
+                        self._resolve_error_both(run_id, safe_name, original_name)
+                        self.db.bump_run(run_id, "files_skipped")
+                        logger.info("= %s already backed up (re-encoded copy, content unchanged), skipped", safe_name)
+                        return {"status": "skipped_duplicate", "dest_path": str(candidate_path)}
 
                 final_path = self._next_conflict_name(target_dir, candidate_path)
                 shutil.move(str(staging_path), str(final_path))

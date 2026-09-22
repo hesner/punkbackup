@@ -1073,8 +1073,13 @@ Tabla `runs` (una corrida de backup, para `/status`):
       regla de Firewall, evita duplicados) y nombre fijo del acceso
       directo de desinstalación (evita duplicados por idioma del
       instalador).
-- [ ] Segunda copia de respaldo (USB secundaria) — diseño cerrado
-      (2026-09-21), pendiente de implementar. Ver sección 13.
+- [x] Segunda copia de respaldo (USB secundaria) — diseñada e
+      implementada (2026-09-21), 58/58 pruebas pasando, probada en vivo
+      contra datos reales de producción, todos los bugs reales
+      encontrados en el camino ya corregidos. Ver secciones 13 y 14.
+      Pendiente real: completar una sincronización 100% con una USB de
+      mayor capacidad, y los escenarios de prueba manual 4/6/7 (rama
+      `feature/second-usb-mirror`, todavía sin mezclar a `main`).
 
 ## 13. Segunda copia de respaldo (USB secundaria) — diseño (2026-09-21)
 

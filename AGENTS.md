@@ -99,6 +99,16 @@ A one-directional (iPhone/iPad → PC) photo/video backup system:
 - **Never touch the phone.** No delete, no move, no write back to Photos
   beyond what the user's own Shortcut does (nothing, in the current
   design — no album marker at all anymore).
+- **The optional second-copy (mirror, `server/mirror.py`) can never affect
+  the iPhone-facing path.** It's a GUI-triggered, PC-side-only copy — no
+  HTTP dependency, no import from `server/app.py`. If the second USB
+  fails catastrophically mid-sync, the primary backup from the phone must
+  keep working exactly as if the mirror didn't exist. This is also why
+  `sync_mirror()` is designed to never raise (every failure mode comes
+  back as a field on its result instead, see PLAN.md section 13 and
+  lesson 15 below) — a background-thread exception escaping a GUI
+  callback is a silent-failure shape this project has hit and fixed
+  repeatedly (see lesson 11, PLAN.md section 5.13).
 
 ## 4. HTTP API contract
 
@@ -398,6 +408,62 @@ reintroduces these problems.
     both new tests actually catch the bug (failed against the pre-fix code,
     passed after) before trusting them — see PLAN.md §5.13.
 
+15. **CustomTkinter (`gui/`) has its own set of gotchas, found building the
+    second-copy feature (2026-09-21), that don't fit the Shortcuts/server
+    sections above but matter just as much for anyone extending this GUI:**
+
+    - **A `CTkButton` with a colored `fg_color` but no explicit
+      `text_color` silently falls back to CustomTkinter's own default text
+      color — which does NOT reliably contrast against this app's brand
+      colors** (`ACCENT` pink, `RED`). This app already has the correct
+      fix defined (`ACCENT_INK = "#1a0308"` for text on `ACCENT`,
+      `TEXT_MAIN` for text on `RED` — used correctly on the main
+      Start/Stop button and in `gui/dialogs.py`'s primary buttons since
+      day one) but **6 other buttons across `gui/main_window.py`** (some
+      pre-dating this feature: "Choose folder...", "Delete",
+      "+ Add profile"; some new: the mirror Sync/Stop button in both its
+      states) were built without ever passing `text_color`, and nobody
+      noticed until a real screenshot showed barely-readable text. There
+      is no lint/test that catches this — a `CTkButton(..., fg_color=X)`
+      call without `text_color` is syntactically fine and silently wrong.
+      **When adding any new colored button, always pass `text_color`
+      explicitly** (`ACCENT_INK` on `ACCENT`, `TEXT_MAIN` on `RED`/`GREEN`
+      unless the specific shade calls for the opposite — check by eye).
+    - **`CTkButton.configure(fg_color=X)` without `text_color` does NOT
+      reset `text_color`** — it stays whatever it was set to at
+      construction (confirmed directly against CustomTkinter). This means
+      a button that DID set `text_color` once, at construction, is safe to
+      `.configure()` repeatedly afterward without repeating it (see
+      `save_btn` in `SettingNumberRow`) — the bug above only affects
+      buttons that never set it in the first place, not ones that stop
+      repeating it in later `.configure()` calls.
+    - **A modal `_PunkDialog` (`gui/dialogs.py`) can crash if a second one
+      gets shown immediately after the first is dismissed.** Confirmed
+      live: `_on_mirror_sync_done` showed two `show_warning(...)` calls
+      back to back for the same event (space warning + stopped-with-error,
+      both true at once) and hit `TypeError:
+      _PunkDialog.__init__.<locals>.<lambda>() missing 1 required
+      positional argument: '_e'` — the `<Escape>` key binding
+      (`lambda _e: self._cancel()`) got invoked with zero arguments by
+      something in that dismiss/show sequence. **Fixed with a default**
+      (`lambda _e=None: ...`, same defensive pattern `ask_input`'s
+      `_confirm`/`_cancel` already used) — but the deeper lesson is:
+      **never show two of these modal dialogs back to back for the same
+      logical event; consolidate into one message (`elif`, not two
+      separate `if`s).** Both the bug and the redundant double-popup UX
+      go away together.
+    - **A progress counter that resets to "1" on a resumed/incremental
+      operation looks like data was lost, even when it wasn't.** The
+      mirror's `sync_mirror()` originally reported progress as `i` of
+      `len(pending)` — technically correct for *that run*, but showing
+      "1/6885" right after 128 files were already safely copied and
+      verified looked, to a real user watching it, exactly like starting
+      over from zero. Fixed by reporting progress cumulatively against the
+      operation's real total (`baseline + i` of `baseline + len(pending)`,
+      where `baseline` = what was already there) — a UI/UX lesson as much
+      as a technical one: **when an operation can resume, its progress
+      display must never contradict "nothing was lost."**
+
 ## 6. Testing approach that actually caught bugs
 
 - Unit tests against `BackupEngine`/`ManifestDB` directly (no HTTP) for the
@@ -429,16 +495,19 @@ reintroduces these problems.
 
 ## 7. What "done" looks like
 
-- `pytest tests -q` passes (41 tests as of this writing, covering engine
+- `pytest tests -q` passes (58 tests as of this writing, covering engine
   rules, profile isolation/pause/delete, destination-switch correctness,
   concurrent uploads, the `/check` contract, the 0-byte-upload rejection,
   its self-healing retry error-count behavior, a stale-run reap on
   reopen (and its distinct log line vs. a genuine `/run/finish`),
   content-based extension/EXIF-date fallbacks for items Shortcuts sends
   with no extension or no `taken_at`, `ServerController`'s bind
-  verification + auto-retry on a transient port conflict, and the
-  in-place video `creation_time` metadata patch against a synthetic
-  ISO-BMFF fixture).
+  verification + auto-retry on a transient port conflict, the in-place
+  video `creation_time` metadata patch against a synthetic ISO-BMFF
+  fixture, and the second-copy mirror sync engine — newest-first order,
+  hash verification/corruption detection, resumability, cancellation,
+  cumulative progress, and the promote-to-primary scenario with no
+  reconciliation step needed).
 - A real iPhone can run the Shortcut manually, and files appear in the
   chosen destination with correct extensions, organized by Year/Month, and
   `<dest>/.iphone_backup_index/index.sqlite`'s `backed_up_files` table

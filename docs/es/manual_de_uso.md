@@ -190,6 +190,36 @@ por cada persona o dispositivo.
 | **Renovar token** | Genera un token nuevo para ese perfil. El Atajo de ese dispositivo deja de funcionar hasta que pegues el token nuevo ahí — úsalo solo si sospechas que el token se filtró. |
 | **Eliminar** | Revoca el acceso de ese perfil (su token deja de servir). **No borra ningún archivo ya respaldado.** |
 
+### Segunda copia (opcional)
+
+Debajo de los botones, cada perfil puede tener una **segunda copia** —
+una copia de todo lo que hay en su destino principal, guardada en otra
+carpeta/USB. No es obligatoria y viene desactivada por defecto; es para
+quien quiera tener sus fotos en más de una unidad física.
+
+- **"+ Configurar segunda copia (opcional)"** — aparece cuando todavía no
+  configuraste ninguna. Tócalo, elige una carpeta (no puede ser la misma
+  que tu destino principal), y con eso ya quedó configurada.
+- Una vez configurada, vas a ver cuántos archivos tiene y cuánto espacio
+  libre le queda, además de un botón **"🔄 Sincronizar ahora"**.
+- Tocar **"🔄 Sincronizar ahora"** copia lo que falte desde tu destino
+  principal hacia la segunda copia — empezando por las fotos más
+  recientes — y verifica cada archivo después de copiarlo, así una mala
+  escritura de la USB se detecta y se reintenta sola en vez de dejar una
+  copia dañada sin que nadie se entere. Esto nunca corre solo; tú decides
+  cuándo sincronizar.
+- Mientras sincroniza, ese mismo botón se convierte en **"⏹ Detener"** —
+  úsalo si necesitas desconectar la segunda unidad antes de que termine.
+  No se pierde nada en ningún caso: lo que ya se copió y verificó queda
+  ahí, y la siguiente sincronización retoma justo donde quedó.
+- **"Quitar"** deja de sincronizar hacia esa carpeta — **no** borra
+  ningún archivo que ya se haya copiado ahí.
+- Si algún día pierdes o se daña tu unidad principal, esta segunda copia
+  es un respaldo real e independiente: basta con apuntar el destino
+  principal de ese perfil a esa carpeta (con "Elegir carpeta..." de
+  arriba) y la app reconoce exactamente lo que ya tiene ahí — no hace
+  falta volver a subir nada desde el teléfono.
+
 ---
 
 ## Flujo típico de uso diario

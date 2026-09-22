@@ -143,14 +143,22 @@ class BackupEngine:
         staging_path = self.staging_dir / f"{uuid.uuid4().hex}.part"
         hasher = hashlib.sha256()
         size = 0
-        with open(staging_path, "wb") as out:
-            while True:
-                chunk = src_file.read(CHUNK_SIZE)
-                if not chunk:
-                    break
-                hasher.update(chunk)
-                out.write(chunk)
-                size += len(chunk)
+        try:
+            with open(staging_path, "wb") as out:
+                while True:
+                    chunk = src_file.read(CHUNK_SIZE)
+                    if not chunk:
+                        break
+                    hasher.update(chunk)
+                    out.write(chunk)
+                    size += len(chunk)
+        except Exception:
+            # A failure partway through (e.g. disk full) can leave a
+            # partial file behind — clean it up rather than leaking it into
+            # the staging dir forever (a new UUID is used on every attempt,
+            # so nothing here is ever overwritten/retried in place).
+            staging_path.unlink(missing_ok=True)
+            raise
         return staging_path, hasher.hexdigest(), size
 
     def process_upload(
@@ -164,6 +172,14 @@ class BackupEngine:
         never stalls the async event loop on large video files."""
         try:
             staging_path, sha256, size = self.stage_bytes(src_file)
+        except OSError as exc:
+            # Most common real cause: the destination drive filled up
+            # mid-write (ENOSPC) — see app.py's /upload for why this must
+            # never be recorded as backed up (so /check keeps reporting it
+            # missing and a later run retries once space is freed).
+            self.db.bump_run(run_id, "files_error")
+            logger.error("x %s: could not write to disk (%s), requesting the file again", filename, exc)
+            raise ValueError(f'"{filename}" could not be saved (disk write failed: {exc}) — will retry on the next run.') from exc
         except Exception as exc:
             self.db.bump_run(run_id, "files_error")
             logger.error("ERROR receiving %s: %s", filename, exc)

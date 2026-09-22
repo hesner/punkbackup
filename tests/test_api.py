@@ -239,6 +239,45 @@ def test_empty_upload_is_rejected_and_not_recorded(client, store, tmp_path):
     assert check.json() == {"missing": True}  # still reported missing, so a retry can succeed
 
 
+def test_disk_full_during_upload_returns_graceful_error(client, store, tmp_path, monkeypatch):
+    """Found via design review while planning the second-USB mirror feature
+    (2026-09-21): the destination drive filling up mid-write (ENOSPC) used
+    to propagate as an unhandled exception -> a bare 500 -> confirmed on a
+    real device elsewhere in this project that a non-2xx response makes
+    Shortcuts silently abort the rest of that loop iteration. Same
+    always-200-with-detail idiom as the 0-byte-upload case above."""
+    profile = add_profile_with_dest(store, tmp_path, "Perfil de prueba")
+    headers = {"X-Backup-Token": profile.token}
+
+    real_open = open
+
+    def failing_open(path, mode="r", *args, **kwargs):
+        if str(path).endswith(".part"):
+            f = real_open(path, mode, *args, **kwargs)
+
+            def failing_write(data, _real_write=f.write):
+                raise OSError(28, "No space left on device")
+
+            f.write = failing_write
+            return f
+        return real_open(path, mode, *args, **kwargs)
+
+    monkeypatch.setattr(app_module, "open", failing_open, raising=False)
+
+    r = upload(client, headers, "IMG_1.mov", b"some real bytes")
+    assert r.status_code == 200
+    assert r.json().get("detail")
+
+    status = client.get("/status", headers=headers).json()
+    assert status["total_files_backed_up"] == 0
+
+    check = client.post(
+        "/check", headers=headers,
+        data={"filename": "IMG_1.mov", "taken_at": "2026-06-01T12:00:00"},
+    )
+    assert check.json() == {"missing": True}  # still reported missing, so a retry can succeed
+
+
 def test_error_count_self_heals_when_retry_succeeds(client, store, tmp_path):
     """The Shortcut's own retry (see PLAN.md §5.1: 0-byte upload -> Encode
     Media -> re-upload the same filename) shouldn't leave files_error

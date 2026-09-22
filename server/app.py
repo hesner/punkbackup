@@ -190,6 +190,19 @@ async def upload(
                 hasher.update(chunk)
                 out.write(chunk)
                 size += len(chunk)
+    except OSError as exc:
+        # Most common real cause: the destination drive filled up mid-write
+        # (ENOSPC). Same reasoning as the 0-byte-upload case below: a non-2xx
+        # here would silently abort the rest of the Shortcut's loop (see
+        # PLAN.md §5.1 / AGENTS.md lesson 11) instead of surfacing anything —
+        # this used to propagate as an unhandled exception (a bare 500),
+        # exactly the failure mode that pattern exists to avoid. Not recorded
+        # as backed up, so /check still reports it missing and a later run
+        # (once space is freed) retries it automatically.
+        staging_path.unlink(missing_ok=True)
+        engine.db.bump_run(run_id, "files_error")
+        logger.error("x %s: could not write to disk (%s), requesting the file again", filename, exc)
+        return {"detail": f'"{filename}" could not be saved (disk write failed: {exc}) — will retry on the next run.'}
     except Exception:
         staging_path.unlink(missing_ok=True)
         engine.db.bump_run(run_id, "files_error")

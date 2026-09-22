@@ -376,6 +376,28 @@ reintroduces these problems.
     the one testing (you already flipped that switch on your own device
     ages ago).
 
+14. **A destination drive filling up mid-write (`OSError`/`ENOSPC`) used to
+    propagate as a raw, unhandled exception in `/upload`** — found by code
+    review (2026-09-21), not a user report. Same category of bug as point
+    11 (non-2xx silently aborts the Shortcut's loop), just a different
+    trigger: nothing in this codebase pre-computes "is there enough total
+    space for the whole library" before starting (correct — the system is
+    supposed to try file-by-file and only fail on the one that genuinely
+    doesn't fit), but the actual failure at that point wasn't caught, so it
+    surfaced as a bare 500 instead of the established always-200-with-
+    `detail` pattern. Fixed in both `server/app.py`'s `/upload` (the real
+    iPhone-facing path) and `server/storage.py`'s `process_upload`/
+    `stage_bytes` (the path the test suite drives directly) — catch
+    `OSError` specifically, clean up the partial staging file, never record
+    it as backed up (so `/check` keeps it "missing" for an automatic retry
+    once space is freed). **Fully testable without a real device**:
+    `monkeypatch` a real (not fake) file object whose `write()` raises
+    `OSError(28, "No space left on device")` — lets the file genuinely
+    exist on disk first, so the cleanup path gets exercised for real, not
+    just skipped because a mock never touched the filesystem. Confirmed
+    both new tests actually catch the bug (failed against the pre-fix code,
+    passed after) before trusting them — see PLAN.md §5.13.
+
 ## 6. Testing approach that actually caught bugs
 
 - Unit tests against `BackupEngine`/`ManifestDB` directly (no HTTP) for the
@@ -407,7 +429,7 @@ reintroduces these problems.
 
 ## 7. What "done" looks like
 
-- `pytest tests -q` passes (39 tests as of this writing, covering engine
+- `pytest tests -q` passes (41 tests as of this writing, covering engine
   rules, profile isolation/pause/delete, destination-switch correctness,
   concurrent uploads, the `/check` contract, the 0-byte-upload rejection,
   its self-healing retry error-count behavior, a stale-run reap on

@@ -10,6 +10,8 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
+import pytest
+
 from server.manifest_db import ManifestDB
 from server.storage import BackupEngine
 
@@ -214,3 +216,54 @@ def test_missing_taken_at_falls_back_to_exif_date_when_present(tmp_path):
     )
     assert result["status"] == "new"
     assert str(Path(result["dest_path"]).parent).endswith(str(Path("2019") / "03"))
+
+
+class _DiskFullFile:
+    """Wraps a REAL file object so open() genuinely creates a file on disk
+    (exactly as it would in production), but write() fails immediately
+    after — simulating a drive that fills up mid-write (ENOSPC). This
+    lets the test verify the leftover partial file actually gets deleted,
+    not just that a mock never touched disk in the first place."""
+
+    def __init__(self, real_file):
+        self._real_file = real_file
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *exc):
+        self._real_file.close()
+        return False
+
+    def write(self, data):
+        raise OSError(28, "No space left on device")
+
+
+def test_disk_full_during_write_is_not_recorded_as_backed_up(tmp_path, monkeypatch):
+    """Found via design review while planning the second-USB mirror feature
+    (2026-09-21): a disk filling up mid-write used to propagate as a raw,
+    unhandled exception instead of the same graceful "not recorded, retry
+    later" pattern already used for a 0-byte upload — see app.py's /upload
+    for why an ungraceful failure here matters (a non-2xx response silently
+    aborts the rest of the Shortcut's loop, AGENTS.md lesson 11). Also
+    covers the leftover .part file this same fix cleans up."""
+    import server.storage as storage_module
+
+    engine = make_engine(tmp_path)
+    real_open = open
+
+    def failing_open(path, mode="r", *args, **kwargs):
+        if str(path).endswith(".part"):
+            return _DiskFullFile(real_open(path, mode, *args, **kwargs))
+        return real_open(path, mode, *args, **kwargs)
+
+    monkeypatch.setattr(storage_module, "open", failing_open, raising=False)
+
+    with pytest.raises(ValueError, match="could not be saved"):
+        engine.process_upload("IMG_9003.jpg", io.BytesIO(b"some real bytes"), "2026-05-01T00:00:00", None)
+
+    # Not recorded as backed up -> a later run (once space is freed) retries it.
+    assert engine.db.get_status()["total_files_backed_up"] == 0
+    # The real 0-byte partial file that open() created got cleaned up, not
+    # left behind in the staging dir forever.
+    assert list(engine.staging_dir.glob("*.part")) == []

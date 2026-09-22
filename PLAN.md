@@ -824,6 +824,44 @@ una promesa genérica. Publicado en ambos manuales de troubleshooting
 (EN/ES) con las salvedades correspondientes (varía según mezcla foto/video
 del usuario, señal WiFi, y el límite de `Repeticiones` por corrida).
 
+### 5.13 Bug real: la USB A llena a mitad de un respaldo fallaba en silencio — CORREGIDO (2026-09-21)
+
+Encontrado por revisión de código (no por reporte del usuario), mientras se
+diseñaba la funcionalidad de segunda copia (sección de "diseño en curso"
+más abajo) — el usuario pidió explícitamente que el sistema "igual lo
+intentará hasta su llenado" cuando el destino no tiene espacio suficiente,
+lo cual ya era cierto (no existe ningún cálculo previo de espacio total
+contra toda la biblioteca), pero al revisar qué pasaba cuando el disco
+realmente se llena a mitad de escribir un archivo se encontró que el
+`OSError` (`ENOSPC`) se re-lanzaba sin convertirse en una respuesta
+controlada — el mismo patrón de bug ya corregido varias veces esta semana
+(server-bind, idle-notice): según la lección más importante de este
+proyecto (una respuesta que no sea 2xx aborta en silencio el resto de esa
+vuelta del loop del Atajo — ver punto 11 de AGENTS.md), esto significaba
+que cada foto restante de ese bloque fallaba en silencio, sin ningún
+mensaje de "se llenó el disco" visible para el usuario.
+
+**Corregido** en `server/app.py` (`/upload`, el camino real que usa el
+iPhone) y en `server/storage.py` (`BackupEngine.process_upload`/
+`stage_bytes`, el camino que usan las pruebas): ambos ahora capturan
+`OSError` específicamente y devuelven el mismo patrón ya establecido para
+el caso de 0 bytes — una respuesta 200 con `detail` explicando el error,
+nunca registrado como respaldado, así que `/check` lo sigue reportando
+como faltante y una corrida posterior (una vez se libere espacio) lo
+reintenta solo. De paso se corrigió una fuga menor relacionada:
+`stage_bytes` dejaba el archivo parcial (`.part`) huérfano en la carpeta
+de staging cuando la escritura fallaba a mitad de camino — ahora se
+limpia siempre.
+
+**Probado sin ningún dispositivo real**, simulando el disco lleno con
+`monkeypatch` sobre `open()` (el archivo se crea de verdad en disco, pero
+`write()` falla igual que un disco realmente lleno) — 2 pruebas nuevas
+(`tests/test_api.py::test_disk_full_during_upload_returns_graceful_error`,
+`tests/test_backup_engine.py::test_disk_full_during_write_is_not_recorded_as_backed_up`),
+verificadas primero fallando contra el código SIN el fix (confirmando que
+sí detectan el bug real) y luego pasando con el fix aplicado. 41/41 pruebas
+pasando en total.
+
 ## 6. Modelo de datos (índice SQLite, uno por perfil)
 
 Tabla `backed_up_files`:

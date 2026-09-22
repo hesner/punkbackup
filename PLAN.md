@@ -1560,3 +1560,29 @@ garantizado como el último mensaje de un arranque normal. Verificado con
 una prueba de humo real (corrida abandonada real en el índice + llamada
 real a `_start_server()` + inspección del orden real de la cola de
 mensajes). 59/59 pruebas pasando.
+
+### 14.5 Disclaimer nuevo sobre el comportamiento real de Avast (2026-09-22)
+
+Pedido explícito del usuario, con conocimiento directo de cómo se
+comporta Avast con PunkBackup en la práctica (no solo "a veces cierra la
+app", sino el mecanismo exacto): Avast deja abrir la app normal, la
+escanea **mientras ya está corriendo** (por eso los primeros segundos se
+ven bien), y recién después la cierra y la vuelve a abrir sola, unos
+**10 segundos** después del primer arranque. Esto ya estaba documentado
+de forma genérica ("Avast puede cerrar la app"), pero faltaba la
+consecuencia concreta y accionable: **si el usuario inicia un backup
+desde el iPhone justo en esa ventana de ~10 segundos, esa corrida
+específica se corta en el momento exacto en que Avast cierra la app** —
+no se pierde nada de lo ya subido, pero esa corrida puntual no termina
+sola y hay que volver a iniciarla desde el teléfono.
+
+**Documentado en**: la sección "⚠ Importante: esta app no tiene firma
+digital de pago" del Manual de instalación (EN/ES, la explicación
+completa con el mecanismo y la consecuencia), y un párrafo corto y
+accionable en la sección correspondiente del Manual de solución de
+problemas (EN/ES) que remite a la explicación completa. Se aclara que el
+reintento automático de arranque del servidor (ya existente, sección 5.10
+de este mismo documento) se encarga de que el servidor vuelva a quedar
+bien después del cierre — lo nuevo que se documenta es específicamente
+qué pasa con una corrida del Atajo que estaba activa en ese momento
+preciso, que es un caso distinto.

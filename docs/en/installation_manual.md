@@ -29,6 +29,28 @@ consequences:
   error message from the app itself (it just vanishes). If that happens to
   you, it's Avast, not a bug in PunkBackup — see the fix below.
 
+> ⚠️ **What this actually looks like in practice, and why it can be
+> confusing**: Avast doesn't block PunkBackup from opening at all — it
+> lets it open normally, scans it *while it's already running* (so
+> everything looks fine for those first several seconds), and only then
+> silently closes it and reopens it on its own, roughly **10 seconds**
+> after the first launch. From your side, it looks like the app just
+> vanished and came back for no reason — that's Avast's scan cycle, not
+> PunkBackup crashing. The app's own automatic retry (see the
+> Troubleshooting Manual, "The iPhone can't reach the server") already
+> handles the server coming back up cleanly after this happens.
+>
+> **The one real consequence to know about**: if you start a backup from
+> your iPhone during that first ~10-second window — before Avast's
+> close-and-reopen cycle finishes — that specific backup run gets cut off
+> right at the moment Avast closes the app, and needs to be started again
+> from the iPhone once PunkBackup is back and stable. Nothing is lost or
+> corrupted (any file already fully uploaded before that moment stays
+> backed up permanently), but that particular run won't finish on its
+> own. **The fix below (an Avast exception) makes this stop happening
+> entirely** — once PunkBackup is excluded from scanning, it just opens
+> normally like any other program, with no 10-second window at all.
+
 You can read the full source code yourself (this is an open-source project)
 if you want to verify exactly what it does before trusting it.
 

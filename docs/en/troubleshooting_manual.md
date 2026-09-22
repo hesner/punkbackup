@@ -11,6 +11,15 @@ Manual for why, and the fix (add an exception for the PunkBackup install
 folder in Avast, restore it from Quarantine/Virus Chest if it landed
 there).
 
+If a backup you started from your iPhone right after opening PunkBackup
+seems to have stopped for no reason, this is almost certainly why: Avast
+scans the app for its first ~10 seconds, then silently closes and
+reopens it — any backup run active at that exact moment gets cut off
+along with it (see the Installation Manual for the full explanation).
+Nothing already uploaded is lost — just start the backup again from your
+iPhone once the app is back open. Adding the Avast exception stops this
+from happening again.
+
 ## "Start backup" does nothing / doesn't change state
 
 - Fully close the app (not just minimize it) and reopen it from the

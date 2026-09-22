@@ -8,6 +8,16 @@ Manual de instalación para el por qué, y el arreglo (agregar una excepción
 para la carpeta de instalación de PunkBackup en Avast, restaurarla desde
 Cuarentena/Virus Chest si quedó ahí).
 
+Si un backup que iniciaste desde tu iPhone justo después de abrir
+PunkBackup parece haberse detenido sin razón, casi seguro que es por
+esto: Avast escanea la app durante sus primeros ~10 segundos, y después
+la cierra y la vuelve a abrir en silencio — cualquier corrida de backup
+activa justo en ese momento se corta junto con ella (ver el Manual de
+instalación para la explicación completa). No se pierde nada de lo que
+ya se subió — solo vuelve a iniciar el backup desde tu iPhone una vez que
+la app esté abierta de nuevo. Agregar la excepción de Avast hace que esto
+deje de pasar.
+
 ## "Iniciar backup" no hace nada / no cambia de estado
 
 - Cierra la app por completo (no solo minimizarla) y ábrela de nuevo con el

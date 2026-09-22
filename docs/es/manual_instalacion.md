@@ -25,6 +25,29 @@ esperadas:
   desaparece). Si te pasa esto, es Avast, no un error de PunkBackup — mira
   el arreglo abajo.
 
+> ⚠️ **Cómo se ve esto en la práctica, y por qué puede confundir**: Avast
+> no bloquea que PunkBackup abra — la deja abrir normal, la escanea
+> **mientras ya está corriendo** (así que todo se ve bien los primeros
+> segundos), y recién después la cierra en silencio y la vuelve a abrir
+> sola, más o menos **10 segundos** después del primer arranque. De tu
+> lado, parece que la app simplemente desapareció y volvió sin ninguna
+> razón — es el ciclo de escaneo de Avast, no que PunkBackup se haya
+> colgado. El reintento automático que ya tiene la app (ver el Manual de
+> solución de problemas, "El iPhone no puede conectarse al servidor") ya
+> se encarga de que el servidor vuelva a quedar bien después de esto.
+>
+> **La única consecuencia real que hay que saber**: si inicias un backup
+> desde tu iPhone justo en esos primeros ~10 segundos — antes de que
+> termine el ciclo de cerrar-y-reabrir de Avast — esa corrida específica
+> se corta justo en el momento en que Avast cierra la app, y hay que
+> volver a iniciarla desde el iPhone una vez que PunkBackup vuelva a estar
+> abierta y estable. No se pierde ni se daña nada (cualquier archivo que
+> ya se haya subido completo antes de ese momento queda respaldado para
+> siempre), pero esa corrida puntual no va a terminar sola. **El arreglo
+> de abajo (una excepción en Avast) hace que esto deje de pasar por
+> completo** — una vez que PunkBackup queda excluida del escaneo, abre
+> normal como cualquier otro programa, sin ninguna ventana de 10 segundos.
+
 Puedes revisar el código fuente completo tú mismo (es un proyecto de código
 abierto) si quieres verificar exactamente qué hace antes de confiar en él.
 

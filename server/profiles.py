@@ -44,6 +44,11 @@ class Profile:
     enabled: bool = True  # paused profiles keep their history but can't upload until re-enabled
     destination_dir: Optional[str] = None  # each profile backs up to its OWN folder/drive
     destination_history: list = field(default_factory=list)  # snapshots — see set_destination()
+    # Optional second copy (mirror), synced PC-side from destination_dir — never touched by
+    # the iPhone/Shortcut path. See PLAN.md section 13. Both fields default so old
+    # profiles.json files without them still load fine via Profile(**item).
+    mirror_dir: Optional[str] = None
+    mirror_history: list = field(default_factory=list)  # snapshots — see set_mirror_destination()
 
     def to_dict(self) -> dict:
         return asdict(self)
@@ -53,6 +58,11 @@ class Profile:
         """The most recent destination snapshot, i.e. info about the drive
         `destination_dir` currently points at (label, serial, free space)."""
         return self.destination_history[-1] if self.destination_history else None
+
+    @property
+    def current_mirror_volume(self) -> Optional[dict]:
+        """Same as current_volume, but for the optional second-copy drive."""
+        return self.mirror_history[-1] if self.mirror_history else None
 
 
 class ProfileStore:
@@ -125,6 +135,33 @@ class ProfileStore:
         snapshot = {**info, "path": destination_dir, "recorded_at": datetime.now(timezone.utc).isoformat()}
         profile.destination_history.append(snapshot)
         profile.destination_history = profile.destination_history[-MAX_DESTINATION_HISTORY:]
+        self.save()
+
+    def set_mirror_destination(self, profile_id: str, mirror_dir: str) -> None:
+        """Points the profile's optional second copy at a (possibly new)
+        folder/drive — same bookkeeping as set_destination(), kept
+        entirely separate from destination_history so switching one never
+        affects the other."""
+        profile = self._profiles[profile_id]
+        if profile.destination_dir and Path(mirror_dir) == Path(profile.destination_dir):
+            # Would otherwise try to "mirror a folder into itself" — see
+            # PLAN.md section 13.6.
+            raise ValueError(
+                "La segunda copia no puede ser la misma carpeta que el destino principal."
+            )
+        profile.mirror_dir = mirror_dir
+        info = get_volume_info(mirror_dir)
+        snapshot = {**info, "path": mirror_dir, "recorded_at": datetime.now(timezone.utc).isoformat()}
+        profile.mirror_history.append(snapshot)
+        profile.mirror_history = profile.mirror_history[-MAX_DESTINATION_HISTORY:]
+        self.save()
+
+    def clear_mirror_destination(self, profile_id: str) -> None:
+        """Unlinks the second copy without touching any file already
+        written there, and without erasing mirror_history — the same
+        folder can be re-selected later and its own on-disk index (see
+        server/mirror.py) picks up exactly where it left off."""
+        self._profiles[profile_id].mirror_dir = None
         self.save()
 
     def set_enabled(self, profile_id: str, enabled: bool) -> None:

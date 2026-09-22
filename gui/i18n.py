@@ -117,6 +117,86 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
     "btn_regenerate_token": {"es": "Renovar token", "en": "Regenerate token"},
     "btn_delete": {"es": "Eliminar", "en": "Delete"},
 
+    # Mirror / second-copy feature (PLAN.md section 13)
+    "btn_configure_mirror": {"es": "+ Configurar segunda copia (opcional)", "en": "+ Configure second copy (optional)"},
+    "btn_choose_mirror": {"es": "Elegir carpeta...", "en": "Choose folder..."},
+    "btn_sync_mirror": {"es": "🔄 Sincronizar ahora", "en": "🔄 Sync now"},
+    "btn_stop_mirror_sync": {"es": "⏹ Detener", "en": "⏹ Stop"},
+    "btn_remove_mirror": {"es": "Quitar", "en": "Remove"},
+    "dlg_choose_mirror_title": {
+        "es": 'Carpeta de segunda copia para "{name}"',
+        "en": 'Second-copy folder for "{name}"',
+    },
+    "dlg_remove_mirror_title": {"es": "Quitar segunda copia", "en": "Remove second copy"},
+    "dlg_remove_mirror_text": {
+        "es": 'Esto deja de sincronizar "{name}" hacia esa carpeta. Los archivos que ya se '
+        "copiaron ahí NO se borran. ¿Continuar?",
+        "en": 'This stops syncing "{name}" to that folder. Files already copied there are NOT '
+        "deleted. Continue?",
+    },
+    "dlg_mirror_same_folder_title": {"es": "No se puede usar esa carpeta", "en": "Can't use that folder"},
+    "dlg_mirror_same_folder_text": {
+        "es": "La segunda copia no puede ser la misma carpeta que el destino principal.",
+        "en": "The second copy can't be the same folder as the primary destination.",
+    },
+    "mirror_status": {
+        "es": "🔄 Segunda copia: {path}\n{total} archivos copiados  ·  {free} libres de {total_space}",
+        "en": "🔄 Second copy: {path}\n{total} files copied  ·  {free} free of {total_space}",
+    },
+    "mirror_status_no_space_info": {
+        "es": "🔄 Segunda copia: {path}\n{total} archivos copiados",
+        "en": "🔄 Second copy: {path}\n{total} files copied",
+    },
+    "mirror_not_connected": {
+        "es": "🔄 Segunda copia: {path}\n(no conectada)",
+        "en": "🔄 Second copy: {path}\n(not connected)",
+    },
+    "mirror_syncing_progress": {
+        "es": "🔄 Sincronizando... {done} / {total} archivos  ·  {free} libres de {total_space}",
+        "en": "🔄 Syncing... {done} / {total} files  ·  {free} free of {total_space}",
+    },
+    "mirror_syncing_progress_no_space": {
+        "es": "🔄 Sincronizando... {done} / {total} archivos",
+        "en": "🔄 Syncing... {done} / {total} files",
+    },
+    "log_mirror_sync_started": {
+        "es": "🔄 Sincronizando segunda copia de \"{name}\"...",
+        "en": "🔄 Syncing second copy for \"{name}\"...",
+    },
+    "log_mirror_sync_done": {
+        "es": "🔄 Segunda copia de \"{name}\" sincronizada: {copied} nuevos, {verify_failed} fallidos"
+        " de verificación.",
+        "en": "🔄 Second copy for \"{name}\" synced: {copied} new, {verify_failed} failed"
+        " verification.",
+    },
+    "log_mirror_sync_cancelled": {
+        "es": "⏹ Sincronización de segunda copia de \"{name}\" detenida — {copied} copiados. Puedes"
+        " continuar más tarde, retoma justo donde quedó.",
+        "en": "⏹ Second-copy sync for \"{name}\" stopped — {copied} copied. You can continue later,"
+        " it picks up right where it left off.",
+    },
+    "warn_mirror_low_space": {
+        "es": "La segunda copia no tiene espacio suficiente para todo lo pendiente — se copiará"
+        " lo que alcance, empezando por lo más reciente.",
+        "en": "The second copy doesn't have enough space for everything pending — it will copy"
+        " as much as fits, starting with the most recent.",
+    },
+    "warn_mirror_stopped_with_error": {
+        "es": "La sincronización se detuvo antes de terminar ({error}). Puede ser que la unidad se"
+        " haya llenado o se haya desconectado — revisa y vuelve a tocar \"Sincronizar ahora\","
+        " retoma justo donde quedó.",
+        "en": "The sync stopped before finishing ({error}). The drive may have filled up or gotten"
+        " disconnected — check it and tap \"Sync now\" again, it picks up right where it left off.",
+    },
+    "log_mirror_sync_fatal": {
+        "es": "la segunda copia de \"{name}\" falló inesperadamente: {error}",
+        "en": "second copy for \"{name}\" failed unexpectedly: {error}",
+    },
+    "err_mirror_sync_fatal": {
+        "es": "No se pudo completar la sincronización de la segunda copia: {error}",
+        "en": "Couldn't complete the second-copy sync: {error}",
+    },
+
     "empty_profiles_main": {
         "es": 'Aún no hay perfiles. Ve a "⚙ Configuración" y arranca la banda.',
         "en": 'No profiles yet. Go to "⚙ Settings" and start the band.',

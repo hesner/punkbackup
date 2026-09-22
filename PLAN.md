@@ -1222,3 +1222,183 @@ patrón que sección 5.13).
   silencio — corregido y probado ANTES de empezar esta funcionalidad,
   porque el mismo patrón de error aplica igual de fuerte a la segunda
   copia.
+
+### 13.9 Implementado (2026-09-21) — estado real
+
+Construido en la rama `feature/second-usb-mirror`: `server/mirror.py`
+(motor de sincronización), campos/métodos nuevos en `server/profiles.py`
+y `server/manifest_db.py`, la sub-sección nueva en `ProfileManageRow`
+(`gui/main_window.py`), ~35 claves nuevas en `gui/i18n.py`. 56/56 pruebas
+pasando (`tests/test_mirror.py`, `tests/test_profiles.py`).
+
+**Bug real encontrado durante la prueba en vivo con datos de producción**
+(pregunta directa del usuario: "¿el programa libera la USB o Windows no
+me dejará sacarla?"): mientras la sincronización corre, el programa
+mantiene abierta una conexión a la base de datos dentro de la USB
+secundaria — Windows correctamente bloquea la expulsión seguro mientras
+tanto. Pero si se saca la USB a la fuerza (sin expulsar) a mitad de
+copiar un archivo, la excepción podía escaparse del hilo en segundo plano
+sin ningún manejo, dejando el botón trabado en "Sincronizando..." para
+siempre, sin mensaje de error — mismo patrón de falla silenciosa ya
+corregido varias veces esta semana (ver AGENTS.md lección 11).
+**Corregido**: `sync_mirror()` ahora nunca lanza una excepción sin
+controlar — cualquier falla (disco lleno, unidad desconectada, cualquier
+otra cosa inesperada) vuelve como un campo del resultado
+(`stopped_with_error`, `fatal_error`), con limpieza segura en cada paso
+(incluyendo que el propio intento de borrar un archivo parcial pueda
+fallar si la unidad ya no está). Nueva prueba:
+`test_drive_disconnected_mid_copy_reports_error_not_a_crash`.
+
+**Segundo bug real encontrado, esta vez en vivo (captura de pantalla del
+usuario, 2026-09-21)**: la primera sincronización real se hizo contra una
+USB de prueba de solo 4 GB (mucho más chica que los ~16 GB reales de la
+biblioteca) — validó sin querer el escenario de "espacio insuficiente"
+del punto 13.4: copió 128 archivos (2.25 GB) priorizando lo más
+reciente, la verificación por hash atrapó 7 copias corruptas cerca del
+límite de espacio (justo lo que existe para prevenir), y se detuvo
+limpio. Pero mostrar el aviso de "poco espacio" Y el de "se detuvo con
+error" **uno después del otro** (ambas condiciones dieron verdadero a la
+vez) apiló dos diálogos modales seguidos, y eso disparó un bug real y
+preexistente en `gui/dialogs.py` (`_PunkDialog`, usado por TODOS los
+diálogos de la app, no solo los nuevos): el lambda del bind de `<Escape>`
+exigía el objeto de evento como argumento obligatorio
+(`lambda _e: self._cancel()`), y algo en la secuencia de apilar dos
+diálogos lo invocó sin argumento — `TypeError: ...<lambda>() missing 1
+required positional argument: '_e'`. **Corregido en dos frentes**: (1)
+el lambda ahora tiene `_e=None` por defecto (mismo patrón defensivo que
+ya usaban `_confirm`/`_cancel` en `ask_input`, aplicado aquí también,
+beneficia a TODA la app, no solo a la segunda copia); (2)
+`_on_mirror_sync_done` ahora usa `elif` en vez de dos `if` separados, así
+nunca apila dos diálogos para el mismo evento de sincronización — mejor
+UX de todas formas, no solo evita el bug. 56/56 pruebas pasando después
+del arreglo.
+
+**Hueco de observabilidad encontrado en la misma sesión de pruebas**: el
+mensaje de error real de `stopped_with_error` solo se mostraba en el
+diálogo emergente (transitorio, fácil de perder) — no quedaba guardado
+en el log de actividad. Esto llevó a una conclusión apresurada
+("se llenó la USB") sin verificar el texto real del error contra el
+espacio libre real (que resultó ser 900 MB, no cero) — un recordatorio de
+seguir la práctica ya establecida del proyecto de verificar con evidencia
+real antes de explicarle algo al usuario. **Corregido**: el mensaje real
+del error ahora también se escribe en el log de actividad
+(`_on_mirror_sync_done`), no solo en el diálogo.
+
+**Botón "Detener sincronización" (pedido explícito del usuario,
+2026-09-21)** — para poder sacar la USB secundaria sin esperar a que
+termine una sincronización larga. Mismo patrón que el botón principal
+"Iniciar/Detener backup": un solo botón que cambia de función según el
+estado (`_toggle_server`/`_sync_profile_mirror`), no un botón aparte.
+
+- `server/mirror.py`: `sync_mirror()` gana un parámetro
+  `cancel_event: Optional[threading.Event]`, revisado solo **entre**
+  archivos (nunca a mitad de copiar o verificar uno) — así lo que ya se
+  copió y verificó queda válido, y la USB queda segura para expulsar
+  apenas termina de detenerse. Nuevo campo `MirrorSyncResult.cancelled`
+  (no es un error, es un resultado normal pedido por el usuario). Nueva
+  prueba: `test_cancelling_mid_sync_stops_cleanly_and_resumes_later`
+  (cancela a mitad, confirma que solo lo copiado hasta ahí quedó
+  registrado, y que una sincronización posterior retoma el resto).
+- `gui/main_window.py`: `_sync_profile_mirror` ahora es un toggle — si ya
+  hay una sincronización corriendo para ese perfil (rastreado en
+  `self._mirror_cancel_events`, un `threading.Event` por perfil), el
+  mismo botón la cancela en vez de iniciar una nueva.
+  `ProfileManageRow.set_syncing()` cambia el texto/color del botón
+  ("🔄 Sincronizar ahora" ↔ "⏹ Detener") en vez de desactivarlo — tiene
+  que seguir siendo clickeable para poder cancelar. El botón "Quitar" sí
+  se desactiva mientras sincroniza (quitar la configuración a mitad de
+  una sincronización activa no tiene sentido).
+- Verificado con una prueba de humo real de los widgets (no solo que
+  compila): el botón muestra "⏹ Detener", sigue clickeable, y un cambio
+  de idioma a mitad de sincronización no lo revierte a "Sincronizar".
+  57/57 pruebas pasando.
+
+**Espacio usado/disponible de la segunda copia (pedido del usuario,
+2026-09-21) — HECHO**: `get_mirror_status()` ahora también devuelve
+`free_bytes`/`total_bytes` (vía `shutil.disk_usage()`, mismo dato que ya
+usaba `sync_mirror()` para la alerta de espacio insuficiente, ahora
+también expuesto para mostrar). El estado normal de la tarjeta del perfil
+ahora muestra "{N} archivos copiados · {libres} libres de {total}",
+mismo formato que ya usa la carpeta principal (`free_of_total`). Prueba
+actualizada. **Pendiente, más menor**: mostrar ese mismo dato TAMBIÉN
+dentro del texto "Sincronizando... X/Y archivos" mientras corre (hoy solo
+se ve en el estado de reposo/conectado, no durante la sincronización
+activa) — agregar `free`/`total_space` a `mirror_syncing_progress`.
+
+**Contraste de botones (pedido del usuario, 2026-09-21, con captura de
+pantalla) — HECHO**: varios botones con fondo rosa (`ACCENT`) o rojo
+(`RED`) — "Elegir carpeta...", "Eliminar", "+ Agregar perfil",
+"Sincronizar ahora"/"⏹ Detener" — nunca definían `text_color` en su
+construcción, cayendo en el color de texto por defecto de CustomTkinter,
+con mal contraste sobre esos fondos brillantes. La app YA tenía la
+solución correcta en otros botones del mismo archivo (`ACCENT_INK =
+"#1a0308"` para fondo rosa, `TEXT_MAIN` para fondo rojo — el botón
+principal "Iniciar/Detener backup" ya lo hacía bien) — simplemente nunca
+se aplicó a estos otros botones. Corregidos los 6 casos encontrados
+(`btn_choose_dest`, `btn_delete`, `btn_sync_mirror` en sus dos estados,
+`add_profile_btn`). Verificado que `.configure()` sin `text_color` no
+resetea el que ya estaba puesto (comprobado con un script directo contra
+CustomTkinter) — así que los botones que sí lo tenían desde su
+construcción (`save_btn`, navegación) no necesitaban tocarse.
+
+**Contador de progreso reiniciaba en "1" en cada corrida nueva (pedido del
+usuario, 2026-09-21) — HECHO**: con 128 archivos ya copiados y
+verificados, la siguiente corrida mostraba "1/6885" — técnicamente
+correcto (1 de los que faltan), pero se veía exactamente como si hubiera
+perdido los 128 anteriores. `progress_callback` ahora reporta un conteo
+**acumulado** contra el total real de la segunda copia
+(`baseline + i` de `baseline + len(pending)`, donde `baseline` es cuántos
+ya tenía el espejo antes de esta corrida) — con 128 ya copiados y 1
+pendiente, ahora muestra "129/129", nunca "1/1". Nueva prueba:
+`test_progress_is_cumulative_not_reset_to_one_on_a_resumed_sync`. 58/58
+pruebas pasando.
+
+**Espacio libre/total también durante la sincronización activa (último
+pendiente, cerrado 2026-09-21)**: el estado de reposo ya mostraba
+"{free} libres de {total}" desde el arreglo anterior, pero el texto
+"Sincronizando... X/Y archivos" en vivo todavía no lo mostraba. Cerrado:
+`_on_mirror_progress` en `gui/main_window.py` ahora calcula
+`shutil.disk_usage(profile.mirror_dir)` en cada actualización de
+progreso (barato, sin efectos secundarios) y se lo pasa a
+`set_sync_progress`, que arma el texto completo
+"Sincronizando... X/Y archivos · {free} libres de {total}". Con esto
+queda completo el pedido original del usuario sobre visibilidad de
+espacio en la segunda copia — tanto en reposo como mientras corre.
+
+## 14. Estado final de la implementación de la segunda copia (2026-09-21)
+
+Diseño (sección 13) implementado por completo, probado (pytest +
+pruebas de humo de widgets + prueba en vivo contra ~7,200 archivos
+reales de producción) y con todos los bugs reales encontrados durante
+las pruebas ya corregidos:
+
+- Motor de sincronización (`server/mirror.py`): copia newest-first,
+  verifica por hash, propia base de datos por segunda copia, nunca
+  lanza una excepción sin controlar, botón de cancelar (`cancel_event`),
+  progreso acumulado (no se reinicia en "1" al retomar).
+- GUI (`gui/main_window.py`, `gui/i18n.py`): sub-sección en la tarjeta
+  de cada perfil con los 4 estados de diseño, botón que alterna
+  Sincronizar/Detener, espacio libre/total visible tanto en reposo como
+  durante la sincronización, contraste de texto corregido en todos los
+  botones con fondo de color (rosa/rojo) que lo tenían mal desde antes
+  de esta funcionalidad.
+- Bug preexistente en `gui/dialogs.py` (`_PunkDialog`) corregido —
+  beneficia a toda la app, no solo a esta funcionalidad.
+- 58/58 pruebas automatizadas pasando. Validado en producción real con
+  el perfil "iphone de Hes" (D: → E:, USB de prueba de 4 GB que reveló
+  el escenario de espacio insuficiente sin que se hiciera a propósito).
+
+**Pendiente real, no técnico**: probar con una segunda USB de mayor
+capacidad para completar una sincronización 100% completa de los ~16 GB
+reales (la USB de 4 GB usada en las pruebas nunca alcanzó a terminar),
+y los escenarios 4/6/7 del plan de pruebas manuales (desconexión física
+real, validación de "misma carpeta", cambio de rol A↔B) que quedaron
+pendientes de ejecutar en vivo por priorizar los bugs encontrados en el
+camino.
+
+**Pendiente de terminar en la prueba en vivo** (ver el plan de pruebas
+manuales que se está siguiendo en conversación): sincronización inicial
+completa de ~7,228 archivos reales hacia una segunda USB (en curso),
+segunda sincronización sin cambios, desconexión/reconexión real,
+validación de "misma carpeta", y la prueba de cambio de rol A↔B con datos
+reales.

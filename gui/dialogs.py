@@ -66,7 +66,14 @@ class _PunkDialog(ctk.CTkToplevel):
             pass
 
         self.protocol("WM_DELETE_WINDOW", self._cancel)
-        self.bind("<Escape>", lambda _e: self._cancel())
+        # `_e=None` (not just `_e`): a real Escape keypress passes the event
+        # object, but this can also fire with zero arguments -- confirmed on
+        # a real device (2026-09-21) when two of these dialogs got shown
+        # back to back (see gui/main_window.py's mirror-sync warnings),
+        # crashing with "<lambda>() missing 1 required positional argument:
+        # '_e'". Same defensive default ask_input()'s _confirm/_cancel
+        # already use below, applied here too.
+        self.bind("<Escape>", lambda _e=None: self._cancel())
 
         card = ctk.CTkFrame(self, fg_color=BG)
         card.pack(fill="both", expand=True, padx=20, pady=18)

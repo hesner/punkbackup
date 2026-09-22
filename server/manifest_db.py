@@ -128,6 +128,27 @@ class ManifestDB:
             )
             self._conn.commit()
 
+    def all_sha256s(self) -> set[str]:
+        """Every content hash this destination already has. Used by
+        server/mirror.py to cheaply tell, in one query, which rows of the
+        PRIMARY destination still need to be copied to a second-copy
+        destination — reuses idx_backed_up_files_sha256."""
+        with self._lock:
+            cur = self._conn.execute("SELECT sha256 FROM backed_up_files")
+            return {row[0] for row in cur.fetchall()}
+
+    def iter_files_by_recency(self) -> list[sqlite3.Row]:
+        """All rows, newest photo first (falling back to received_at for
+        the few rows with no known taken_at) — same ordering the iPhone's
+        own block-sweep already uses in practice (see PLAN.md section 5.1),
+        applied here to server/mirror.py's copy order so an interrupted or
+        space-constrained sync protects the most recent files first."""
+        with self._lock:
+            cur = self._conn.execute(
+                "SELECT * FROM backed_up_files ORDER BY COALESCE(taken_at, received_at) DESC"
+            )
+            return cur.fetchall()
+
     # -- runs -------------------------------------------------------------
 
     def start_run(self) -> str:

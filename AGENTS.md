@@ -541,6 +541,37 @@ reintroduces these problems.
     (`pyinstaller --onedir ...`) and reinstall
     (`installer/output/PunkBackupSetup.exe`) first.**
 
+20. **A "cheap pre-check" endpoint (`/check`) is only as good as the exact
+    string it's asked to match — if a LATER step can change that string
+    server-side, the cheap check needs to know about it too, or it lies
+    forever.** Found live (2026-09-22): `/check` compares the Shortcut's
+    as-sent filename against a path on disk, but the file's actual
+    extension often gets appended server-side during `/upload`'s
+    content-sniffing (see point 9/PLAN.md §5.4) — a fact `/check` never
+    learns, since it's deliberately byte-less. Confirmed directly: `POST
+    /check filename=ScreenRecording_09-14-2026` returned `{"missing":
+    true}` while `filename=ScreenRecording_09-14-2026.mov` (same item,
+    extension included) returned `{}` — for an item like this (no
+    extension AND no `taken_at`), `/check` is WRONG about "missing"
+    forever, on every single future sweep, even though the file is
+    genuinely backed up. For a video in point 12's Encode Media category,
+    that means paying the re-encode cost every sweep, not once.
+    **Fixed by recording ground truth, not by guessing**:
+    `backed_up_files` gained an `original_filename` column (the exact
+    as-sent name, captured once, the first time an item is genuinely
+    matched/recorded) that `check_exists()` falls back to when the sent
+    name has no extension. The naive alternative — matching "any
+    extension, same stem" — was considered and rejected: these
+    no-`taken_at` items already have zero other distinguishing metadata,
+    so two genuinely different items that happen to share a base name
+    (plausible for unsuffixed screen recordings) would silently merge,
+    and the second one would never get backed up. An exact match against
+    a name that was verifiably sent and processed before has no such
+    risk. Rows that predate this column self-heal the next time they're
+    re-encountered (one more unavoidable round-trip, then never again) —
+    no migration script needed, same self-healing philosophy as the
+    0-byte retry (point 12) and the reap logic (point 16).
+
 ## 6. Testing approach that actually caught bugs
 
 - Unit tests against `BackupEngine`/`ManifestDB` directly (no HTTP) for the
@@ -572,7 +603,7 @@ reintroduces these problems.
 
 ## 7. What "done" looks like
 
-- `pytest tests -q` passes (65 tests as of this writing, covering engine
+- `pytest tests -q` passes (67 tests as of this writing, covering engine
   rules, profile isolation/pause/delete, destination-switch correctness,
   concurrent uploads, the `/check` contract, the 0-byte-upload rejection,
   its self-healing retry error-count behavior, a stale-run reap on

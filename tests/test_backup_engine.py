@@ -110,6 +110,50 @@ def test_check_exists_reflects_actual_destination_contents(tmp_path):
     assert other_engine.check_exists("IMG_0006.HEIC", "2026-07-01T00:00:00") is False
 
 
+def test_check_exists_recognizes_a_name_the_server_had_to_extend(tmp_path):
+    """The real bug (2026-09-22): a Shortcut item with no extension in its
+    name gets one appended server-side (from content-sniffing, see
+    _detect_extension), but that never gets reflected back to what the
+    Shortcut sends on a later /check for the SAME item — so the plain
+    path-existence check can never match again, and the Shortcut keeps
+    re-uploading (and, for a problematic video, keeps paying the cost of
+    Encode Media) forever even though the file is already safely backed
+    up. Confirmed live against ScreenRecording_09-14-2026.mov."""
+    engine = make_engine(tmp_path)
+    # Real QuickTime .mov signature — content-sniffing detects ".mov".
+    fake_mov = b"\x00\x00\x00\x14ftypqt  \x00\x00\x00\x00" + b"\x00" * 64
+    assert engine.check_exists("ScreenRecording_01-01-2026", None) is False
+
+    engine.process_upload("ScreenRecording_01-01-2026", io.BytesIO(fake_mov), None, None)
+    assert engine.check_exists("ScreenRecording_01-01-2026", None) is True
+    # The literal name WITH the extension the server chose must still work too.
+    assert engine.check_exists("ScreenRecording_01-01-2026.mov", None) is True
+
+
+def test_check_exists_extensionless_lookup_self_heals_on_duplicate_skip(tmp_path):
+    """A file already backed up BEFORE this fix existed (no original_filename
+    recorded yet) must self-heal the next time the same bare name is
+    uploaded again and correctly skipped as a duplicate — not require a
+    migration script."""
+    engine = make_engine(tmp_path)
+    fake_mov = b"\x00\x00\x00\x14ftypqt  \x00\x00\x00\x00" + b"\x00" * 64
+    first = engine.process_upload("ScreenRecording_02-02-2026", io.BytesIO(fake_mov), None, None)
+
+    # Simulate a pre-fix row: wipe the original_filename this upload just set.
+    dest_path = first["dest_path"]
+    engine.db._conn.execute(
+        "UPDATE backed_up_files SET original_filename = NULL WHERE dest_path = ?", (dest_path,)
+    )
+    engine.db._conn.commit()
+    assert engine.check_exists("ScreenRecording_02-02-2026", None) is False
+
+    # Re-upload of the exact same content: skipped as duplicate, and the
+    # skip path must backfill original_filename so /check works from now on.
+    result = engine.process_upload("ScreenRecording_02-02-2026", io.BytesIO(fake_mov), None, None)
+    assert result["status"] == "skipped_duplicate"
+    assert engine.check_exists("ScreenRecording_02-02-2026", None) is True
+
+
 def test_run_tracking_counts_new_skipped_and_conflict(tmp_path):
     engine = make_engine(tmp_path)
     run_id = engine.db.start_run()

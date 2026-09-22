@@ -548,6 +548,72 @@ lección ya existía implícitamente en el proyecto pero vale la pena
 tenerla explícita: **antes de dar un fix por probado en vivo, confirmar
 la fecha de build del `.exe` instalado contra la fecha del commit.**
 
+### 5.4.2 `/check` no reconocía como respaldados los ítems sin extensión — corregido de raíz (2026-09-22, v1.7.5)
+
+Pregunta del usuario, tras confirmar el fix de §5.4.1: **¿tendría sentido
+revisar si un archivo ya fue copiado ANTES de hacer conversiones/análisis
+de extensión, para agilizar el skip?** — es exactamente lo que `/check`
+ya debería hacer (existe justo para eso, un chequeo barato sin bytes
+antes de subir nada), así que investigar por qué no lo estaba logrando
+para este archivo llevó a una causa raíz real y distinta de la de
+§5.4.1.
+
+**Confirmado con evidencia real**: `POST /check` con
+`filename=ScreenRecording_09-14-2026` (sin extensión, tal cual lo manda
+el Atajo) devolvía `{"missing": true}` — pero el mismo `/check` con
+`filename=ScreenRecording_09-14-2026.mov` (con extensión) devolvía `{}`
+(ya existe). **Causa**: `check_exists()` solo compara la ruta exacta
+`año/mes/<nombre-tal-cual-lo-mandó-el-Atajo>`; la extensión de este
+archivo se detecta y se agrega **únicamente del lado del servidor**,
+durante `/upload` (nunca durante `/check`, que es deliberadamente sin
+bytes) — así que la ruta que `check_exists()` busca nunca coincide con
+la que realmente existe en disco, para siempre, para cualquier ítem sin
+extensión. Efecto práctico: aunque el archivo ya esté respaldado, el
+Atajo lo sigue intentando subir en TODOS los barridos futuros — y para
+un video problemático de la categoría de §5.4/§5.4.1, eso significa
+seguir pagando el costo de `Encode Media` cada vez, sin fin, aunque el
+servidor ya lo reconozca y lo descarte correctamente después de recibirlo.
+
+**Arreglo descartado por riesgo real**: la solución obvia (buscar
+"cualquier archivo con ese nombre, sin importar la extensión") se
+descartó — estos ítems ya no tienen NINGÚN otro dato que los distinga
+(sin `taken_at`, ver §5.4), así que dos elementos genuinamente distintos
+que compartieran el mismo nombre base (posible para grabaciones de
+pantalla sin sufijo de hora) se fusionarían en uno solo — el segundo
+jamás se subiría, pérdida silenciosa de un archivo real.
+
+**Arreglo implementado (seguro)**: `backed_up_files` gana una columna
+`original_filename` (migración automática vía `ALTER TABLE` en
+`ManifestDB.__init__`, para bases de datos ya existentes) que guarda el
+nombre EXACTO tal como lo mandó el Atajo la primera vez que este ítem se
+subió/reconoció de verdad — nunca una suposición. `check_exists()`
+consulta primero la ruta exacta (como antes) y, si el nombre no trae
+extensión, cae a un segundo chequeo por `original_filename` exacto
+(`ManifestDB.find_by_original_filename()`). Los caminos de "ya
+respaldado" (hash idéntico, y el de §5.4.1 de video re-encodeado)
+además hacen `backfill_original_filename()` sobre la fila existente —
+así un archivo que ya estaba respaldado ANTES de este fix (sin la
+columna poblada) se autocorrige la próxima vez que se lo vuelva a
+encontrar, sin necesitar ningún script de migración de datos.
+
+**Validado en vivo (v1.7.5)**: `ScreenRecording_09-14-2026` pasó una
+última vez por el ciclo de 0-byte/`Encode Media` (esperado — su fila aún
+no tenía `original_filename`), salió como `already backed up (re-encoded
+copy...)`, y el backfill se aplicó — confirmado con
+`SELECT filename, original_filename ...` mostrando
+`('ScreenRecording_09-14-2026.mov', 'ScreenRecording_09-14-2026')`, y
+`/check` con el nombre sin extensión pasó de `{"missing": true}` a `{}`
+en la siguiente consulta. El mismo backfill se confirmó también para
+varias fotos normales (`IMG_6619.jpg`, etc.) que el Atajo también manda
+sin extensión — su "skip" en sí no se vuelve más rápido (nunca pasaban
+por `Encode Media`, eso es solo de video), pero desde el próximo barrido
+deberían dejar de intentarse subir por completo.
+
+2 tests nuevos en `tests/test_backup_engine.py` (67/67 pasando):
+reconocimiento vía `original_filename` para un ítem sin extensión, y
+auto-sanación del backfill para una fila simulada como "anterior al fix"
+(sin migración de datos real, solo NULL-eada a propósito en la prueba).
+
 ### 5.5 Bug: el aviso de inactividad se disparaba solo con abrir la app — RESUELTO
 
 Tras agregar el aviso de "backup inactivo 5+ minutos" (§ este mismo doc,

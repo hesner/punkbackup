@@ -31,7 +31,8 @@ CREATE TABLE IF NOT EXISTS backed_up_files (
     taken_at TEXT,
     received_at TEXT NOT NULL,
     dest_path TEXT NOT NULL UNIQUE,
-    size_bytes INTEGER NOT NULL
+    size_bytes INTEGER NOT NULL,
+    original_filename TEXT
 );
 CREATE INDEX IF NOT EXISTS idx_backed_up_files_dest_path ON backed_up_files(dest_path);
 CREATE INDEX IF NOT EXISTS idx_backed_up_files_sha256 ON backed_up_files(sha256);
@@ -71,6 +72,18 @@ class ManifestDB:
         self._conn.row_factory = sqlite3.Row
         with self._lock:
             self._conn.executescript(SCHEMA)
+            # Migration for DBs created before original_filename existed
+            # (see find_by_original_filename()'s docstring) — CREATE TABLE IF
+            # NOT EXISTS above never adds columns to an already-existing
+            # table, so older index.sqlite files need this ALTER TABLE once.
+            existing_cols = {row[1] for row in self._conn.execute("PRAGMA table_info(backed_up_files)")}
+            if "original_filename" not in existing_cols:
+                self._conn.execute("ALTER TABLE backed_up_files ADD COLUMN original_filename TEXT")
+            self._conn.execute(
+                "CREATE INDEX IF NOT EXISTS idx_backed_up_files_original_filename "
+                "ON backed_up_files(original_filename)"
+            )
+            self._conn.commit()
             # A run's finished_at can only ever be set by /run/finish, called
             # from the SAME app process that handed out its run_id via
             # /run/start (RunID is a Shortcut-local variable, never persisted
@@ -126,6 +139,40 @@ class ManifestDB:
             )
             return cur.fetchone()
 
+    def find_by_original_filename(self, original_filename: str) -> Optional[sqlite3.Row]:
+        """Lookup used by BackupEngine.check_exists() for items whose name,
+        as the Shortcut actually sends it, has no extension — see
+        PLAN.md section 5.4.2. The plain path-existence check in
+        check_exists() can never match these after their first successful
+        upload, because the extension only gets appended server-side
+        (during finalize_upload's content-sniffing), never reflected back
+        to what the Shortcut sends on a later /check call for the same
+        item. This is an EXACT match against a name that was actually,
+        really sent and processed before — not a guess — so it stays safe
+        even for items with no other distinguishing metadata (no
+        taken_at)."""
+        with self._lock:
+            cur = self._conn.execute(
+                "SELECT * FROM backed_up_files WHERE original_filename = ? LIMIT 1", (original_filename,)
+            )
+            return cur.fetchone()
+
+    def backfill_original_filename(self, dest_path: str, original_filename: str) -> None:
+        """Opportunistically fills in original_filename on a row that
+        predates this column, or that was first recorded before the
+        Shortcut's as-sent name was tracked — called from finalize_upload's
+        skip paths (duplicate / re-encoded-duplicate) so a file that keeps
+        getting re-uploaded because /check couldn't recognize its bare name
+        self-heals the very next time it's encountered, without needing a
+        one-off migration script."""
+        with self._lock:
+            self._conn.execute(
+                "UPDATE backed_up_files SET original_filename = ? "
+                "WHERE dest_path = ? AND (original_filename IS NULL OR original_filename != ?)",
+                (original_filename, dest_path, original_filename),
+            )
+            self._conn.commit()
+
     def record_file(
         self,
         filename: str,
@@ -133,13 +180,14 @@ class ManifestDB:
         taken_at: Optional[str],
         dest_path: str,
         size_bytes: int,
+        original_filename: Optional[str] = None,
     ) -> None:
         with self._lock:
             self._conn.execute(
                 """INSERT INTO backed_up_files
-                   (filename, sha256, taken_at, received_at, dest_path, size_bytes)
-                   VALUES (?, ?, ?, ?, ?, ?)""",
-                (filename, sha256, taken_at, _now(), dest_path, size_bytes),
+                   (filename, sha256, taken_at, received_at, dest_path, size_bytes, original_filename)
+                   VALUES (?, ?, ?, ?, ?, ?, ?)""",
+                (filename, sha256, taken_at, _now(), dest_path, size_bytes, original_filename or filename),
             )
             self._conn.commit()
 

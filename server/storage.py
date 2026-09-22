@@ -131,7 +131,19 @@ class BackupEngine:
         is ever silently overwritten even if this cheap check is wrong."""
         safe_name = Path(filename).name
         candidate_path = self._year_month_dir(taken_at) / safe_name
-        return candidate_path.exists()
+        if candidate_path.exists():
+            return True
+        if not Path(safe_name).suffix:
+            # The Shortcut sent no extension — if the server detected one
+            # from content on a PRIOR /upload of this exact name (see
+            # finalize_upload's _detect_extension), the path above can
+            # never match again since the extension is never reflected
+            # back to what the Shortcut sends. Fall back to the exact
+            # original name this item resolved to last time it was really
+            # uploaded — see manifest_db.find_by_original_filename's
+            # docstring and PLAN.md section 5.4.2.
+            return self.db.find_by_original_filename(safe_name) is not None
+        return False
 
     def stage_bytes(self, src_file: BinaryIO) -> tuple[Path, str, int]:
         """Phase 1 of receiving an upload: stream `src_file` (anything with
@@ -228,6 +240,8 @@ class BackupEngine:
         try:
             if candidate_path.exists():
                 if self._hash_existing(candidate_path) == sha256:
+                    if original_name != safe_name:
+                        self.db.backfill_original_filename(str(candidate_path), original_name)
                     self._resolve_error_both(run_id, safe_name, original_name)
                     self.db.bump_run(run_id, "files_skipped")
                     logger.info("= %s already backed up, skipped", safe_name)
@@ -244,6 +258,8 @@ class BackupEngine:
                     # "different content, keep both".
                     existing_sig = content_signature(candidate_path)
                     if existing_sig is not None and existing_sig == content_signature(staging_path):
+                        if original_name != safe_name:
+                            self.db.backfill_original_filename(str(candidate_path), original_name)
                         self._resolve_error_both(run_id, safe_name, original_name)
                         self.db.bump_run(run_id, "files_skipped")
                         logger.info("= %s already backed up (re-encoded copy, content unchanged), skipped", safe_name)
@@ -251,7 +267,7 @@ class BackupEngine:
 
                 final_path = self._next_conflict_name(target_dir, candidate_path)
                 shutil.move(str(staging_path), str(final_path))
-                self.db.record_file(safe_name, sha256, taken_at, str(final_path), size)
+                self.db.record_file(safe_name, sha256, taken_at, str(final_path), size, original_name)
                 self._resolve_error_both(run_id, safe_name, original_name)
                 self.db.bump_run(run_id, "files_conflict")
                 self._maybe_fix_video_creation_time(final_path, taken_at)
@@ -259,7 +275,7 @@ class BackupEngine:
                 return {"status": "conflict_kept_both", "dest_path": str(final_path)}
 
             shutil.move(str(staging_path), str(candidate_path))
-            self.db.record_file(safe_name, sha256, taken_at, str(candidate_path), size)
+            self.db.record_file(safe_name, sha256, taken_at, str(candidate_path), size, original_name)
             self._resolve_error_both(run_id, safe_name, original_name)
             self.db.bump_run(run_id, "files_new")
             self._maybe_fix_video_creation_time(candidate_path, taken_at)

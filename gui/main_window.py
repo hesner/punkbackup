@@ -1201,7 +1201,12 @@ class MainWindow(ctk.CTk):
         primary_root = Path(current.destination_dir)
         mirror_root = Path(current.mirror_dir)
         try:
-            primary_db = ManifestDB(primary_root)  # cheap: reap only matters for real runs, harmless here
+            # reap_dangling_runs=False: this is a SECOND ManifestDB on the
+            # same primary destination the running server may already have
+            # one open for -- without this, opening it here could reap a
+            # real, still-in-progress run from the phone right out from
+            # under it (confirmed live, 2026-09-22 -- see manifest_db.py).
+            primary_db = ManifestDB(primary_root, reap_dangling_runs=False)
         except OSError as exc:
             show_error(self, self.lang, self.t("dlg_title_error"), self.t("err_mirror_sync_fatal", error=str(exc)))
             return

@@ -61,7 +61,7 @@ class ManifestDB:
     correctness simplicity.
     """
 
-    def __init__(self, dest_root: Path):
+    def __init__(self, dest_root: Path, reap_dangling_runs: bool = True):
         self.dest_root = Path(dest_root)
         self.index_dir = self.dest_root / ".iphone_backup_index"
         self.index_dir.mkdir(parents=True, exist_ok=True)
@@ -81,9 +81,24 @@ class ManifestDB:
             # reports "running" indefinitely for a run nobody is actually
             # running, which then falsely trips the GUI's idle-backup notice
             # a few minutes after simply opening the app.
+            #
+            # reap_dangling_runs=False exists specifically for a SECOND
+            # ManifestDB opened on the SAME dest_root within the SAME still-
+            # running process (e.g. server/mirror.py reading the primary
+            # destination's index to build its copy list) -- the "previous
+            # process lifetime" assumption above is only true for the FIRST
+            # ManifestDB opened on a given dest_root per process. A second
+            # one opened while a real /run/start from the phone is still
+            # genuinely in progress would otherwise reap that live run out
+            # from under it (confirmed live, 2026-09-22: the GUI's mirror-
+            # sync button did exactly this to a real, currently uploading
+            # backup, making it look stalled even though files kept
+            # landing). See AGENTS.md's "ad-hoc read-only status checks"
+            # lesson -- this is the same category of bug, now also possible
+            # from application code, not just a one-off script.
             dangling = self._conn.execute(
                 "SELECT id FROM runs WHERE finished_at IS NULL"
-            ).fetchall()
+            ).fetchall() if reap_dangling_runs else []
             if dangling:
                 self._conn.execute(
                     "UPDATE runs SET finished_at = ? WHERE finished_at IS NULL", (_now(),)

@@ -1456,3 +1456,49 @@ así que no se implementó. La conclusión honesta es que el cuello de
 botella real es la propia unidad USB (pequeña, casi llena), no el
 algoritmo — una USB más grande y con más espacio libre es la mejora real,
 no un cambio de código.
+
+### 14.2 Bug real y serio: sincronizar la segunda copia podía "cortar" en
+### silencio un respaldo real que seguía en curso (2026-09-22)
+
+Encontrado en producción real, reportado por el usuario ("acabo de
+iniciar un nuevo backup desde el iphone pero no veo que avance"),
+investigado con evidencia real (log de actividad + consulta solo-lectura
+a la base de datos), no supuesto.
+
+**Qué pasó**: una corrida real (`run_id 45a3b003...`) empezó a las
+08:42:24 desde el iPhone. Once segundos después, el botón de
+sincronizar la segunda copia abrió su propia conexión
+`ManifestDB(primary_root)` para leer el índice de `D:` — y esa apertura
+disparó el mecanismo de "reap" (ver sección 6/AGENTS.md punto 10),
+cerrando `finished_at` de esa corrida como si fuera una corrida
+abandonada de una sesión anterior. **La causa raíz de fondo**: el
+supuesto original del reap ("si `finished_at` es NULL, es porque el
+proceso anterior se cerró a medias — `RunID` nunca sobrevive a un
+proceso") solo es cierto para la PRIMERA `ManifestDB` que se abre sobre
+un `dest_root` en un proceso — no contempla una SEGUNDA apertura, del
+mismo proceso todavía corriendo, mientras una corrida real sigue en
+curso de verdad. Justo el escenario que la funcionalidad de segunda
+copia introdujo por primera vez (antes de esto, solo existía una
+`ManifestDB` cacheada por perfil, nunca una segunda).
+
+**Consecuencia real verificada**: los archivos SÍ siguieron subiendo
+correctamente después del reap erróneo (`bump_run`/`record_file` no
+revisan `finished_at`, confirmado con una consulta real: llegaron
+archivos nuevos hasta las 08:43:43) — pero la GUI dejó de mostrar la
+corrida como "en curso", haciendo que pareciera detenida aunque seguía
+funcionando por debajo. Sin pérdida de datos ni de archivos, pero sí un
+hueco real de confianza en lo que el usuario ve en pantalla.
+
+**Corregido**: `ManifestDB.__init__` gana un parámetro
+`reap_dangling_runs: bool = True` — `_sync_profile_mirror` en
+`gui/main_window.py` ahora abre su `ManifestDB(primary_root)` con
+`reap_dangling_runs=False`, ya que es exactamente el caso de "segunda
+apertura sobre un destino que el proceso ya puede estar usando
+activamente". Nueva prueba:
+`test_reap_dangling_runs_false_never_touches_a_genuinely_live_run` en
+`tests/test_backup_engine.py`. 59/59 pruebas pasando. Documentado como
+lección nueva en AGENTS.md punto 16, con una regla explícita para
+cualquier código futuro que abra una `ManifestDB` sobre un destino que
+el servidor ya pueda tener abierto: preguntar primero si una corrida
+real podría estar en curso, y si la respuesta es sí, usar
+`reap_dangling_runs=False`.

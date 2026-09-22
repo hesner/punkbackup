@@ -464,6 +464,35 @@ reintroduces these problems.
       as a technical one: **when an operation can resume, its progress
       display must never contradict "nothing was lost."**
 
+16. **`ManifestDB`'s dangling-run reap (see point 10, and AGENTS.md §6's
+    "ad-hoc read-only status checks" lesson) can fire on a run that is
+    genuinely, currently in progress — not just a leftover from a crashed
+    previous process — if a SECOND `ManifestDB` gets opened on the same
+    `dest_root` from within the SAME still-running app process.** Found
+    live (2026-09-22): `gui/main_window.py::_sync_profile_mirror` opens
+    its own `ManifestDB(primary_root)` to read the primary destination's
+    index for the copy list — while the phone's own `/run/start` had
+    genuinely just begun uploading, 11 seconds earlier, through the
+    server's own separately-cached engine (`server/app.py::_engine_for`).
+    The reap logic's core assumption ("a run still open must be from a
+    previous process lifetime, since `RunID` never survives past one
+    Shortcut execution") is only true for the FIRST `ManifestDB` opened on
+    a given `dest_root` per process — a second one, opened later in the
+    same process, has no way to tell "genuinely still running" apart from
+    "orphaned by a crash." The reap closed the live run's `finished_at`
+    early; the actual `/upload` calls kept landing files correctly
+    regardless (nothing in `bump_run`/`record_file` checks `finished_at`),
+    but the GUI's "still in progress" indicator vanished, making a real,
+    still-working backup look stalled. **Fixed**: `ManifestDB.__init__`
+    gained `reap_dangling_runs: bool = True` — pass `False` for any
+    ManifestDB opened purely to *read* a destination that another part of
+    the running app might already be actively writing to. Test:
+    `test_reap_dangling_runs_false_never_touches_a_genuinely_live_run`.
+    **When adding any new code path that opens a `ManifestDB` on a
+    destination folder the server might also have open, ask first: could
+    a real run be genuinely in progress right now? If yes, pass
+    `reap_dangling_runs=False`.**
+
 ## 6. Testing approach that actually caught bugs
 
 - Unit tests against `BackupEngine`/`ManifestDB` directly (no HTTP) for the
@@ -495,7 +524,7 @@ reintroduces these problems.
 
 ## 7. What "done" looks like
 
-- `pytest tests -q` passes (58 tests as of this writing, covering engine
+- `pytest tests -q` passes (59 tests as of this writing, covering engine
   rules, profile isolation/pause/delete, destination-switch correctness,
   concurrent uploads, the `/check` contract, the 0-byte-upload rejection,
   its self-healing retry error-count behavior, a stale-run reap on

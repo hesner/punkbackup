@@ -167,6 +167,31 @@ def test_reap_logs_a_warning_distinct_from_a_real_run_finish(tmp_path, caplog):
     assert any("previous session" in record.getMessage() for record in caplog.records)
 
 
+def test_reap_dangling_runs_false_never_touches_a_genuinely_live_run(tmp_path):
+    """Found live, 2026-09-22: server/mirror.py's sync needs to open a
+    SECOND ManifestDB on the SAME primary dest_root, from within the SAME
+    still-running app process, to read the primary index -- while a real
+    /run/start from the phone might genuinely still be in progress (NOT
+    left over from a previous process lifetime, the one case reaping is
+    meant to handle). Without reap_dangling_runs=False, that second open
+    reaped the live run right out from under the phone's own still-
+    uploading Shortcut, making the backup look stalled in the GUI even
+    though files kept landing on disk."""
+    dest = tmp_path / "dest"
+    dest.mkdir()
+    db1 = ManifestDB(dest)
+    run_id = db1.start_run()  # NOT closed -- simulates a genuinely in-progress run
+
+    db2 = ManifestDB(dest, reap_dangling_runs=False)  # e.g. the mirror sync's read-only-ish open
+    assert db2.get_status()["last_run"]["finished_at"] is None  # untouched
+
+    # The original run is still exactly as live as it was -- db1 (or a
+    # fresh default-True open, simulating the real app reopening later)
+    # still sees it as unfinished, not silently closed by db2.
+    assert db1.get_status()["last_run"]["id"] == run_id
+    assert db1.get_status()["last_run"]["finished_at"] is None
+
+
 def _fake_jpeg_bytes(exif_datetime_original: str | None = None) -> bytes:
     """A real, tiny, valid JPEG — optionally with a DateTimeOriginal EXIF
     tag — for testing the content-sniffing/EXIF-fallback paths without a

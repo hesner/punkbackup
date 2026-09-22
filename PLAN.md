@@ -1534,3 +1534,29 @@ Ambos verificados con una prueba de humo real (`MainWindow` real,
 `ProfileStore` real, sin mock) antes de darlos por buenos. Subida a
 **v1.7.2** (incluye también el arreglo del reap de la sección 14.2,
 nunca llegó a instalarse como v1.7.1 por separado).
+
+### 14.4 Orden de los mensajes al arrancar: "A darle" debe ser el último (2026-09-22)
+
+El usuario reportó (con una captura real) que el aviso de "!! Run ...
+was left running by a previous session..." aparecía DESPUÉS de "Servidor
+iniciado. A darle." — confirmado que es un caso legítimo (la corrida
+anterior de verdad nunca recibió `/run/finish`, no relacionado con el bug
+de la sección 14.2), pero el orden se veía raro: un mensaje que parece
+una advertencia apareciendo justo después de que todo ya decía estar
+listo. **Causa**: el reap se dispara de forma perezosa, la primera vez
+que se abre la `ManifestDB` de un perfil — que en la práctica pasaba en
+el primer tick del loop de chequeo de inactividad, DESPUÉS de que
+`_start_server()` ya había registrado "Iniciando backup..." y "Servidor
+iniciado".
+
+**Corregido**: `_start_server()` ahora toca la `ManifestDB` de cada
+perfil (llamando `get_status_for_profile`) de forma síncrona, justo
+después de `app_module.configure(...)` y ANTES de registrar cualquier
+mensaje de esta sesión — así, si hay algo que reapear de la sesión
+anterior, queda como lo último de la sesión vieja, no como lo primero
+(ni lo último) de la nueva. Orden final: `[reap si aplica]` →
+"Iniciando backup..." → "Servidor iniciado. A darle." — "A darle" queda
+garantizado como el último mensaje de un arranque normal. Verificado con
+una prueba de humo real (corrida abandonada real en el índice + llamada
+real a `_start_server()` + inspección del orden real de la cola de
+mensajes). 59/59 pruebas pasando.

@@ -909,6 +909,25 @@ class MainWindow(ctk.CTk):
             return
 
         app_module.configure(self.profile_store)
+
+        # Touch each profile's ManifestDB NOW, synchronously, before
+        # logging anything about this startup — this is what actually
+        # triggers the "Run ... was left running by a previous session"
+        # reap warning (it fires lazily, the first time a profile's index
+        # is opened). Left to happen on its own, it interleaved AFTER
+        # "Servidor iniciado. A darle." on the next idle-check tick,
+        # making a clean startup look like something had just gone wrong.
+        # Doing it here means that warning (if any) is always the LAST
+        # thing left over from the previous session, not the first thing
+        # after this one starts — "A darle" stays the true final line of
+        # a normal startup.
+        for profile in profiles:
+            if profile.destination_dir:
+                try:
+                    app_module.get_status_for_profile(profile)
+                except Exception:
+                    pass  # unreachable destination etc. — the idle-check loop already handles/reports this normally
+
         controller = ServerController(app_module.app, host="0.0.0.0", port=self.cfg.port)
 
         # A silent bind failure (port conflict, permission issue) used to

@@ -1502,3 +1502,35 @@ cualquier código futuro que abra una `ManifestDB` sobre un destino que
 el servidor ya pueda tener abierto: preguntar primero si una corrida
 real podría estar en curso, y si la respuesta es sí, usar
 `reap_dangling_runs=False`.
+
+### 14.3 Ruido real en el log para perfiles desactivados/sin configurar, y versión visible en la GUI (2026-09-22)
+
+Dos pedidos del usuario, ambos cerrados:
+
+**1. `_check_idle_backups()` (`gui/main_window.py`) revisaba TODOS los
+perfiles sin filtrar**, así que un perfil desactivado (ej. "iphone de
+Lau", pausado y sin carpeta destino) siempre lanzaba una excepción real
+(`get_status_for_profile` → 403/409) que se registraba como un
+traceback completo en el log — una vez por cada reinicio de la app (no
+en bucle, gracias al arreglo previo de "una vez por racha de error", pero
+igual ruido real para algo que es un estado completamente normal, no un
+error). **Corregido**: el loop ahora salta por completo cualquier perfil
+desactivado o sin carpeta destino configurada, sin llamar nunca a
+`get_status_for_profile` para esos casos — cero excepción, cero log.
+Verificado con una prueba de humo real (perfil desactivado + perfil sin
+configurar, cero líneas de error registradas).
+
+**2. No había forma de ver qué versión de la app estaba instalada.**
+Nuevo `server/version.py` (`APP_VERSION`, única fuente de verdad para el
+lado Python — el instalador de Inno Setup sigue con su propio
+`MyAppVersion` aparte, con un comentario cruzado en ambos archivos
+recordando mantenerlos sincronizados, ya que ISPP no puede leer el
+`.py` directamente). Se muestra en el título de la ventana
+("PunkBackup — v1.7.2") y en la esquina superior derecha de la tarjeta
+de idioma en "⚙ Configuración" ("PunkBackup v1.7.2") — visible sin tener
+que buscarlo, útil para comparar contra el manual o reportar un problema.
+
+Ambos verificados con una prueba de humo real (`MainWindow` real,
+`ProfileStore` real, sin mock) antes de darlos por buenos. Subida a
+**v1.7.2** (incluye también el arreglo del reap de la sección 14.2,
+nunca llegó a instalarse como v1.7.1 por separado).

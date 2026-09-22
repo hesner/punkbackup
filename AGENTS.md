@@ -493,6 +493,17 @@ reintroduces these problems.
     a real run be genuinely in progress right now? If yes, pass
     `reap_dangling_runs=False`.**
 
+17. **Any periodic per-profile check (like `_check_idle_backups`) must
+    explicitly skip disabled/not-yet-configured profiles up front, not
+    rely on catching the exception they'd otherwise raise.** A disabled
+    or destination-less profile always fails `get_status_for_profile`
+    (403/409) — that's correct and expected, not a bug, but treating it
+    as a caught-exception case still logged a full traceback once per app
+    restart for something that's a completely normal state. Filter these
+    out with a plain `if not profile.enabled or not profile.destination_dir:
+    continue` before the exception-prone call, rather than only
+    softening how the exception gets logged afterward.
+
 ## 6. Testing approach that actually caught bugs
 
 - Unit tests against `BackupEngine`/`ManifestDB` directly (no HTTP) for the

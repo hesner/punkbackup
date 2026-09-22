@@ -16,7 +16,10 @@
 ; launch so PunkBackup.exe never runs as admin day-to-day.
 
 #define MyAppName "PunkBackup"
-#define MyAppVersion "1.7.1"
+; Keep in sync with APP_VERSION in server/version.py (shown in the app's
+; own window title + Settings screen) -- Inno Setup's preprocessor can't
+; read that Python file directly, so this has to be bumped by hand too.
+#define MyAppVersion "1.7.2"
 #define MyAppPublisher "PunkBackup"
 #define MyAppURL "https://github.com/hesner/punkbackup"
 #define MyAppExeName "PunkBackup.exe"

@@ -45,6 +45,7 @@ from server.mirror import MirrorSyncResult, get_mirror_status, sync_mirror
 from server.paths import app_root, user_data_dir
 from server.profiles import Profile, ProfileStore
 from server.runner import ServerController
+from server.version import APP_VERSION
 
 from .autostart import set_start_with_windows
 from .dialogs import ask_input, ask_yes_no, show_error, show_info, show_warning
@@ -509,7 +510,7 @@ class MainWindow(ctk.CTk):
         self.lang = self.cfg.language if self.cfg.language in LANGUAGES else "es"
 
         self.configure(fg_color=BG)
-        self.title(APP_TITLE)
+        self.title(f"{APP_TITLE} — v{APP_VERSION}")
         if ICON_PATH.exists():
             try:
                 self.iconbitmap(str(ICON_PATH))
@@ -708,10 +709,15 @@ class MainWindow(ctk.CTk):
 
         lang_frame = ctk.CTkFrame(parent, fg_color=CARD_BG, border_width=1, border_color=BORDER)
         lang_frame.pack(fill="x", padx=12, pady=(12, 8))
+        title_row = ctk.CTkFrame(lang_frame, fg_color="transparent")
+        title_row.pack(fill="x", padx=10, pady=(10, 4))
         self.language_title_label = ctk.CTkLabel(
-            lang_frame, text=self.t("language_title"), font=ctk.CTkFont(weight="bold"), text_color=TEXT_MAIN,
+            title_row, text=self.t("language_title"), font=ctk.CTkFont(weight="bold"), text_color=TEXT_MAIN,
         )
-        self.language_title_label.pack(anchor="w", padx=10, pady=(10, 4))
+        self.language_title_label.pack(side="left")
+        ctk.CTkLabel(
+            title_row, text=f"PunkBackup v{APP_VERSION}", text_color=TEXT_MUTED,
+        ).pack(side="right")
         lang_btns = ctk.CTkFrame(lang_frame, fg_color="transparent")
         lang_btns.pack(anchor="w", padx=10, pady=(0, 10))
         self.lang_buttons: dict[str, ctk.CTkButton] = {}
@@ -1452,6 +1458,15 @@ class MainWindow(ctk.CTk):
         resets the moment new activity shows up or the run finishes."""
         now = datetime.now(timezone.utc)
         for profile in self.profile_store.list():
+            if not profile.enabled or not profile.destination_dir:
+                # A paused or not-yet-configured profile can never have a
+                # "running" backup to go idle on -- get_status_for_profile()
+                # would just raise (403/409) every time, which used to log
+                # a full traceback once per app restart for something that
+                # isn't an error at all. Skip it outright instead.
+                self._idle_tracking.pop(profile.id, None)
+                continue
+
             tracking = self._idle_tracking.setdefault(
                 profile.id, {"last_backup_at": None, "seen_at": now, "notified": False, "error_logged": False}
             )

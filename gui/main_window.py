@@ -91,6 +91,12 @@ def get_local_ip() -> str:
         s.close()
 
 
+# Distinguishes "no precomputed status was passed, go fetch it now" (used by
+# rare, non-hot-path callers) from a real, meaningful `None` result (e.g. "the
+# mirror drive isn't connected") — see ProfileManageRow._refresh_mirror_section.
+_UNSET = object()
+
+
 def _format_local(iso_utc: str | None) -> str | None:
     """Every timestamp the server hands the GUI (last_backup_at, a
     destination-history snapshot's recorded_at, ...) is stored in UTC —
@@ -119,7 +125,46 @@ def _volume_text(profile: Profile, lang: str) -> str:
     return _t("free_of_total", lang, label=label, free=free, total=total)
 
 
-def _profile_stats_text(profile: Profile, lang: str) -> str:
+def _compute_status_snapshot(profiles: list[Profile]) -> dict:
+    """Every blocking disk/SQLite call the GUI's periodic refresh needs is
+    isolated here, deliberately kept as a plain module-level function (not
+    a MainWindow method) so it's obvious by construction that it never
+    touches a Tkinter widget — CustomTkinter/Tkinter widgets are NOT
+    thread-safe, and this function is meant to be called from a background
+    thread (see MainWindow._poll_tick). Reads `profiles` (a list already
+    fetched on the main thread — see _poll_tick) but never touches
+    `self.profile_store` directly, since ProfileStore's own dict isn't
+    locked against concurrent mutation from the GUI thread (e.g. adding or
+    deleting a profile) — see AGENTS.md lesson 22."""
+    per_profile: dict[str, dict] = {}
+    for profile in profiles:
+        entry: dict = {"status": None, "status_error": None, "mirror_status": None}
+        if profile.enabled and profile.destination_dir:
+            try:
+                entry["status"] = app_module.get_status_for_profile(profile)
+            except Exception:
+                import traceback
+
+                entry["status_error"] = traceback.format_exc()
+        if profile.mirror_dir:
+            entry["mirror_status"] = get_mirror_status(profile.mirror_dir)
+        per_profile[profile.id] = entry
+
+    aggregate = None
+    try:
+        aggregate = app_module.get_aggregate_status()
+    except Exception:
+        pass
+    return {"per_profile": per_profile, "aggregate": aggregate}
+
+
+def _profile_stats_text(profile: Profile, lang: str, status: Optional[dict] = None) -> str:
+    """`status` is a PRECOMPUTED result of `app_module.get_status_for_profile`
+    (or None — no data yet, or the profile isn't running) — this function
+    itself must never touch disk. See _compute_status_snapshot's docstring
+    for why: this used to call get_status_for_profile() directly, once per
+    row per ~1.5s GUI refresh tick, which is real synchronous disk/SQLite
+    I/O running on the Tkinter main thread (AGENTS.md lesson 22)."""
     if not profile.destination_dir:
         return _t("stats_no_dest", lang)
 
@@ -130,12 +175,11 @@ def _profile_stats_text(profile: Profile, lang: str) -> str:
 
     stats_line = _t("stats_line", lang, last=_t("never", lang), count=0)
     last_run_line = None
-    if app_module.is_configured():
+    if status is not None:
         try:
-            st = app_module.get_status_for_profile(profile)
-            last = _format_local(st["last_backup_at"]) or _t("never", lang)
-            stats_line = _t("stats_line", lang, last=last, count=st["total_files_backed_up"])
-            last_run = st.get("last_run")
+            last = _format_local(status["last_backup_at"]) or _t("never", lang)
+            stats_line = _t("stats_line", lang, last=last, count=status["total_files_backed_up"])
+            last_run = status.get("last_run")
             if last_run:
                 running = _t("stats_last_run_in_progress", lang) if last_run.get("finished_at") is None else ""
                 last_run_line = _t(
@@ -156,17 +200,18 @@ def _profile_stats_text(profile: Profile, lang: str) -> str:
 class ProfileStatusRow(ctk.CTkFrame):
     """Used on the "Principal" screen: name, stats, and the enable/pause switch."""
 
-    def __init__(self, master, profile: Profile, lang: str, on_toggle):
+    def __init__(self, master, profile: Profile, lang: str, on_toggle, status: Optional[dict] = None):
         super().__init__(master, fg_color=CARD_BG, border_width=1, border_color=BORDER, corner_radius=8)
         self.grid_columnconfigure(0, weight=1)
         self.profile = profile
         self.lang = lang
         self._on_toggle = on_toggle
+        self._status = status
 
         self.name_label = ctk.CTkLabel(self, text=profile.name, font=ctk.CTkFont(weight="bold"), text_color=TEXT_MAIN)
         self.name_label.grid(row=0, column=0, sticky="w", padx=12, pady=(10, 0))
         self.stats_label = ctk.CTkLabel(
-            self, text=_profile_stats_text(profile, lang), text_color=TEXT_MUTED, justify="left"
+            self, text=_profile_stats_text(profile, lang, status), text_color=TEXT_MUTED, justify="left"
         )
         self.stats_label.grid(row=1, column=0, sticky="w", padx=12, pady=(0, 10))
 
@@ -186,13 +231,15 @@ class ProfileStatusRow(ctk.CTkFrame):
     def _state_text(self) -> str:
         return _t("profile_active", self.lang) if self.profile.enabled else _t("profile_paused", self.lang)
 
-    def update_data(self, profile: Profile, lang: str) -> None:
+    def update_data(self, profile: Profile, lang: str, status: Optional[dict] = None) -> None:
         """Refresh in place instead of destroying/recreating — avoids the
-        visible flicker a full rebuild causes on every periodic status poll."""
+        visible flicker a full rebuild causes on every periodic status poll.
+        `status` is precomputed (see _profile_stats_text's docstring)."""
         self.profile = profile
         self.lang = lang
+        self._status = status
         self.name_label.configure(text=profile.name)
-        self.stats_label.configure(text=_profile_stats_text(profile, lang))
+        self.stats_label.configure(text=_profile_stats_text(profile, lang, status))
         self.state_label.configure(text=self._state_text())
         if self.switch_var.get() != profile.enabled:
             self.switch_var.set(profile.enabled)
@@ -204,12 +251,16 @@ class ProfileManageRow(ctk.CTkFrame):
     section 13. That sub-section stays a single discreet link when no
     mirror is configured, so it adds no noise for anyone not using it."""
 
-    def __init__(self, master, profile: Profile, lang: str, callbacks: dict):
+    def __init__(
+        self, master, profile: Profile, lang: str, callbacks: dict,
+        status: Optional[dict] = None, mirror_status: Optional[dict] = None,
+    ):
         super().__init__(master, fg_color=CARD_BG, border_width=1, border_color=BORDER, corner_radius=8)
         self.grid_columnconfigure(0, weight=1)
         self.profile = profile
         self.lang = lang
         self._syncing = False
+        self._status = status
 
         self.name_label = ctk.CTkLabel(self, text=profile.name, font=ctk.CTkFont(weight="bold"), text_color=TEXT_MAIN)
         self.name_label.grid(row=0, column=0, sticky="w", padx=12, pady=(10, 0))
@@ -286,11 +337,11 @@ class ProfileManageRow(ctk.CTkFrame):
         self.btn_remove_mirror.pack(side="left", padx=2)
 
         self._apply_button_text()
-        self._refresh_mirror_section()
+        self._refresh_mirror_section(mirror_status)
 
     def _status_text(self) -> str:
         status = _t("profile_active", self.lang) if self.profile.enabled else _t("profile_paused", self.lang)
-        return f"{status}\n{_profile_stats_text(self.profile, self.lang)}"
+        return f"{status}\n{_profile_stats_text(self.profile, self.lang, self._status)}"
 
     def _apply_button_text(self) -> None:
         self.btn_choose_dest.configure(text=_t("btn_choose_folder", self.lang))
@@ -306,7 +357,14 @@ class ProfileManageRow(ctk.CTkFrame):
         self.btn_sync_mirror.configure(text=_t(sync_key, self.lang))
         self.btn_remove_mirror.configure(text=_t("btn_remove_mirror", self.lang))
 
-    def _refresh_mirror_section(self) -> None:
+    def _refresh_mirror_section(self, mirror_status=_UNSET) -> None:
+        """`mirror_status` is a PRECOMPUTED result of get_mirror_status(),
+        or the `_UNSET` sentinel meaning "no precomputed value available,
+        fetch it now" — used only by the rare call sites that aren't
+        driven by the periodic background poller (e.g. right after a sync
+        finishes). `None` is a real, meaningful result on its own (the
+        drive isn't currently reachable) and must never be confused with
+        "not fetched yet" — see AGENTS.md lesson 22."""
         if not self.profile.mirror_dir:
             self.mirror_configured_frame.grid_remove()
             self.btn_configure_mirror.grid(row=0, column=0, sticky="w")
@@ -317,7 +375,7 @@ class ProfileManageRow(ctk.CTkFrame):
         if self._syncing:
             return  # set_sync_progress()/set_syncing() own the label/button while active
 
-        status = get_mirror_status(self.profile.mirror_dir)
+        status = get_mirror_status(self.profile.mirror_dir) if mirror_status is _UNSET else mirror_status
         if status is None:
             self.mirror_status_label.configure(text=_t("mirror_not_connected", self.lang, path=self.profile.mirror_dir))
             self.btn_sync_mirror.configure(state="disabled")
@@ -366,15 +424,18 @@ class ProfileManageRow(ctk.CTkFrame):
             text = _t("mirror_syncing_progress_no_space", lang, done=done, total=total)
         self.mirror_status_label.configure(text=text)
 
-    def update_data(self, profile: Profile, lang: str) -> None:
+    def update_data(
+        self, profile: Profile, lang: str, status: Optional[dict] = None, mirror_status=_UNSET,
+    ) -> None:
         lang_changed = lang != self.lang
         self.profile = profile
         self.lang = lang
+        self._status = status
         self.name_label.configure(text=profile.name)
         self.status_label.configure(text=self._status_text())
         if lang_changed:
             self._apply_button_text()
-        self._refresh_mirror_section()
+        self._refresh_mirror_section(mirror_status)
 
 
 class SettingSwitchRow(ctk.CTkFrame):
@@ -539,6 +600,14 @@ class MainWindow(ctk.CTk):
         self._settings_rows: dict[str, ProfileManageRow] = {}
         self._settings_empty_label: ctk.CTkLabel | None = None
         self._mirror_cancel_events: dict[str, threading.Event] = {}  # profile.id -> event, only while syncing
+        # Result of the last background status poll (see _poll_tick /
+        # _compute_status_snapshot) — every ~1.5s refresh reads from this
+        # instead of touching disk itself. Empty until the first poll
+        # completes (briefly, at cold start or right after a new profile
+        # row is created) — that's fine, every consumer treats a missing
+        # entry the same as "no data yet" and self-corrects within ~1.5s.
+        self._latest_snapshot: dict = {"per_profile": {}, "aggregate": None}
+        self._poll_in_flight = False
 
         self._build_header()
         self._build_nav()
@@ -559,8 +628,7 @@ class MainWindow(ctk.CTk):
 
         self.protocol("WM_DELETE_WINDOW", self._on_close)
         self.after(300, self._drain_log_queue)
-        self.after(1500, self._refresh_status_loop)
-        self.after(1500, self._idle_check_loop)
+        self.after(1500, self._poll_tick)
 
         def _maximize() -> None:
             try:
@@ -989,7 +1057,15 @@ class MainWindow(ctk.CTk):
     # ------------------------------------------------------------------
     # Profiles — "Principal" screen (status + enable/pause only)
     # ------------------------------------------------------------------
-    def _refresh_principal_profiles(self) -> None:
+    def _refresh_principal_profiles(self, per_profile: Optional[dict] = None) -> None:
+        """`per_profile` is `{profile_id: {"status":..., "mirror_status":...}}`,
+        precomputed off the main thread by the background status poller (see
+        _compute_status_snapshot) — falls back to the last snapshot the
+        poller produced when a caller doesn't have a fresh one at hand
+        (e.g. right after renaming a profile). Never fetches anything from
+        disk itself — see AGENTS.md lesson 22."""
+        if per_profile is None:
+            per_profile = self._latest_snapshot.get("per_profile", {})
         profiles = self.profile_store.list()
         current_ids = {p.id for p in profiles}
 
@@ -1016,11 +1092,15 @@ class MainWindow(ctk.CTk):
 
         for i, profile in enumerate(profiles):
             row = self._principal_rows.get(profile.id)
+            entry = per_profile.get(profile.id, {})
             if row is None:
-                row = ProfileStatusRow(self.principal_profiles_container, profile, self.lang, self._on_toggle_profile)
+                row = ProfileStatusRow(
+                    self.principal_profiles_container, profile, self.lang, self._on_toggle_profile,
+                    status=entry.get("status"),
+                )
                 self._principal_rows[profile.id] = row
             else:
-                row.update_data(profile, self.lang)
+                row.update_data(profile, self.lang, status=entry.get("status"))
             row.grid(row=i, column=0, sticky="ew", padx=4, pady=4)
 
     def _on_toggle_profile(self, profile: Profile, enabled: bool) -> None:
@@ -1033,7 +1113,11 @@ class MainWindow(ctk.CTk):
     # ------------------------------------------------------------------
     # Profiles — "⚙ Configuración" screen (full management)
     # ------------------------------------------------------------------
-    def _refresh_settings_profiles(self) -> None:
+    def _refresh_settings_profiles(self, per_profile: Optional[dict] = None) -> None:
+        """See _refresh_principal_profiles's docstring — same precomputed-
+        snapshot contract, never touches disk itself."""
+        if per_profile is None:
+            per_profile = self._latest_snapshot.get("per_profile", {})
         callbacks = {
             "choose_dest": self._choose_profile_destination,
             "history": self._show_destination_history,
@@ -1072,11 +1156,18 @@ class MainWindow(ctk.CTk):
 
         for i, profile in enumerate(profiles):
             row = self._settings_rows.get(profile.id)
+            entry = per_profile.get(profile.id, {})
             if row is None:
-                row = ProfileManageRow(self.perfiles_container, profile, self.lang, callbacks)
+                row = ProfileManageRow(
+                    self.perfiles_container, profile, self.lang, callbacks,
+                    status=entry.get("status"), mirror_status=entry.get("mirror_status", _UNSET),
+                )
                 self._settings_rows[profile.id] = row
             else:
-                row.update_data(profile, self.lang)
+                row.update_data(
+                    profile, self.lang, status=entry.get("status"),
+                    mirror_status=entry.get("mirror_status", _UNSET),
+                )
             row.grid(row=i, column=0, sticky="ew", padx=4, pady=4)
 
     def _add_profile(self) -> None:
@@ -1454,10 +1545,14 @@ class MainWindow(ctk.CTk):
                 widget.configure(state="disabled")
         self.after(300, self._drain_log_queue)
 
-    def _refresh_aggregate_stats(self) -> None:
-        if app_module.is_configured():
+    def _refresh_aggregate_stats(self, agg: Optional[dict] = None) -> None:
+        """`agg` is a precomputed result of `app_module.get_aggregate_status()`
+        — falls back to the last snapshot the background poller produced.
+        Never fetches anything from disk itself — see AGENTS.md lesson 22."""
+        if agg is None:
+            agg = self._latest_snapshot.get("aggregate")
+        if app_module.is_configured() and agg is not None:
             try:
-                agg = app_module.get_aggregate_status()
                 last = _format_local(agg["last_backup_at"]) or self.t("never")
                 self.stats_label.configure(text=self.t("aggregate_stats", last=last, total=agg["total_files_backed_up"]))
             except Exception:
@@ -1465,41 +1560,75 @@ class MainWindow(ctk.CTk):
         else:
             self.stats_label.configure(text=self.t("aggregate_stats", last=self.t("never"), total=0))
 
-    def _refresh_status_loop(self) -> None:
-        if app_module.is_configured():
-            try:
-                self._refresh_aggregate_stats()
-                self._refresh_principal_profiles()
-                self._refresh_settings_profiles()
-            except Exception:
-                import traceback
+    def _poll_tick(self) -> None:
+        """Runs every ~1.5s on the main thread, but does none of the actual
+        disk/SQLite work itself — that used to run directly inside this
+        loop (and the old, separate _idle_check_loop) on the Tkinter main
+        thread, which blocks EVERYTHING while it runs: redrawing the
+        window, reacting to a click, even Windows' own "bring this window
+        to front" repaint — not just the specific label being updated.
+        Confirmed as the cause of a real ~10s freeze switching to/from this
+        app's window (2026-09-22): with a profile's primary destination
+        and another profile's second-copy destination sharing one physical
+        USB drive, that drive's normal latency multiplied across several
+        synchronous disk touches per tick was enough to stall the whole
+        GUI. See AGENTS.md lesson 22 and _compute_status_snapshot's
+        docstring for the fix: every blocking call now happens on a
+        background thread instead, and only the (cheap, in-memory) work of
+        applying the result back to widgets happens here."""
+        if not self._poll_in_flight and app_module.is_configured():
+            self._poll_in_flight = True
+            profiles = self.profile_store.list()  # cheap, in-memory -- stays on the main thread
 
-                self._log_local(f"ERROR in _refresh_status_loop:\n{traceback.format_exc()}")
-        self.after(1500, self._refresh_status_loop)
+            def worker() -> None:
+                try:
+                    snapshot = _compute_status_snapshot(profiles)
+                except Exception:
+                    import traceback
 
-    def _idle_check_loop(self) -> None:
-        """Deliberately its OWN after()-scheduled loop, separate from
-        _refresh_status_loop above — a slow/failing stats refresh (e.g. a
-        transient SQLite lock during a heavy upload burst) must never be
-        able to silently starve idle detection of ticks just because they
-        used to share one try/except block. Confirmed via a real missed
-        notice (2026-09-18): a 14+ minute gap with zero log activity while
-        a run stayed "running" produced no notice at all, with no error
-        visible anywhere — see PLAN.md for the write-up."""
+                    details = traceback.format_exc()
+                    self.after(0, lambda: self._log_local(f"ERROR in status poller:\n{details}"))
+                    snapshot = None
+                self.after(0, lambda: self._apply_status_snapshot(snapshot))
+
+            threading.Thread(target=worker, daemon=True).start()
+        self.after(1500, self._poll_tick)
+
+    def _apply_status_snapshot(self, snapshot: Optional[dict]) -> None:
+        """Runs on the main thread once a background poll finishes — from
+        here on, everything is cheap (in-memory dict lookups, widget
+        .configure() calls), never disk I/O. Two independent try/excepts,
+        same reasoning the old _refresh_status_loop/_idle_check_loop split
+        documented: a failure updating the visible stats must never be
+        able to silently starve idle-stall detection, or vice versa."""
+        self._poll_in_flight = False
+        if snapshot is None:
+            return  # the worker already logged its own error
+        self._latest_snapshot = snapshot
         try:
-            self._check_idle_backups()
+            self._refresh_aggregate_stats(snapshot["aggregate"])
+            self._refresh_principal_profiles(snapshot["per_profile"])
+            self._refresh_settings_profiles(snapshot["per_profile"])
         except Exception:
             import traceback
 
-            self._log_local(f"ERROR in _idle_check_loop:\n{traceback.format_exc()}")
-        self.after(1500, self._idle_check_loop)
+            self._log_local(f"ERROR applying status snapshot:\n{traceback.format_exc()}")
+        try:
+            self._check_idle_backups(snapshot["per_profile"])
+        except Exception:
+            import traceback
 
-    def _check_idle_backups(self) -> None:
+            self._log_local(f"ERROR in idle check:\n{traceback.format_exc()}")
+
+    def _check_idle_backups(self, per_profile: dict) -> None:
         """A run has no persistent connection to watch — the server can
         only infer "the phone stopped talking to us" from a lack of new
         files while a run is still marked "running" (no /run/finish yet).
         Logs a one-time notice per stretch of inactivity, per profile;
-        resets the moment new activity shows up or the run finishes."""
+        resets the moment new activity shows up or the run finishes.
+        `per_profile` is precomputed by the background status poller (see
+        _compute_status_snapshot) — this function itself is pure in-memory
+        bookkeeping, no disk I/O."""
         now = datetime.now(timezone.utc)
         for profile in self.profile_store.list():
             if not profile.enabled or not profile.destination_dir:
@@ -1515,21 +1644,21 @@ class MainWindow(ctk.CTk):
                 profile.id, {"last_backup_at": None, "seen_at": now, "notified": False, "error_logged": False}
             )
 
-            try:
-                st = app_module.get_status_for_profile(profile)
-            except Exception:
+            entry = per_profile.get(profile.id, {})
+            st = entry.get("status")
+            if st is None:
                 # Routine, expected conditions (e.g. a brand-new profile
-                # with no destination folder chosen yet) raise here too —
-                # not bugs. Log any exception only ONCE per stretch of
-                # failures (not every 1.5s forever) so a real, unexpected
-                # error is still never silent, but a normal "not set up
-                # yet" state doesn't flood the log either.
-                if not tracking["error_logged"]:
+                # with no destination folder chosen yet) show up here as
+                # "no status computed" too — not bugs. Log any real error
+                # the poller hit only ONCE per stretch of failures (not
+                # every 1.5s forever) so a genuine unexpected error is
+                # still never silent, but a normal "not set up yet" state
+                # doesn't flood the log either.
+                status_error = entry.get("status_error")
+                if status_error and not tracking["error_logged"]:
                     tracking["error_logged"] = True
-                    import traceback
-
                     self._log_local(
-                        f"ERROR checking idle status for {profile.name}:\n{traceback.format_exc()}",
+                        f"ERROR checking idle status for {profile.name}:\n{status_error}",
                         profile=profile.name,
                     )
                 continue

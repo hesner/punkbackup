@@ -593,6 +593,43 @@ reintroduces these problems.
     the kind of bug that's easy to miss without deliberately checking
     both a server-triggered line AND a GUI-triggered line side by side.
 
+22. **Tkinter (and CustomTkinter) is single-threaded — ANY blocking call
+    made from an `after()`-scheduled callback stalls the ENTIRE window,
+    not just the widget being updated**, including reacting to a click,
+    switching between this app's own screens, and even Windows' own
+    "repaint this window" message when the user alt-tabs into it. This
+    project's periodic ~1.5s refresh loops (`_refresh_status_loop`,
+    `_idle_check_loop`) used to call `app_module.get_status_for_profile()`
+    (a real SQLite query) and `get_mirror_status()` (`shutil.disk_usage()`
+    + another SQLite query) directly, per profile, per tick — all on the
+    main thread. Confirmed as the cause of a real, reported ~10-second
+    freeze switching to/from this app's window (2026-09-22): once a
+    second profile's destination and a first profile's mirror destination
+    ended up sharing the same physical USB drive, several synchronous
+    disk touches to that one drive, back to back, every 1.5s, were enough
+    to stall the whole GUI whenever the drive had any latency at all — not
+    just the specific label being refreshed, the entire window, because
+    Tkinter has nothing else to process events with while the Python call
+    is running. **Fixed** by moving every actual disk/SQLite call into one
+    plain module-level function (`_compute_status_snapshot`, deliberately
+    NOT a `MainWindow` method — makes it obvious by construction that it
+    never touches a Tk widget, since Tk widgets are not thread-safe to
+    touch from a background thread) run on a background thread via
+    `_poll_tick`; the result comes back to the main thread via
+    `self.after(0, ...)` as a plain dict, and every widget-refresh
+    function (`_refresh_principal_profiles`, `_refresh_settings_profiles`,
+    `_refresh_aggregate_stats`, `_check_idle_backups`) now reads from that
+    precomputed snapshot instead of fetching anything itself — pure
+    in-memory dict lookups and `.configure()` calls, provably no I/O.
+    Guard against overlapping polls with a simple `self._poll_in_flight`
+    flag (never start a second background poll while one is still
+    running). **When adding ANY new periodic GUI refresh that needs data
+    from disk, a database, or the network: compute it on a background
+    thread and hand back only the already-computed result — never call
+    something that can block inside an `after()` callback itself.** Fully
+    unit-testable without any Tkinter dependency at all, since the
+    snapshot function is pure: see `tests/test_gui_status_poller.py`.
+
 - Unit tests against `BackupEngine`/`ManifestDB` directly (no HTTP) for the
   dedup/conflict/incremental rules — fast, exhaustive.
 - `fastapi.testclient.TestClient` end-to-end tests for the real ASGI app,
@@ -622,7 +659,7 @@ reintroduces these problems.
 
 ## 7. What "done" looks like
 
-- `pytest tests -q` passes (70 tests as of this writing, covering engine
+- `pytest tests -q` passes (74 tests as of this writing, covering engine
   rules, profile isolation/pause/delete, destination-switch correctness,
   concurrent uploads, the `/check` contract, the 0-byte-upload rejection,
   its self-healing retry error-count behavior, a stale-run reap on

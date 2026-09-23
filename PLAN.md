@@ -1810,5 +1810,91 @@ Documentado en el Manual de Uso (EN/ES), sección "▼ Mostrar actividad" /
 "▼ Show activity", donde ya se explicaba el formato de fecha/hora —
 ahora también explica el nuevo campo de perfil. PDFs reconstruidos.
 
-Versión: **v1.7.6** (bump pendiente de build+instalación, a la espera de
-confirmación del usuario antes de aplicar).
+Versión: **v1.7.6** — construida, instalada y validada en vivo el mismo
+día (línea real confirmada: `21:13:15 > ipad > !! Run ... was left
+"running"...` / `21:13:18 > - > Servidor iniciado. A darle.`), publicada
+como release público en GitHub.
+
+## 16. Congelamientos de ~10 segundos al cambiar de ventana/pantalla — causa raíz encontrada y corregida (2026-09-22, v1.7.7)
+
+Pregunta del usuario: "¿por qué al hacer clic en Principal/Configuración,
+o al volver a PunkBackup desde otra app de Windows, tarda unos 10
+segundos en mostrarse?" — llevó a una causa raíz real y a un rediseño
+concreto, no solo a un ajuste cosmético.
+
+### 16.1 Causa raíz
+
+Tkinter (y CustomTkinter) es de un solo hilo: **cualquier llamada
+bloqueante dentro de un callback programado con `after()` congela TODA
+la ventana**, no solo el dato que se está actualizando — incluyendo la
+reacción a un clic, el cambio entre las dos pantallas propias de la app,
+e incluso el repintado que pide Windows al volver el foco a la ventana.
+
+Los dos ciclos periódicos de refresco (cada ~1.5s) hacían trabajo de
+disco **síncrono, en el hilo principal**, por cada perfil, en cada tick:
+- `app_module.get_status_for_profile(profile)` — una consulta SQLite real
+  contra el índice del perfil.
+- `get_mirror_status(profile.mirror_dir)` — `shutil.disk_usage()` +
+  abrir/leer/cerrar otra base SQLite.
+
+Con los 3 perfiles reales del usuario en ese momento, **dos de ellos
+comparten la misma unidad física E:** (`ipad` en `E:/Ipad photos`, y la
+segunda copia de `iphone de Hes` en `E:/Backup 2 Hesner`) — así que cada
+1.5 segundos había varias idas y venidas síncronas a esa misma USB
+física, en el único hilo que también tiene que responder a los clics y
+repintar la ventana. Cualquier latencia real de esa unidad (nada raro en
+USB, más aún después de tanta actividad ese mismo día) se traducía
+exactamente en el síntoma reportado.
+
+### 16.2 Arreglo
+
+Todo el trabajo de disco se aisló en una sola función de nivel de módulo,
+`_compute_status_snapshot(profiles)` (`gui/main_window.py`) — deliberadamente
+NO un método de `MainWindow`, para que quede claro por construcción que
+nunca toca un widget de Tkinter (los widgets de Tk/CTk no son seguros
+para tocar desde un hilo que no sea el principal). Esta función corre en
+un hilo de fondo (`_poll_tick`, reemplaza a los antiguos
+`_refresh_status_loop`/`_idle_check_loop`), y su resultado (un dict plano
+con el estado de cada perfil + el agregado) vuelve al hilo principal vía
+`self.after(0, ...)`. A partir de ahí, `_refresh_principal_profiles()`,
+`_refresh_settings_profiles()`, `_refresh_aggregate_stats()` y
+`_check_idle_backups()` ya no tocan disco en absoluto — solo leen ese
+snapshot precomputado (lookups de diccionario en memoria +
+`.configure()` de widgets). Un flag `self._poll_in_flight` evita que se
+acumulen sondeos en paralelo si uno tarda más de 1.5s.
+
+Todas las funciones de refresco mantienen su firma original SIN
+argumentos como opción válida (`per_profile: Optional[dict] = None`) —
+si no se les pasa un snapshot fresco, caen al último que calculó el
+sondeo de fondo (`self._latest_snapshot`), así que los ~15 sitios del
+código que ya las llamaban (después de renombrar un perfil, cambiar de
+idioma, etc.) no necesitaron cambiar ni una línea.
+
+**Caso especial**: `get_mirror_status()` puede devolver legítimamente
+`None` cuando la USB simplemente no está conectada — ese `None` NO se
+puede confundir con "todavía no se calculó". Se resolvió con un sentinel
+(`_UNSET`, un `object()` a nivel de módulo) distinto de `None`: los
+sitios que sí tienen un valor fresco del sondeo (aunque sea `None`
+porque está desconectada) lo pasan explícitamente; los pocos sitios
+raros que no participan del ciclo de 1.5s (ej. justo después de terminar
+una sincronización manual) siguen haciendo el fetch síncrono de siempre,
+sin cambio de comportamiento ahí.
+
+### 16.3 Pruebas y verificación
+
+4 pruebas nuevas (`tests/test_gui_status_poller.py`, **74/74 pasando**)
+contra `_compute_status_snapshot` directamente — sin ninguna dependencia
+de Tkinter, ya que la función es puro cómputo: perfiles independientes
+no se mezclan, perfiles desactivados/sin carpeta no intentan ni un solo
+fetch, el estado de la segunda copia se calcula correctamente cuando
+existe, y un snapshot vacío nunca lanza una excepción (importante porque
+esto corre en un hilo de fondo — una excepción no controlada ahí se
+perdería en silencio si no se manejara explícitamente).
+
+**Prueba de humo real**: la app se corrió en modo desarrollo
+(`python main.py`) contra el `profiles.json` REAL de producción (los 3
+perfiles reales, incluyendo el escenario de la unidad E: compartida que
+causó el bug) durante ~16 segundos (10+ ciclos de sondeo) sin ningún
+error ni traceback.
+
+Documentado como lección nueva en AGENTS.md (§22). Versión: **v1.7.7**.

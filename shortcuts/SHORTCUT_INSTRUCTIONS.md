@@ -90,7 +90,14 @@ Save, and you're done building it.
 
 1. Tap the `PunkBackup` shortcut once, manually, from the Shortcuts app (or
    your Home Screen if you added it there).
-   > **On a brand-new device/profile, you may see**: *"This action is
+   > **On a brand-new device/profile, iOS may also ask for permission to
+   > access your photos** (the first time the Shortcut tries to read
+   > them). When that prompt appears, choose **"Always Allow"** — not
+   > "Allow Once". Picking "Allow Once" means the permission expires, and
+   > the Shortcut will silently fail (or ask again) on a future run,
+   > especially the WiFi automation running unattended.
+   >
+   > **Also on a brand-new device/profile, you may see**: *"This action is
    > trying to share [N] photos items, which is not allowed. You can allow
    > this in Settings."* This is a separate iOS gate from the "Untrusted
    > Shortcut" one in Step 1 — it shows up specifically when a Shortcut

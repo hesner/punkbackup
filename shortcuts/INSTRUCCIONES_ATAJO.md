@@ -87,8 +87,16 @@ Guarda, y ya quedó construido.
 
 1. Toca el atajo `PunkBackup` una vez, manualmente, desde la app Atajos (o
    desde la pantalla de inicio si lo agregaste ahí).
-   > **En un dispositivo/perfil recién creado, puede aparecer este
-   > mensaje**: *"This action is trying to share [N] photos items, which
+   > **En un dispositivo/perfil recién creado, también puede pedirte
+   > permiso para acceder a tus fotos** (la primera vez que el Atajo
+   > intenta leerlas). Cuando aparezca ese aviso, elige **"Always Allow"**
+   > (no "Allow Once") — si eliges solo "una vez", el permiso se vence y el
+   > Atajo va a volver a pedirlo (y a fallar sin avisar claramente) en
+   > corridas futuras, sobre todo si usas la automatización por WiFi sin
+   > estar mirando el teléfono en ese momento.
+   >
+   > **También puede aparecer este otro mensaje, aparte**: *"This action
+   > is trying to share [N] photos items, which
    > is not allowed. You can allow this in Settings."* Es un permiso de
    > iOS distinto al de "Atajo no confiable" del Paso 1 — aparece
    > específicamente cuando un Atajo intenta compartir de una sola vez una

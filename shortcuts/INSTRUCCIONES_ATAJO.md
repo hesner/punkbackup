@@ -87,6 +87,18 @@ Guarda, y ya quedó construido.
 
 1. Toca el atajo `PunkBackup` una vez, manualmente, desde la app Atajos (o
    desde la pantalla de inicio si lo agregaste ahí).
+   > **En un dispositivo/perfil recién creado, puede aparecer este
+   > mensaje**: *"This action is trying to share [N] photos items, which
+   > is not allowed. You can allow this in Settings."* Es un permiso de
+   > iOS distinto al de "Atajo no confiable" del Paso 1 — aparece
+   > específicamente cuando un Atajo intenta compartir de una sola vez una
+   > cantidad grande de elementos, lo cual pasa justo en un perfil nuevo
+   > porque TODO tu contenido todavía está pendiente de subir por primera
+   > vez. Para permitirlo, **solo esta vez**:
+   > - Ve a **Configuración del iPhone → Atajos**.
+   > - Activa **"Permitir compartir grandes cantidades de datos"**.
+   > - Vuelve a correr el atajo `PunkBackup`.
+   > - También es una configuración de una sola vez por iPhone/iPad.
 2. Deberías ver una notificación al final con los números (Nuevos / Ya
    existían / Conflictos). Es normal que los números de esta primera
    corrida muestren varios archivos subidos — es tu primer respaldo

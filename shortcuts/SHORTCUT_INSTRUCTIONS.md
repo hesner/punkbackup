@@ -90,6 +90,17 @@ Save, and you're done building it.
 
 1. Tap the `PunkBackup` shortcut once, manually, from the Shortcuts app (or
    your Home Screen if you added it there).
+   > **On a brand-new device/profile, you may see**: *"This action is
+   > trying to share [N] photos items, which is not allowed. You can allow
+   > this in Settings."* This is a separate iOS gate from the "Untrusted
+   > Shortcut" one in Step 1 — it shows up specifically when a Shortcut
+   > tries to hand off a large batch of items at once, which happens on a
+   > brand-new profile because everything still needs to be uploaded for
+   > the first time. To allow it, **just this once**:
+   > - Go to **iPhone Settings → Shortcuts**.
+   > - Turn on **"Allow Sharing Large Amounts of Data"**.
+   > - Run the `PunkBackup` shortcut again.
+   > - This is also a one-time setting per iPhone/iPad.
 2. You should see a notification at the end with counts (New / Already had
    / Conflicts). It's fine if the very first run's numbers show it uploaded
    several files — that's your first backup running.

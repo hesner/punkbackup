@@ -16,10 +16,10 @@ from server.manifest_db import ManifestDB
 from server.storage import BackupEngine
 
 
-def make_engine(tmp_path: Path) -> BackupEngine:
+def make_engine(tmp_path: Path, profile_label: str = "-") -> BackupEngine:
     dest = tmp_path / "dest"
     dest.mkdir()
-    db = ManifestDB(dest)
+    db = ManifestDB(dest, profile_label=profile_label)
     return BackupEngine(dest, db)
 
 
@@ -209,6 +209,43 @@ def test_reap_logs_a_warning_distinct_from_a_real_run_finish(tmp_path, caplog):
 
     assert any(run_id in record.getMessage() for record in caplog.records)
     assert any("previous session" in record.getMessage() for record in caplog.records)
+
+
+def test_manifest_db_log_records_are_tagged_with_the_profile_label(tmp_path, caplog):
+    """Every log line a ManifestDB emits must carry which profile/device
+    it's about (as a `profile` attribute on the LogRecord, consumed by
+    gui/main_window.py's %(profile)s-aware log formatting) so an activity
+    log covering several profiles stays attributable to the right one —
+    not just distinguishable by re-reading the message text."""
+    dest = tmp_path / "dest"
+    dest.mkdir()
+    db1 = ManifestDB(dest, profile_label="iPad de Hesner")
+    run_id = db1.start_run()
+    db1.close()
+
+    with caplog.at_level("WARNING", logger="backup_engine"):
+        ManifestDB(dest, profile_label="iPad de Hesner")
+
+    reap_records = [r for r in caplog.records if run_id in r.getMessage()]
+    assert reap_records
+    assert all(getattr(r, "profile", None) == "iPad de Hesner" for r in reap_records)
+
+    # A DB opened with no explicit label (e.g. an ad-hoc/legacy caller)
+    # must never crash the formatter — falls back to "-".
+    dest2 = tmp_path / "dest2"
+    dest2.mkdir()
+    db2 = ManifestDB(dest2)
+    assert db2.profile_label == "-"
+
+
+def test_backup_engine_log_records_carry_the_same_profile_label(tmp_path, caplog):
+    engine = make_engine(tmp_path, profile_label="iphone de Hesner")
+    with caplog.at_level("INFO", logger="backup_engine"):
+        engine.process_upload("IMG_1.jpg", io.BytesIO(b"hello"), "2026-01-01T00:00:00", None)
+
+    new_records = [r for r in caplog.records if "backed up" in r.getMessage()]
+    assert new_records
+    assert all(getattr(r, "profile", None) == "iphone de Hesner" for r in new_records)
 
 
 def test_reap_dangling_runs_false_never_touches_a_genuinely_live_run(tmp_path):

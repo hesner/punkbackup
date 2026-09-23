@@ -34,6 +34,7 @@ import threading
 from datetime import datetime, timezone
 from pathlib import Path
 from tkinter import filedialog, messagebox
+from typing import Optional
 
 import customtkinter as ctk
 
@@ -868,7 +869,9 @@ class MainWindow(ctk.CTk):
         file_handler = logging.handlers.TimedRotatingFileHandler(
             log_dir / "activity.log", when="midnight", backupCount=180, encoding="utf-8",
         )
-        file_handler.setFormatter(logging.Formatter("%(asctime)s > %(message)s", datefmt="%d-%m-%Y %H:%M:%S"))
+        file_handler.setFormatter(
+            logging.Formatter("%(asctime)s > %(profile)s > %(message)s", datefmt="%d-%m-%Y %H:%M:%S")
+        )
         self._file_logger = logging.getLogger("punkbackup.activity_file")
         self._file_logger.setLevel(logging.INFO)
         self._file_logger.addHandler(file_handler)
@@ -1023,7 +1026,7 @@ class MainWindow(ctk.CTk):
     def _on_toggle_profile(self, profile: Profile, enabled: bool) -> None:
         self.profile_store.set_enabled(profile.id, enabled)
         key = "log_profile_activated" if enabled else "log_profile_paused"
-        self._log_local(self.t(key, name=profile.name))
+        self._log_local(self.t(key, name=profile.name), profile=profile.name)
         self._refresh_principal_profiles()
         self._refresh_settings_profiles()
 
@@ -1231,7 +1234,7 @@ class MainWindow(ctk.CTk):
             # one open for -- without this, opening it here could reap a
             # real, still-in-progress run from the phone right out from
             # under it (confirmed live, 2026-09-22 -- see manifest_db.py).
-            primary_db = ManifestDB(primary_root, reap_dangling_runs=False)
+            primary_db = ManifestDB(primary_root, reap_dangling_runs=False, profile_label=current.name)
         except OSError as exc:
             show_error(self, self.lang, self.t("dlg_title_error"), self.t("err_mirror_sync_fatal", error=str(exc)))
             return
@@ -1242,7 +1245,7 @@ class MainWindow(ctk.CTk):
         row = self._settings_rows.get(profile.id)
         if row is not None:
             row.set_syncing(True, self.lang)
-        self._log_local(self.t("log_mirror_sync_started", name=current.name))
+        self._log_local(self.t("log_mirror_sync_started", name=current.name), profile=current.name)
 
         def on_progress(done: int, total: int) -> None:
             self.after(0, lambda: self._on_mirror_progress(profile.id, done, total))
@@ -1257,6 +1260,7 @@ class MainWindow(ctk.CTk):
                 result = sync_mirror(
                     primary_root, primary_db, mirror_root,
                     progress_callback=on_progress, cancel_event=cancel_event,
+                    profile_label=current.name,
                 )
             except Exception as exc:
                 result = MirrorSyncResult(fatal_error=str(exc))
@@ -1289,21 +1293,27 @@ class MainWindow(ctk.CTk):
         if row is not None:
             row.set_syncing(False, self.lang)
         if result.fatal_error:
-            self._log_local(f"ERROR: {self.t('log_mirror_sync_fatal', name=profile.name, error=result.fatal_error)}")
+            self._log_local(
+                f"ERROR: {self.t('log_mirror_sync_fatal', name=profile.name, error=result.fatal_error)}",
+                profile=profile.name,
+            )
             show_error(self, self.lang, self.t("dlg_title_error"), self.t("err_mirror_sync_fatal", error=result.fatal_error))
             self._refresh_settings_profiles()
             return
         if result.cancelled:
             # Not an error -- the user asked for this (e.g. to safely eject
             # the drive). Whatever was already copied+verified stays valid.
-            self._log_local(self.t("log_mirror_sync_cancelled", name=profile.name, copied=result.copied))
+            self._log_local(
+                self.t("log_mirror_sync_cancelled", name=profile.name, copied=result.copied), profile=profile.name
+            )
             self._refresh_settings_profiles()
             return
         self._log_local(
             self.t(
                 "log_mirror_sync_done", name=profile.name,
                 copied=result.copied, verify_failed=result.verify_failed,
-            )
+            ),
+            profile=profile.name,
         )
         if result.stopped_with_error:
             # The real OS error text, not just "something stopped it" --
@@ -1312,7 +1322,7 @@ class MainWindow(ctk.CTk):
             # fact. Found the hard way (2026-09-21): guessed "disk full"
             # from a small USB without actually reading this string, which
             # turned out to be wrong once real free space was checked.
-            self._log_local(f"  -> {result.stopped_with_error}")
+            self._log_local(f"  -> {result.stopped_with_error}", profile=profile.name)
         # elif, not two separate ifs: both can be true at once (confirmed on
         # a real device, 2026-09-21 -- a small mirror USB triggered the
         # up-front space warning AND then genuinely ran out mid-copy).
@@ -1399,8 +1409,16 @@ class MainWindow(ctk.CTk):
     # ------------------------------------------------------------------
     # Live updates
     # ------------------------------------------------------------------
-    def _log_local(self, message: str) -> None:
-        self.log_queue.put(message)
+    def _log_local(self, message: str, profile: Optional[str] = None) -> None:
+        """`profile` is the device/profile this message is about (e.g. the
+        profile's own display name), so a mixed-activity log stays
+        attributable — pass None (default) for messages that aren't about
+        any one profile (server start/stop, general loop errors, etc.),
+        shown as "-". Server-side messages get the same treatment via
+        `logging.LoggerAdapter` (see ManifestDB/BackupEngine) — both paths
+        end up going through the same `%(profile)s`-aware formatting in
+        _drain_log_queue below."""
+        self.log_queue.put((profile or "-", message))
 
     def _drain_log_queue(self) -> None:
         while True:
@@ -1408,11 +1426,18 @@ class MainWindow(ctk.CTk):
                 record = self.log_queue.get_nowait()
             except queue.Empty:
                 break
-            text = record.getMessage() if isinstance(record, logging.LogRecord) else str(record)
+            if isinstance(record, logging.LogRecord):
+                text = record.getMessage()
+                profile = getattr(record, "profile", "-")
+            elif isinstance(record, tuple):
+                profile, text = record
+            else:
+                text = str(record)
+                profile = "-"
             stamp = datetime.now().strftime("%d-%m-%Y %H:%M:%S")
-            line = f"{stamp} > {text}\n"
+            line = f"{stamp} > {profile} > {text}\n"
             try:
-                self._file_logger.info(text)
+                self._file_logger.info(text, extra={"profile": profile})
             except Exception:
                 pass  # persisting to disk is best-effort — never block the live display over it
             self.log_box.configure(state="normal")
@@ -1503,7 +1528,10 @@ class MainWindow(ctk.CTk):
                     tracking["error_logged"] = True
                     import traceback
 
-                    self._log_local(f"ERROR checking idle status for {profile.name}:\n{traceback.format_exc()}")
+                    self._log_local(
+                        f"ERROR checking idle status for {profile.name}:\n{traceback.format_exc()}",
+                        profile=profile.name,
+                    )
                 continue
             tracking["error_logged"] = False
 
@@ -1523,7 +1551,8 @@ class MainWindow(ctk.CTk):
             if idle_seconds >= self.cfg.idle_timeout_minutes * 60 and not tracking["notified"]:
                 tracking["notified"] = True
                 self._log_local(
-                    self.t("log_backup_idle", name=profile.name, minutes=self.cfg.idle_timeout_minutes)
+                    self.t("log_backup_idle", name=profile.name, minutes=self.cfg.idle_timeout_minutes),
+                    profile=profile.name,
                 )
 
     def report_callback_exception(self, exc, val, tb) -> None:

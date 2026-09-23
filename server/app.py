@@ -66,7 +66,7 @@ def _engine_for(profile: Profile) -> BackupEngine:
             dest_path.mkdir(parents=True, exist_ok=True)
         except OSError as exc:
             raise HTTPException(503, f"Destination folder is not reachable (is the drive connected?): {exc}")
-        engines[profile.id] = BackupEngine(dest_path, ManifestDB(dest_path))
+        engines[profile.id] = BackupEngine(dest_path, ManifestDB(dest_path, profile_label=profile.name))
     return engines[profile.id]
 
 
@@ -121,18 +121,19 @@ async def health():
 
 @app.post("/run/start")
 async def run_start(profile: Profile = Depends(verify_token)):
-    run_id = _engine_for(profile).db.start_run()
-    logger.info("=== Backup run started (%s) — run_id %s ===", profile.name, run_id)
+    engine = _engine_for(profile)
+    run_id = engine.db.start_run()
+    engine.logger.info("=== Backup run started — run_id %s ===", run_id)
     return {"run_id": run_id, "profile": profile.name}
 
 
 @app.post("/run/finish")
 async def run_finish(run_id: str = Form(...), profile: Profile = Depends(verify_token)):
-    result = _engine_for(profile).db.finish_run(run_id)
-    logger.info(
-        "=== Backup run finished (%s) — run_id %s — %s new, %s already had, %s conflicts,"
+    engine = _engine_for(profile)
+    result = engine.db.finish_run(run_id)
+    engine.logger.info(
+        "=== Backup run finished — run_id %s — %s new, %s already had, %s conflicts,"
         " %s errors ===",
-        profile.name,
         run_id,
         result.get("files_new", 0),
         result.get("files_skipped", 0),
@@ -201,7 +202,7 @@ async def upload(
         # (once space is freed) retries it automatically.
         staging_path.unlink(missing_ok=True)
         engine.db.bump_run(run_id, "files_error")
-        logger.error("x %s: could not write to disk (%s), requesting the file again", filename, exc)
+        engine.logger.error("x %s: could not write to disk (%s), requesting the file again", filename, exc)
         return {"detail": f'"{filename}" could not be saved (disk write failed: {exc}) — will retry on the next run.'}
     except Exception:
         staging_path.unlink(missing_ok=True)
@@ -215,7 +216,7 @@ async def upload(
         # Kept at debug (not shown in the GUI's normal activity panel,
         # which only surfaces info+) in case it's ever needed again; the
         # user-visible pairing is storage.py's "x ... / + ..." log lines.
-        logger.debug(
+        engine.logger.debug(
             "0-byte upload: filename=%r declared_content_length=%r "
             "content_type=%r user_agent=%r transfer_encoding=%r",
             filename,

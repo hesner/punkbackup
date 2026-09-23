@@ -143,8 +143,13 @@ nuevos/ya existían/conflictos/errores), así que puedes ver de un vistazo
 dónde empieza y termina cada backup en el historial del log.
 
 Cada línea lleva la **fecha y hora local** en que ocurrió
-(`DD-MM-AAAA HH:MM:SS`), así que un log que abarca varios días (si dejas la
-app abierta) se sigue leyendo con claridad — puedes saber exactamente
+(`DD-MM-AAAA HH:MM:SS`), seguida de **a qué perfil/dispositivo
+corresponde** (ej. `iPhone de Hesner`, `Ipad`, o `-` para una línea que no
+es de ningún perfil en particular, como cuando arranca o se detiene el
+servidor) — así, con más de un dispositivo respaldando, puedes saber de
+un vistazo a cuál pertenece cada línea, sin tener que adivinar solo por
+el mensaje. De cualquier forma, un log que abarca varios días (si dejas
+la app abierta) se sigue leyendo con claridad — puedes saber exactamente
 cuándo corrió cada backup, no solo el orden en que aparecen.
 
 Si una corrida se queda "en curso" sin recibir ningún archivo nuevo

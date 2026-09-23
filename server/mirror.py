@@ -62,6 +62,7 @@ def sync_mirror(
     mirror_root: Path,
     progress_callback: Optional[Callable[[int, int], None]] = None,
     cancel_event: Optional[threading.Event] = None,
+    profile_label: str = "-",
 ) -> MirrorSyncResult:
     """Copies whatever primary_root/primary_db has that mirror_root
     doesn't yet, newest-first, verifying each copy by hash before
@@ -73,6 +74,11 @@ def sync_mirror(
     copy or mid-verify) — e.g. so the user can safely eject the drive
     right after stopping, without any file left half-written. Whatever
     was already copied+verified before the cancellation stays valid.
+
+    `profile_label`: passed straight to the mirror's own ManifestDB so any
+    log line it emits (in practice just its own dangling-run reap notice,
+    essentially never for a mirror) is tagged with the right profile —
+    same purpose as every other ManifestDB/BackupEngine's profile_label.
 
     `progress_callback(done, total)`: CUMULATIVE against the mirror's
     whole target, not just this run's pending list -- resuming a mirror
@@ -99,7 +105,7 @@ def sync_mirror(
     result = MirrorSyncResult()
     try:
         mirror_root.mkdir(parents=True, exist_ok=True)
-        mirror_db = ManifestDB(mirror_root)
+        mirror_db = ManifestDB(mirror_root, profile_label=profile_label)
     except OSError as exc:
         result.fatal_error = str(exc)
         return result

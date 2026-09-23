@@ -210,6 +210,31 @@ def test_full_run_flow(client, store, tmp_path):
     assert status["last_backup_at"] is not None
 
 
+def test_log_records_are_tagged_with_the_correct_profile(client, store, tmp_path, caplog):
+    """The whole point of this feature: with two profiles active, every
+    log line must be attributable to the right one, never mixed up or
+    left unlabeled — this is what lets a shared activity log distinguish
+    "iPhone de Hesner" from "iPad" activity at a glance."""
+    profile_a = add_profile_with_dest(store, tmp_path, "iPhone de Hesner")
+    profile_b = add_profile_with_dest(store, tmp_path, "iPad")
+
+    with caplog.at_level("INFO", logger="backup_engine"):
+        run_id_a = client.post("/run/start", headers={"X-Backup-Token": profile_a.token}).json()["run_id"]
+        upload(client, {"X-Backup-Token": profile_a.token}, "IMG_A.jpg", b"a", run_id=run_id_a)
+
+        run_id_b = client.post("/run/start", headers={"X-Backup-Token": profile_b.token}).json()["run_id"]
+        upload(client, {"X-Backup-Token": profile_b.token}, "IMG_B.jpg", b"b", run_id=run_id_b)
+
+    started_a = [r for r in caplog.records if run_id_a in r.getMessage() and "started" in r.getMessage()]
+    started_b = [r for r in caplog.records if run_id_b in r.getMessage() and "started" in r.getMessage()]
+    uploaded_a = [r for r in caplog.records if "IMG_A.jpg" in r.getMessage()]
+    uploaded_b = [r for r in caplog.records if "IMG_B.jpg" in r.getMessage()]
+    assert started_a and started_b and uploaded_a and uploaded_b
+
+    assert all(r.profile == "iPhone de Hesner" for r in started_a + uploaded_a)
+    assert all(r.profile == "iPad" for r in started_b + uploaded_b)
+
+
 def test_empty_upload_is_rejected_and_not_recorded(client, store, tmp_path):
     """A 0-byte body (seen in practice when Shortcuts runs in the
     background and can't fetch a large video's full bytes from iCloud in

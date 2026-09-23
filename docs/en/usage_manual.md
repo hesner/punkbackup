@@ -136,9 +136,13 @@ so you can see at a glance where each backup begins and ends in the log
 history.
 
 Every line is stamped with the **local date and time** it happened
-(`DD-MM-YYYY HH:MM:SS`), so a log that spans several days (if you leave the
-app open) still reads clearly — you can tell exactly when each backup ran,
-not just their order.
+(`DD-MM-YYYY HH:MM:SS`), followed by **which profile/device it's about**
+(e.g. `iPhone de Hesner`, `iPad`, or `-` for a line that isn't about any
+one profile, like the server starting/stopping) — so with more than one
+device backing up, you can tell at a glance which line belongs to which
+one, not just guess from the message text. A log that spans several days
+(if you leave the app open) still reads clearly either way — you can tell
+exactly when each backup ran, not just their order.
 
 If a run stays "in progress" without receiving any new file for a while
 (e.g. WiFi dropped, or you closed the Shortcut on the phone mid-backup),

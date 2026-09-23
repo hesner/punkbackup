@@ -572,7 +572,26 @@ reintroduces these problems.
     no migration script needed, same self-healing philosophy as the
     0-byte retry (point 12) and the reap logic (point 16).
 
-## 6. Testing approach that actually caught bugs
+21. **This project's activity log has TWO independent formatting paths —
+    a real `logging` pipeline (server-side messages) and a hand-rolled
+    one (`gui/main_window.py::_log_local`, GUI-only messages like
+    "Servidor iniciado") — that both feed the SAME on-screen panel and
+    the SAME `activity.log` file. Adding a new field to "every log line"
+    means finding and updating BOTH paths, not just the obvious one.**
+    Confirmed when adding per-profile attribution (2026-09-22): the real
+    fix touches `logging.LoggerAdapter(logger, {"profile": ...})` on
+    `ManifestDB`/`BackupEngine` (each instance already knows its own
+    profile — reuse that instead of threading a new parameter through
+    every individual `logger.info(...)` call site) AND `_log_local`'s
+    queue payload (changed from a bare string to a `(profile, message)`
+    tuple) AND `_drain_log_queue`'s three-way dispatch (real `LogRecord`
+    vs. tuple vs. legacy plain string — `getattr(record, "profile", "-")`
+    for the first, so any record from a call site that's missed falls
+    back safely instead of crashing) AND the file handler's `Formatter`
+    string. Missing any one of these four spots would silently produce
+    inconsistent log lines (some tagged, some not) rather than an error —
+    the kind of bug that's easy to miss without deliberately checking
+    both a server-triggered line AND a GUI-triggered line side by side.
 
 - Unit tests against `BackupEngine`/`ManifestDB` directly (no HTTP) for the
   dedup/conflict/incremental rules — fast, exhaustive.
@@ -603,7 +622,7 @@ reintroduces these problems.
 
 ## 7. What "done" looks like
 
-- `pytest tests -q` passes (67 tests as of this writing, covering engine
+- `pytest tests -q` passes (70 tests as of this writing, covering engine
   rules, profile isolation/pause/delete, destination-switch correctness,
   concurrent uploads, the `/check` contract, the 0-byte-upload rejection,
   its self-healing retry error-count behavior, a stale-run reap on

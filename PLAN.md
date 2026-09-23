@@ -1738,3 +1738,77 @@ de este mismo documento) se encarga de que el servidor vuelva a quedar
 bien después del cierre — lo nuevo que se documenta es específicamente
 qué pasa con una corrida del Atajo que estaba activa en ese momento
 preciso, que es un caso distinto.
+
+## 15. Cada línea del log ahora dice a qué perfil pertenece (2026-09-22, v1.7.6)
+
+Pedido del usuario: con más de un perfil/dispositivo respaldando, poder
+saber de un vistazo a cuál pertenece cada línea del log sin tener que
+adivinar solo por el texto del mensaje. Formato acordado: **fecha (ya
+existía) → perfil → mensaje (ya existía, sin tocar el texto)**.
+
+### 15.1 Diseño
+
+Dos caminos de logging distintos alimentan el mismo log en pantalla y el
+mismo `activity.log` en disco, y ambos necesitaban ganar el campo
+"perfil" sin romper ninguno de los dos:
+
+1. **Mensajes del servidor** (`server/storage.py`, `server/app.py`,
+   `server/manifest_db.py`) — pasan por el logger real de Python
+   (`logging.getLogger("backup_engine")`), que la GUI conecta a la cola
+   en pantalla vía un `QueueHandler`.
+2. **Mensajes propios de la GUI** (`gui/main_window.py::_log_local`) —
+   "Servidor iniciado", los mensajes de la segunda copia, el aviso de
+   inactividad, etc. — nunca pasan por el logger de Python, van directo
+   a la misma cola como texto plano.
+
+**Servidor**: `ManifestDB` y `BackupEngine` ganan un `profile_label: str`
+(default `"-"`, seguro para cualquier construcción sin perfil conocido,
+ej. los tests) y un `self.logger = logging.LoggerAdapter(logger,
+{"profile": profile_label})` — cada instancia ya sabe de qué perfil es,
+así que sus propios `self.logger.info/warning/error(...)` etiquetan el
+`LogRecord` automáticamente, sin tener que cambiar el texto de ningún
+mensaje existente. `BackupEngine` reutiliza el `profile_label` de su
+propio `self.db` (una sola fuente de verdad, no un segundo parámetro
+redundante). `server/app.py`'s `_engine_for()` es el único lugar que
+construye ambos — ahí es donde se pasa `profile.name` una sola vez.
+`server/mirror.py::sync_mirror()` gana el mismo parámetro opcional, para
+la base de datos propia de la segunda copia (aunque en la práctica casi
+nunca emite nada por sí misma).
+
+Se aprovechó el cambio para **quitar el nombre del perfil que ya venía
+embebido a mano dentro del texto** de "=== Backup run started/finished
+==="  en `app.py` (ahora sería redundante con la nueva columna
+estructurada) — verificado que ningún manual ni prueba dependía de ese
+texto exacto. Los mensajes de la segunda copia (`gui/i18n.py`) SÍ siguen
+trayendo el nombre embebido en el texto (ej. `Sincronizando segunda
+copia de "iphone de Hes"...`) — esos NO se tocaron a propósito, porque el
+Manual de solución de problemas los cita textualmente; queda una
+redundancia cosmética menor (el nombre aparece dos veces en esas líneas
+específicas), aceptada conscientemente para no arriesgar los manuales.
+
+**GUI**: `_log_local(message, profile=None)` ahora mete a la cola una
+tupla `(profile_label, message)` en vez de solo el texto. `_drain_log_queue`
+distingue tres formas de lo que puede salir de la cola (`LogRecord` real,
+tupla de `_log_local`, o string suelto como último recurso) y construye
+`f"{fecha} > {perfil} > {mensaje}"` para pantalla, y pasa
+`extra={"profile": perfil}` al logger de archivo (cuyo `Formatter` ganó
+`%(profile)s`). Cualquier línea sin perfil conocido (arranque/apagado del
+servidor, errores de los loops internos, la excepción no controlada de
+Tkinter) muestra `-` — nunca revienta por un atributo faltante, gracias a
+`getattr(record, "profile", "-")`.
+
+### 15.2 Pruebas y documentación
+
+3 pruebas nuevas (70/70 pasando): que un `ManifestDB`/`BackupEngine`
+etiqueta sus propios `LogRecord`s con el `profile_label` correcto (vía
+`caplog`), que uno sin `profile_label` explícito cae a `"-"` sin romper
+nada, y una prueba de extremo a extremo contra la API real con DOS
+perfiles subiendo a la vez confirmando que sus líneas de log nunca se
+mezclan (cada una lleva el nombre de SU propio perfil, no el del otro).
+
+Documentado en el Manual de Uso (EN/ES), sección "▼ Mostrar actividad" /
+"▼ Show activity", donde ya se explicaba el formato de fecha/hora —
+ahora también explica el nuevo campo de perfil. PDFs reconstruidos.
+
+Versión: **v1.7.6** (bump pendiente de build+instalación, a la espera de
+confirmación del usuario antes de aplicar).

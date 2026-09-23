@@ -62,11 +62,18 @@ class ManifestDB:
     correctness simplicity.
     """
 
-    def __init__(self, dest_root: Path, reap_dangling_runs: bool = True):
+    def __init__(self, dest_root: Path, reap_dangling_runs: bool = True, profile_label: str = "-"):
         self.dest_root = Path(dest_root)
         self.index_dir = self.dest_root / ".iphone_backup_index"
         self.index_dir.mkdir(parents=True, exist_ok=True)
         self.db_path = self.index_dir / "index.sqlite"
+        self.profile_label = profile_label
+        # Every log line this DB (or anything built on top of it) emits
+        # carries this profile's name as a separate field — see
+        # gui/main_window.py's Formatter and PLAN.md's log-format section —
+        # so activity from multiple devices/profiles in the same log can be
+        # told apart at a glance instead of only by the message text.
+        self.logger = logging.LoggerAdapter(logger, {"profile": profile_label})
         self._lock = threading.Lock()
         self._conn = sqlite3.connect(self.db_path, check_same_thread=False)
         self._conn.row_factory = sqlite3.Row
@@ -118,7 +125,7 @@ class ManifestDB:
                 )
                 self._conn.commit()
                 for row in dangling:
-                    logger.warning(
+                    self.logger.warning(
                         "!! Run %s was left \"running\" by a previous session (app closed/crashed "
                         "mid-run) — auto-closed on reopen. This is NOT a real /run/finish from the "
                         "Shortcut; its final tally may be incomplete.",

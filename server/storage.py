@@ -100,6 +100,11 @@ class BackupEngine:
     def __init__(self, dest_root: Path, db: ManifestDB):
         self.dest_root = Path(dest_root)
         self.db = db
+        # Reuses the same profile label the DB was opened with (single
+        # source of truth) so every log line from this engine is tagged
+        # with which profile/device it belongs to — see
+        # ManifestDB.__init__'s docstring comment.
+        self.logger = logging.LoggerAdapter(logger, {"profile": db.profile_label})
         self.staging_dir = self.db.index_dir / "staging"
         self.staging_dir.mkdir(parents=True, exist_ok=True)
 
@@ -190,11 +195,11 @@ class BackupEngine:
             # never be recorded as backed up (so /check keeps reporting it
             # missing and a later run retries once space is freed).
             self.db.bump_run(run_id, "files_error")
-            logger.error("x %s: could not write to disk (%s), requesting the file again", filename, exc)
+            self.logger.error("x %s: could not write to disk (%s), requesting the file again", filename, exc)
             raise ValueError(f'"{filename}" could not be saved (disk write failed: {exc}) — will retry on the next run.') from exc
         except Exception as exc:
             self.db.bump_run(run_id, "files_error")
-            logger.error("ERROR receiving %s: %s", filename, exc)
+            self.logger.error("ERROR receiving %s: %s", filename, exc)
             raise
         return self.finalize_upload(filename, staging_path, sha256, size, taken_at, run_id)
 
@@ -220,7 +225,7 @@ class BackupEngine:
             # of the empty file silently poisoning the record forever.
             staging_path.unlink(missing_ok=True)
             self.db.mark_error(run_id, Path(filename).name)
-            logger.error("x %s: received 0 bytes, requesting the file again", filename)
+            self.logger.error("x %s: received 0 bytes, requesting the file again", filename)
             raise ValueError(f'"{filename}" arrived empty (0 bytes) — not recorded, will retry on the next run.')
 
         safe_name = Path(filename).name  # strip any path components — never trust client paths
@@ -228,7 +233,7 @@ class BackupEngine:
         if not Path(safe_name).suffix:
             detected_ext = _detect_extension(staging_path)
             if detected_ext:
-                logger.warning("%s: no extension from the Shortcut, detected %s from content", safe_name, detected_ext)
+                self.logger.warning("%s: no extension from the Shortcut, detected %s from content", safe_name, detected_ext)
                 safe_name = f"{safe_name}{detected_ext}"
         if not taken_at:
             taken_at = _read_exif_taken_at(staging_path)
@@ -244,7 +249,7 @@ class BackupEngine:
                         self.db.backfill_original_filename(str(candidate_path), original_name)
                     self._resolve_error_both(run_id, safe_name, original_name)
                     self.db.bump_run(run_id, "files_skipped")
-                    logger.info("= %s already backed up, skipped", safe_name)
+                    self.logger.info("= %s already backed up, skipped", safe_name)
                     return {"status": "skipped_duplicate", "dest_path": str(candidate_path)}
 
                 if candidate_path.suffix.lower() in VIDEO_EXTENSIONS:
@@ -262,7 +267,7 @@ class BackupEngine:
                             self.db.backfill_original_filename(str(candidate_path), original_name)
                         self._resolve_error_both(run_id, safe_name, original_name)
                         self.db.bump_run(run_id, "files_skipped")
-                        logger.info("= %s already backed up (re-encoded copy, content unchanged), skipped", safe_name)
+                        self.logger.info("= %s already backed up (re-encoded copy, content unchanged), skipped", safe_name)
                         return {"status": "skipped_duplicate", "dest_path": str(candidate_path)}
 
                 final_path = self._next_conflict_name(target_dir, candidate_path)
@@ -271,7 +276,7 @@ class BackupEngine:
                 self._resolve_error_both(run_id, safe_name, original_name)
                 self.db.bump_run(run_id, "files_conflict")
                 self._maybe_fix_video_creation_time(final_path, taken_at)
-                logger.warning("! %s: name conflict, kept both -> %s", safe_name, final_path.name)
+                self.logger.warning("! %s: name conflict, kept both -> %s", safe_name, final_path.name)
                 return {"status": "conflict_kept_both", "dest_path": str(final_path)}
 
             shutil.move(str(staging_path), str(candidate_path))
@@ -279,7 +284,7 @@ class BackupEngine:
             self._resolve_error_both(run_id, safe_name, original_name)
             self.db.bump_run(run_id, "files_new")
             self._maybe_fix_video_creation_time(candidate_path, taken_at)
-            logger.info("+ %s backed up (%.1f MB)", safe_name, size / (1024 * 1024))
+            self.logger.info("+ %s backed up (%.1f MB)", safe_name, size / (1024 * 1024))
             return {"status": "new", "dest_path": str(candidate_path)}
         finally:
             staging_path.unlink(missing_ok=True)  # no-op once moved

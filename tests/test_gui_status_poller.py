@@ -25,7 +25,7 @@ import server.profiles as profiles_module
 from server.manifest_db import ManifestDB
 from server.profiles import ProfileStore
 from server.storage import BackupEngine
-from gui.main_window import _compute_status_snapshot
+from gui.main_window import _compute_status_snapshot, _profile_stats_text
 
 
 @pytest.fixture()
@@ -98,6 +98,42 @@ def test_snapshot_includes_mirror_status_when_mirror_configured(store, tmp_path)
     snapshot2 = _compute_status_snapshot(store.list())
     assert snapshot2["per_profile"][p.id]["mirror_status"] is not None
     assert snapshot2["per_profile"][p.id]["mirror_status"]["total_files"] == 0
+
+
+def test_snapshot_flags_destination_unreachable_distinctly(store, tmp_path, monkeypatch):
+    """An unplugged USB must be reported distinctly from BOTH a brand-new
+    not-yet-existing folder (which mkdir() legitimately auto-creates, see
+    test_snapshot_has_independent_entries_per_profile's dest2, unaffected
+    by this test) and a genuinely unexpected error (which still gets the
+    full "status_error" traceback, unchanged) -- see AGENTS.md lesson 26.
+    Before this fix, both cases looked identical to the profile card: a
+    silent "never backed up, 0 files" with no indication anything was
+    wrong."""
+    p = store.add("iPhone de Hesner")
+    store.set_destination(p.id, str(tmp_path / "dest"))
+
+    def failing_mkdir(self, *a, **k):
+        raise OSError(3, "The system cannot find the path specified")
+
+    monkeypatch.setattr(Path, "mkdir", failing_mkdir)
+
+    snapshot = _compute_status_snapshot(store.list())
+    entry = snapshot["per_profile"][p.id]
+
+    assert entry["destination_unreachable"] is True
+    assert entry["status"] is None
+    assert entry["status_error"] is None
+
+
+def test_stats_text_shows_not_connected_instead_of_stale_empty_stats(store, tmp_path):
+    p = store.add("iPhone de Hesner")
+    dest = tmp_path / "dest"
+    store.set_destination(p.id, str(dest))
+
+    text = _profile_stats_text(p, "es", status=None, destination_unreachable=True)
+    assert str(dest) in text
+    assert "conectad" in text.lower()  # "no conectada" -- distinct from the normal stats layout
+    assert "0 archivos" not in text  # must not look like a real, empty-but-reachable destination
 
 
 def test_snapshot_never_raises_when_nothing_is_configured(store):

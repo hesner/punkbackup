@@ -57,6 +57,10 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "en": "No destination folder configured",
     },
     "stats_folder": {"es": "Carpeta: {path}", "en": "Folder: {path}"},
+    "stats_dest_not_connected": {
+        "es": "⚠ USB no conectada: {path}",
+        "en": "⚠ USB not connected: {path}",
+    },
     "stats_usb": {"es": "USB: {info}", "en": "USB: {info}"},
     "stats_line": {
         "es": "Total en destino: {count} archivos   |   Última copia: {last}",

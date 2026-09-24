@@ -37,6 +37,7 @@ from tkinter import filedialog, messagebox
 from typing import Optional
 
 import customtkinter as ctk
+from fastapi import HTTPException
 
 from server import app as app_module
 from server.config import AppConfig
@@ -138,10 +139,25 @@ def _compute_status_snapshot(profiles: list[Profile]) -> dict:
     deleting a profile) — see AGENTS.md lesson 22."""
     per_profile: dict[str, dict] = {}
     for profile in profiles:
-        entry: dict = {"status": None, "status_error": None, "mirror_status": None}
+        entry: dict = {
+            "status": None, "status_error": None, "mirror_status": None, "destination_unreachable": False,
+        }
         if profile.enabled and profile.destination_dir:
             try:
                 entry["status"] = app_module.get_status_for_profile(profile)
+            except HTTPException as exc:
+                # 503 specifically means _engine_for's mkdir() failed --
+                # the destination's drive isn't currently reachable (USB
+                # unplugged). This is a normal, expected, RECOVERABLE state
+                # (not a bug), so it's surfaced distinctly from a genuine
+                # unexpected error below -- see _profile_stats_text and
+                # AGENTS.md lesson 26. A never-yet-created subfolder on an
+                # otherwise-reachable drive does NOT hit this path: mkdir()
+                # creates it silently, same as it always has.
+                if exc.status_code == 503:
+                    entry["destination_unreachable"] = True
+                else:
+                    entry["status_error"] = f"{exc.status_code}: {exc.detail}"
             except Exception:
                 import traceback
 
@@ -158,15 +174,26 @@ def _compute_status_snapshot(profiles: list[Profile]) -> dict:
     return {"per_profile": per_profile, "aggregate": aggregate}
 
 
-def _profile_stats_text(profile: Profile, lang: str, status: Optional[dict] = None) -> str:
+def _profile_stats_text(
+    profile: Profile, lang: str, status: Optional[dict] = None, destination_unreachable: bool = False,
+) -> str:
     """`status` is a PRECOMPUTED result of `app_module.get_status_for_profile`
     (or None — no data yet, or the profile isn't running) — this function
     itself must never touch disk. See _compute_status_snapshot's docstring
     for why: this used to call get_status_for_profile() directly, once per
     row per ~1.5s GUI refresh tick, which is real synchronous disk/SQLite
-    I/O running on the Tkinter main thread (AGENTS.md lesson 22)."""
+    I/O running on the Tkinter main thread (AGENTS.md lesson 22).
+
+    `destination_unreachable` is also precomputed by the same snapshot —
+    True means the profile's OWN destination_dir is currently unreachable
+    (USB unplugged), distinct from "never backed up yet." Before this, an
+    unplugged drive showed the exact same "Total: 0 files | Last: never"
+    text as a brand-new empty destination, which is actively misleading —
+    see AGENTS.md lesson 26."""
     if not profile.destination_dir:
         return _t("stats_no_dest", lang)
+    if destination_unreachable:
+        return _t("stats_dest_not_connected", lang, path=profile.destination_dir)
 
     lines = [_t("stats_folder", lang, path=profile.destination_dir)]
     volume = _volume_text(profile, lang)
@@ -200,18 +227,23 @@ def _profile_stats_text(profile: Profile, lang: str, status: Optional[dict] = No
 class ProfileStatusRow(ctk.CTkFrame):
     """Used on the "Principal" screen: name, stats, and the enable/pause switch."""
 
-    def __init__(self, master, profile: Profile, lang: str, on_toggle, status: Optional[dict] = None):
+    def __init__(
+        self, master, profile: Profile, lang: str, on_toggle, status: Optional[dict] = None,
+        destination_unreachable: bool = False,
+    ):
         super().__init__(master, fg_color=CARD_BG, border_width=1, border_color=BORDER, corner_radius=8)
         self.grid_columnconfigure(0, weight=1)
         self.profile = profile
         self.lang = lang
         self._on_toggle = on_toggle
         self._status = status
+        self._destination_unreachable = destination_unreachable
 
         self.name_label = ctk.CTkLabel(self, text=profile.name, font=ctk.CTkFont(weight="bold"), text_color=TEXT_MAIN)
         self.name_label.grid(row=0, column=0, sticky="w", padx=12, pady=(10, 0))
         self.stats_label = ctk.CTkLabel(
-            self, text=_profile_stats_text(profile, lang, status), text_color=TEXT_MUTED, justify="left"
+            self, text=_profile_stats_text(profile, lang, status, destination_unreachable),
+            text_color=TEXT_MUTED, justify="left",
         )
         self.stats_label.grid(row=1, column=0, sticky="w", padx=12, pady=(0, 10))
 
@@ -231,15 +263,18 @@ class ProfileStatusRow(ctk.CTkFrame):
     def _state_text(self) -> str:
         return _t("profile_active", self.lang) if self.profile.enabled else _t("profile_paused", self.lang)
 
-    def update_data(self, profile: Profile, lang: str, status: Optional[dict] = None) -> None:
+    def update_data(
+        self, profile: Profile, lang: str, status: Optional[dict] = None, destination_unreachable: bool = False,
+    ) -> None:
         """Refresh in place instead of destroying/recreating — avoids the
         visible flicker a full rebuild causes on every periodic status poll.
         `status` is precomputed (see _profile_stats_text's docstring)."""
         self.profile = profile
         self.lang = lang
         self._status = status
+        self._destination_unreachable = destination_unreachable
         self.name_label.configure(text=profile.name)
-        self.stats_label.configure(text=_profile_stats_text(profile, lang, status))
+        self.stats_label.configure(text=_profile_stats_text(profile, lang, status, destination_unreachable))
         self.state_label.configure(text=self._state_text())
         if self.switch_var.get() != profile.enabled:
             self.switch_var.set(profile.enabled)
@@ -254,6 +289,7 @@ class ProfileManageRow(ctk.CTkFrame):
     def __init__(
         self, master, profile: Profile, lang: str, callbacks: dict,
         status: Optional[dict] = None, mirror_status: Optional[dict] = None,
+        destination_unreachable: bool = False,
     ):
         super().__init__(master, fg_color=CARD_BG, border_width=1, border_color=BORDER, corner_radius=8)
         self.grid_columnconfigure(0, weight=1)
@@ -261,6 +297,7 @@ class ProfileManageRow(ctk.CTkFrame):
         self.lang = lang
         self._syncing = False
         self._status = status
+        self._destination_unreachable = destination_unreachable
 
         self.name_label = ctk.CTkLabel(self, text=profile.name, font=ctk.CTkFont(weight="bold"), text_color=TEXT_MAIN)
         self.name_label.grid(row=0, column=0, sticky="w", padx=12, pady=(10, 0))
@@ -341,7 +378,7 @@ class ProfileManageRow(ctk.CTkFrame):
 
     def _status_text(self) -> str:
         status = _t("profile_active", self.lang) if self.profile.enabled else _t("profile_paused", self.lang)
-        return f"{status}\n{_profile_stats_text(self.profile, self.lang, self._status)}"
+        return f"{status}\n{_profile_stats_text(self.profile, self.lang, self._status, self._destination_unreachable)}"
 
     def _apply_button_text(self) -> None:
         self.btn_choose_dest.configure(text=_t("btn_choose_folder", self.lang))
@@ -436,11 +473,13 @@ class ProfileManageRow(ctk.CTkFrame):
 
     def update_data(
         self, profile: Profile, lang: str, status: Optional[dict] = None, mirror_status=_UNSET,
+        destination_unreachable: bool = False,
     ) -> None:
         lang_changed = lang != self.lang
         self.profile = profile
         self.lang = lang
         self._status = status
+        self._destination_unreachable = destination_unreachable
         self.name_label.configure(text=profile.name)
         self.status_label.configure(text=self._status_text())
         if lang_changed:
@@ -1106,11 +1145,14 @@ class MainWindow(ctk.CTk):
             if row is None:
                 row = ProfileStatusRow(
                     self.principal_profiles_container, profile, self.lang, self._on_toggle_profile,
-                    status=entry.get("status"),
+                    status=entry.get("status"), destination_unreachable=entry.get("destination_unreachable", False),
                 )
                 self._principal_rows[profile.id] = row
             else:
-                row.update_data(profile, self.lang, status=entry.get("status"))
+                row.update_data(
+                    profile, self.lang, status=entry.get("status"),
+                    destination_unreachable=entry.get("destination_unreachable", False),
+                )
             row.grid(row=i, column=0, sticky="ew", padx=4, pady=4)
 
     def _on_toggle_profile(self, profile: Profile, enabled: bool) -> None:
@@ -1171,12 +1213,14 @@ class MainWindow(ctk.CTk):
                 row = ProfileManageRow(
                     self.perfiles_container, profile, self.lang, callbacks,
                     status=entry.get("status"), mirror_status=entry.get("mirror_status", _UNSET),
+                    destination_unreachable=entry.get("destination_unreachable", False),
                 )
                 self._settings_rows[profile.id] = row
             else:
                 row.update_data(
                     profile, self.lang, status=entry.get("status"),
                     mirror_status=entry.get("mirror_status", _UNSET),
+                    destination_unreachable=entry.get("destination_unreachable", False),
                 )
             row.grid(row=i, column=0, sticky="ew", padx=4, pady=4)
 

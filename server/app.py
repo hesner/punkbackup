@@ -25,6 +25,7 @@ from __future__ import annotations
 
 import hashlib
 import logging
+import time
 import uuid
 from pathlib import Path
 from typing import Optional
@@ -43,17 +44,46 @@ logger = logging.getLogger("backup_engine")
 
 app = FastAPI(title="PunkBackup")
 
-_state: dict = {"profile_store": None, "engines": {}}
+_state: dict = {"profile_store": None, "engines": {}, "unreachable_warned": {}}
+
+# How long to stay quiet about the SAME profile's destination being
+# unreachable before logging it again — a real device sweeping hundreds of
+# items against a disconnected USB hits _engine_for on every single
+# /check and /upload, and without this a whole sweep would flood the
+# activity log with hundreds of copies of the same fact. A long-running
+# sweep still gets periodic reminders, just not one per request. See
+# AGENTS.md lesson 26.
+_UNREACHABLE_WARN_COOLDOWN = 60.0  # seconds
 
 
 def configure(profile_store: ProfileStore) -> None:
     """Called by the GUI right before the server starts listening."""
     _state["profile_store"] = profile_store
     _state["engines"] = {}
+    _state["unreachable_warned"] = {}
 
 
 def is_configured() -> bool:
     return _state["profile_store"] is not None
+
+
+def _warn_destination_unreachable(profile: Profile, dest_path: Path, exc: OSError) -> None:
+    """Logs one clear, human-readable line via the SAME "backup_engine"
+    logger the GUI's live activity panel already listens to — before this,
+    a request against an unreachable/unplugged destination raised straight
+    to an HTTPException with no logging at all, so a real Shortcut run
+    against a disconnected USB produced zero visible trace in the app: not
+    in the log, not on the profile card (see AGENTS.md lesson 26). Rate
+    limited per profile via _UNREACHABLE_WARN_COOLDOWN so a whole failing
+    sweep doesn't flood the log with the same fact on every request."""
+    warned = _state["unreachable_warned"]
+    now = time.monotonic()
+    last = warned.get(profile.id)
+    if last is not None and (now - last) < _UNREACHABLE_WARN_COOLDOWN:
+        return
+    warned[profile.id] = now
+    adapter = logging.LoggerAdapter(logger, {"profile": profile.name})
+    adapter.error("Destination folder not reachable — is the USB drive connected? (%s: %s)", dest_path, exc)
 
 
 def _engine_for(profile: Profile) -> BackupEngine:
@@ -65,7 +95,9 @@ def _engine_for(profile: Profile) -> BackupEngine:
         try:
             dest_path.mkdir(parents=True, exist_ok=True)
         except OSError as exc:
+            _warn_destination_unreachable(profile, dest_path, exc)
             raise HTTPException(503, f"Destination folder is not reachable (is the drive connected?): {exc}")
+        _state["unreachable_warned"].pop(profile.id, None)
         engines[profile.id] = BackupEngine(dest_path, ManifestDB(dest_path, profile_label=profile.name))
     return engines[profile.id]
 

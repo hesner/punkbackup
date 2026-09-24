@@ -149,6 +149,101 @@ def test_changing_destination_is_picked_up_after_forget_profile(client, store, t
     assert str(new_dest) in r.json()["dest_path"]
 
 
+def test_unreachable_destination_logs_once_via_the_backup_engine_logger(client, store, tmp_path, monkeypatch, caplog):
+    """Before this, a request against an unreachable/unplugged destination
+    raised straight to a 503 with ZERO logging anywhere -- a real Shortcut
+    run against a disconnected USB left no trace at all in the app's
+    activity log (only an occasional unrelated traceback from the idle
+    checker, and only much later). Reuses the "backup_engine" logger so
+    this shows up in the GUI's live activity panel for free. See AGENTS.md
+    lesson 26."""
+    import logging
+
+    profile = add_profile_with_dest(store, tmp_path, "iPhone de Hesner")
+
+    def failing_mkdir(self, *a, **k):
+        raise OSError(3, "The system cannot find the path specified")
+
+    monkeypatch.setattr(Path, "mkdir", failing_mkdir)
+    caplog.set_level(logging.ERROR, logger="backup_engine")
+
+    r = client.post("/run/start", headers={"X-Backup-Token": profile.token})
+    assert r.status_code == 503
+    assert any("not reachable" in rec.getMessage() for rec in caplog.records)
+
+
+def test_unreachable_destination_warning_is_rate_limited_per_profile(client, store, tmp_path, monkeypatch, caplog):
+    """A real Shortcut sweep retries /check and /upload for every item in
+    the library against the SAME disconnected destination -- without a
+    cooldown, that's hundreds of identical log lines for one underlying
+    fact. See AGENTS.md lesson 26."""
+    import logging
+
+    import server.app as app_mod
+
+    profile = add_profile_with_dest(store, tmp_path, "iPhone de Hesner")
+
+    def failing_mkdir(self, *a, **k):
+        raise OSError(3, "The system cannot find the path specified")
+
+    monkeypatch.setattr(Path, "mkdir", failing_mkdir)
+    fake_now = [1000.0]
+    monkeypatch.setattr(app_mod.time, "monotonic", lambda: fake_now[0])
+    caplog.set_level(logging.ERROR, logger="backup_engine")
+
+    client.post("/run/start", headers={"X-Backup-Token": profile.token})
+    assert len(caplog.records) == 1
+
+    caplog.clear()
+    fake_now[0] += 10  # well inside the cooldown
+    client.post("/run/start", headers={"X-Backup-Token": profile.token})
+    assert len(caplog.records) == 0
+
+    caplog.clear()
+    fake_now[0] += app_mod._UNREACHABLE_WARN_COOLDOWN + 1  # past the cooldown
+    client.post("/run/start", headers={"X-Backup-Token": profile.token})
+    assert len(caplog.records) == 1
+
+
+def test_unreachable_destination_warns_again_right_after_a_real_reconnect(client, store, tmp_path, monkeypatch, caplog):
+    """A successful request (drive genuinely reconnected) must clear the
+    rate-limit state -- otherwise a disconnect -> reconnect -> disconnect
+    cycle inside one cooldown window would wrongly stay silent on the
+    second disconnect, even though it's a fresh, newly-true fact."""
+    import logging
+
+    import server.app as app_mod
+
+    profile = add_profile_with_dest(store, tmp_path, "iPhone de Hesner")
+    real_mkdir = Path.mkdir
+    fail = {"on": True}
+
+    def maybe_failing_mkdir(self, *a, **k):
+        if fail["on"]:
+            raise OSError(3, "The system cannot find the path specified")
+        return real_mkdir(self, *a, **k)
+
+    monkeypatch.setattr(Path, "mkdir", maybe_failing_mkdir)
+    fake_now = [1000.0]
+    monkeypatch.setattr(app_mod.time, "monotonic", lambda: fake_now[0])
+    caplog.set_level(logging.ERROR, logger="backup_engine")
+
+    client.post("/run/start", headers={"X-Backup-Token": profile.token})
+    assert len(caplog.records) == 1
+
+    fail["on"] = False
+    fake_now[0] += 1  # still well inside the cooldown, but the drive is back
+    r = client.post("/run/start", headers={"X-Backup-Token": profile.token})
+    assert r.status_code == 200
+
+    caplog.clear()
+    fail["on"] = True
+    app_module.forget_profile(profile.id)
+    fake_now[0] += 1
+    client.post("/run/start", headers={"X-Backup-Token": profile.token})
+    assert len(caplog.records) == 1  # not suppressed by the earlier cooldown
+
+
 def test_check_endpoint_matches_actual_destination(client, store, tmp_path):
     profile = add_profile_with_dest(store, tmp_path, "iPhone de prueba")
     headers = {"X-Backup-Token": profile.token}

@@ -764,6 +764,71 @@ reintroduces these problems.
     of insert-or-die) is generally safer than trying to guarantee it can
     never happen.
 
+26. **An unreachable destination (USB unplugged) used to be completely
+    invisible in real-time — no server log line, and the profile card
+    showed the exact same "0 files, never backed up" text as a genuine,
+    reachable, empty destination.** Found live (2026-09-24): the user
+    ran the phone's Shortcut with the destination USB unplugged and
+    reported "the app shows nothing, but the Shortcut is still active" —
+    plus a follow-up question that turned out to already have a clean
+    answer available in the codebase's OWN mirror feature, just not
+    applied to the primary destination. Root cause, two independent gaps:
+    (1) `_engine_for()`'s `except OSError` branch (the code path that
+    already correctly turns a failed `mkdir()` into a `503`) never logged
+    anything before raising — so a real Shortcut sweep hammering `/check`/
+    `/upload` against a disconnected drive left zero trace in the activity
+    log at the moment it actually happened; the only log line that could
+    ever appear was a full Python traceback from `_check_idle_backups`'s
+    periodic poller, and only the FIRST time it happened after app
+    startup (rate-limited to once via its own `error_logged` flag) — so by
+    the time the user actually ran the Shortcut minutes or hours later,
+    that traceback (if it had fired at all) had already scrolled by with
+    no new activity to explain what was happening right now. (2) The
+    profile card's stats text (`_profile_stats_text`) only ever received
+    a `status` dict or `None` — a `None` from "genuinely never backed up"
+    and a `None` from "currently unreachable" were indistinguishable, so
+    both rendered the identical "Total: 0 files | Last: never" line.
+    **Fixed by extending an already-correct pattern to the primary path,
+    not inventing a new one**: `get_mirror_status()` already returns a
+    clean `None` for "not connected" that the GUI already renders as a
+    distinct `mirror_not_connected` message — the primary destination just
+    never got the equivalent treatment. (a) `_engine_for`'s `except OSError`
+    now calls `_warn_destination_unreachable()`, which logs one clear line
+    via the SAME `"backup_engine"` logger `BackupEngine`/`ManifestDB`
+    already use (so it reaches the GUI's live activity panel for free,
+    same as every other server-side event), rate-limited to once per 60s
+    per profile (`_UNREACHABLE_WARN_COOLDOWN`) via a small
+    `_state["unreachable_warned"]: dict[profile_id, float]` timestamp map
+    — cleared the moment that profile's `mkdir()` next succeeds, so a
+    disconnect → reconnect → disconnect cycle inside one cooldown window
+    still warns immediately on the second disconnect rather than staying
+    wrongly silent. (b) `_compute_status_snapshot` now catches
+    `HTTPException` specifically and checks `status_code == 503` to set a
+    new `entry["destination_unreachable"]` flag, kept distinct from
+    `status_error` (any OTHER, genuinely unexpected exception still gets
+    the full traceback treatment, unchanged) — `_profile_stats_text` then
+    renders a dedicated `stats_dest_not_connected` line ("⚠ USB no
+    conectada: {path}") instead of the normal stats block, on BOTH the
+    Principal and Settings screens. **Critical distinction that made the
+    naive version of this fix wrong at first**: a brand-new profile
+    pointed at a destination folder that simply doesn't exist YET on an
+    otherwise-reachable drive must NOT be flagged unreachable — `mkdir(
+    parents=True, exist_ok=True)` legitimately auto-creates it on the
+    first real request, which is correct, existing, load-bearing behavior
+    (see `test_snapshot_has_independent_entries_per_profile`'s `dest2`,
+    never explicitly created, still works). The fix therefore does NOT do
+    a cheap `Path.is_dir()` pre-check (which would have wrongly flagged
+    every not-yet-first-used profile) — it lets `_engine_for`'s real
+    `mkdir()` attempt run exactly as before and only distinguishes the
+    OUTCOME (503 = drive root itself unreachable, e.g. `E:\` doesn't exist
+    at all, vs. success = drive reachable, subfolder created fine).
+    **When a feature already solved this exact class of problem elsewhere
+    in the codebase (mirror's `None`-means-not-connected pattern), check
+    for that existing solution and extend it consistently before
+    designing a new one from scratch** — the two code paths now agree on
+    what "not connected" looks like to the user, instead of the primary
+    path inventing its own, worse-communicated version of the same fact.
+
 - Unit tests against `BackupEngine`/`ManifestDB` directly (no HTTP) for the
   dedup/conflict/incremental rules — fast, exhaustive.
 - `fastapi.testclient.TestClient` end-to-end tests for the real ASGI app,
@@ -793,7 +858,7 @@ reintroduces these problems.
 
 ## 7. What "done" looks like
 
-- `pytest tests -q` passes (81 tests as of this writing, covering engine
+- `pytest tests -q` passes (86 tests as of this writing, covering engine
   rules, profile isolation/pause/delete, destination-switch correctness,
   concurrent uploads, the `/check` contract, the 0-byte-upload rejection,
   its self-healing retry error-count behavior, a stale-run reap on
@@ -802,10 +867,13 @@ reintroduces these problems.
   with no extension or no `taken_at`, `ServerController`'s bind
   verification + auto-retry on a transient port conflict, the in-place
   video `creation_time` metadata patch against a synthetic ISO-BMFF
-  fixture, and the second-copy mirror sync engine — newest-first order,
+  fixture, the second-copy mirror sync engine — newest-first order,
   hash verification/corruption detection, resumability, cancellation,
   cumulative progress, and the promote-to-primary scenario with no
-  reconciliation step needed).
+  reconciliation step needed — and the unreachable-destination warning
+  (once-per-cooldown server log line, cleared on reconnect, and the GUI
+  snapshot's distinct `destination_unreachable` flag vs. a genuinely
+  unexpected `status_error`).
 - A real iPhone can run the Shortcut manually, and files appear in the
   chosen destination with correct extensions, organized by Year/Month, and
   `<dest>/.iphone_backup_index/index.sqlite`'s `backed_up_files` table

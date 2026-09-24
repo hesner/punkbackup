@@ -463,6 +463,49 @@ reintroduces these problems.
       where `baseline` = what was already there) — a UI/UX lesson as much
       as a technical one: **when an operation can resume, its progress
       display must never contradict "nothing was lost."**
+    - **`_PunkDialog`'s message-box height, estimated only from literal
+      `"\n"` characters in the message, left a long single-paragraph
+      warning (zero explicit newlines, the shape of every `warn_*` dialog
+      added in AGENTS.md lessons 26/27) clipped behind a scrollbar
+      instead of showing its 2-3 word-wrapped visual lines.** Confirmed
+      via a real screenshot (2026-09-24): the estimate computed
+      `line_count = message.count("\n") + 1` — always 1 for these
+      messages — giving a ~44px box for text that actually wrapped to 2-3
+      lines at the dialog's fixed width. **Fixed** by measuring the REAL
+      wrapped line count after layout, via the underlying raw
+      `tkinter.Text` widget CTkTextbox wraps internally
+      (`ctk_textbox._textbox`, confirmed present by reading
+      customtkinter's own source rather than assuming) and its Tcl-level
+      `count(start, end, "displaylines")` — but this requires a FULL
+      `self.update()`, not `update_idletasks()`: confirmed directly that
+      `update_idletasks()` alone leaves the textbox's real on-screen width
+      unresolved at a placeholder `winfo_width() == 1`, so a
+      `displaylines` query against it returns nonsense (measured ~98
+      "lines" for a message that only wraps to 2) — only a full `update()`
+      forces Tk to actually realize geometry before the query is
+      meaningful. To avoid a visible flash where the dialog briefly shows
+      at the wrong size before snapping to its recalculated one, the
+      whole window is `withdraw()`n at construction and only
+      `deiconify()`d in `_show_modal()`, once position AND size are both
+      final.
+    - **Destroying a transient, grabbed `Toplevel` while its owner window
+      is maximized ("zoomed") can silently drop the owner back to
+      "normal" size the instant the dialog closes** — a Windows/Tk
+      quirk, confirmed live (2026-09-24) via a direct before/after
+      `root.state()` check around a real dialog's `wait_window()`
+      returning. Nothing in this codebase ever asks for this; it's a
+      side effect of the OS returning focus to the owner once the modal
+      grab ends. **Fixed** with `_capture_zoom(parent)` /
+      `_restore_zoom(parent, was_zoomed)` in `gui/dialogs.py`, called
+      immediately before/after every dialog's `wait_window()` (both
+      `_PunkDialog._show_modal()` and `ask_input()`, since `ask_input`
+      builds its own raw `CTkToplevel` outside the `_PunkDialog` class
+      hierarchy and has the exact same modal-grab shape) — re-asserts
+      `"zoomed"` ONLY if the owner really was zoomed before AND the OS
+      actually changed it, confirmed by a direct smoke test that a window
+      the user had deliberately left un-maximized before opening a
+      dialog stays un-maximized afterward (never forces a maximize that
+      wasn't there to begin with).
 
 16. **`ManifestDB`'s dangling-run reap (see point 10, and AGENTS.md §6's
     "ad-hoc read-only status checks" lesson) can fire on a run that is

@@ -49,6 +49,34 @@ def _btn_text(key: str, lang: str) -> str:
     return _BUTTON_LABELS[key].get(lang, _BUTTON_LABELS[key]["es"])
 
 
+def _capture_zoom(parent) -> bool:
+    """True if `parent` (the main window) is currently maximized. Call
+    this right before a modal dialog's `wait_window()` — see
+    `_restore_zoom` for why."""
+    try:
+        return parent.state() == "zoomed"
+    except Exception:
+        return False
+
+
+def _restore_zoom(parent, was_zoomed: bool) -> None:
+    """Windows/Tk quirk, confirmed live (2026-09-24): destroying a
+    transient, grabbed Toplevel while its owner is maximized can silently
+    drop the owner back to its "normal" size the instant this dialog
+    closes — nothing in this codebase ever asks for that; it's the OS
+    returning focus to the owner after a modal grab ends. Re-asserts
+    "zoomed" only if the owner really was zoomed before AND the OS
+    actually changed it — never forces a maximize on a window the user
+    had deliberately un-maximized themselves before opening the dialog."""
+    if not was_zoomed:
+        return
+    try:
+        if parent.winfo_exists() and parent.state() != "zoomed":
+            parent.state("zoomed")
+    except Exception:
+        pass
+
+
 class _PunkDialog(ctk.CTkToplevel):
     """Base modal: dark card, colored accent dot + title, message area,
     button row. Subclasses/helpers below just fill in the button row."""
@@ -56,6 +84,11 @@ class _PunkDialog(ctk.CTkToplevel):
     def __init__(self, parent, title: str, message: str, dot_color: str):
         super().__init__(parent)
         self.result = None
+        # Hidden until fully laid out, correctly sized (see the
+        # displaylines fix below) and centered by _show_modal() — avoids a
+        # visible flash/jump where the dialog briefly appears the wrong
+        # size before snapping to its final one.
+        self.withdraw()
         self.configure(fg_color=BG)
         self.title(title)
         self.resizable(False, False)
@@ -103,6 +136,26 @@ class _PunkDialog(ctk.CTkToplevel):
         self.button_row = ctk.CTkFrame(card, fg_color="transparent")
         self.button_row.pack(fill="x")
 
+        # The estimate above only counts literal "\n" characters — a
+        # single long sentence with none still WORD-WRAPS to 2-3 visual
+        # lines at this width, and the naive estimate left it clipped
+        # behind a scrollbar (confirmed via a real screenshot, 2026-09-24
+        # — every warn_* dialog is exactly this shape: one long sentence,
+        # zero explicit newlines). `self.update()` (a FULL update, not
+        # update_idletasks() — confirmed needed: idletasks alone leaves
+        # the textbox's real on-screen width unresolved at 1px, so a
+        # "displaylines" query against it returns nonsense) forces real
+        # layout, then Tk's own "displaylines" count gives the TRUE number
+        # of wrapped visual lines, covering explicit "\n" and word-wrap
+        # together in one measurement.
+        self.update()
+        try:
+            display_lines = body._textbox.count("1.0", "end", "displaylines")[0]
+            box_height = max(40, min(display_lines * 20 + 24, 360))
+            body.configure(height=box_height)
+        except Exception:
+            pass  # keep the newline-based estimate above — never worse than before
+
     def _cancel(self) -> None:
         self.result = None
         self.destroy()
@@ -129,9 +182,12 @@ class _PunkDialog(ctk.CTkToplevel):
         x = max(px + (pw - w) // 2, 0)
         y = max(py + (ph - h) // 2, 0)
         self.geometry(f"+{x}+{y}")
+        self.deiconify()  # was withdrawn in __init__ until sized+positioned
         self.grab_set()
         self.focus_set()
+        was_zoomed = _capture_zoom(parent)
         self.wait_window()
+        _restore_zoom(parent, was_zoomed)
         return self.result
 
 
@@ -253,5 +309,7 @@ def ask_input(parent, lang: str, title: str, prompt: str, *, initial: str = "") 
     y = max(py + (parent_h - h) // 2, 0)
     dlg.geometry(f"+{x}+{y}")
     dlg.grab_set()
+    was_zoomed = _capture_zoom(parent)
     dlg.wait_window()
+    _restore_zoom(parent, was_zoomed)
     return dlg.result

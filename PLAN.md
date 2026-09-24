@@ -2349,3 +2349,49 @@ aunque no exista todavía cuenta como válida; una raíz de unidad
 inalcanzable, simulada igual que en la lección 26, cuenta como
 inválida) — **91/91 pasando**. Documentado como adenda de la lección 27
 en `AGENTS.md`.
+
+## 20. Dos bugs reales de `gui/dialogs.py`, encontrados vía una captura real del mensaje de la sección 19.1 (2026-09-24, v1.7.16)
+
+El usuario compartió una captura del diálogo "Atención" con el mensaje
+nuevo de la sección 19.1 — el texto salía cortado detrás de una barra
+de scroll, y además, al presionar "Aceptar", la ventana principal
+perdía su estado maximizado.
+
+**Bug 1 — caja de texto mal dimensionada**: la altura de la caja se
+estimaba contando solo saltos de línea literales (`\n`) en el mensaje
+— para un párrafo largo de una sola oración (exactamente la forma de
+todos los mensajes `warn_*` agregados hoy), eso siempre da 1, aunque el
+texto en realidad se envuelva (word-wrap) a 2-3 líneas visuales al
+ancho fijo del diálogo. Arreglado midiendo el conteo REAL de líneas
+envueltas después del layout, vía el widget `tkinter.Text` real que
+`CTkTextbox` envuelve internamente (`body._textbox`) y su comando Tcl
+`count(..., "displaylines")` — confirmado que hace falta un
+`self.update()` completo, no `update_idletasks()`, porque de lo
+contrario el ancho real del widget queda sin resolver (`winfo_width()
+== 1`) y la medición sale sin sentido (~98 líneas para un mensaje que
+en verdad envuelve a 2). Para evitar un salto visual mientras se
+recalcula, el diálogo ahora nace oculto (`withdraw()`) y solo se
+muestra (`deiconify()`) una vez que tiene su tamaño y posición finales.
+
+**Bug 2 — la ventana principal perdía el estado maximizado**: al
+cerrar cualquier diálogo modal mientras la ventana principal estaba
+maximizada, Windows/Tk la regresaba a tamaño normal — un efecto
+secundario confirmado en vivo (comparación directa de `root.state()`
+antes/después de `wait_window()`), no algo que el código pidiera.
+Arreglado con `_capture_zoom()`/`_restore_zoom()` en `gui/dialogs.py`,
+alrededor de CADA `wait_window()` del archivo (los diálogos de
+`_PunkDialog` y también `ask_input`, que construye su propio
+`CTkToplevel` por separado) — solo reafirma "zoomed" si la ventana
+principal de verdad lo estaba antes Y el sistema operativo lo cambió
+sin pedírselo; confirmado con una prueba manual que una ventana que el
+usuario había dejado sin maximizar a propósito sigue sin maximizar
+después de cerrar un diálogo.
+
+Ambos arreglos verificados con un smoke test manual (root maximizado →
+diálogo → cierre → sigue maximizado; root normal → diálogo → cierre →
+sigue normal; conteo de `displaylines` correcto para el mensaje real
+del bug). `gui/dialogs.py` no tiene cobertura de pytest directa (es
+capa Tkinter, convención ya establecida en el proyecto), así que la
+validación fue manual. Documentado en `AGENTS.md` como dos bullets
+nuevos dentro de la lección 15 (gotchas de CustomTkinter). Versión:
+**v1.7.16**.

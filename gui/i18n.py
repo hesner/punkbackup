@@ -159,6 +159,19 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "es": "🔄 Sincronizando... {done} / {total} archivos",
         "en": "🔄 Syncing... {done} / {total} files",
     },
+    # Shown instead of the two keys above when at least one file has
+    # failed verification during this sync -- makes "it's actually
+    # failing a lot, not just slow" visible without having to dig through
+    # the database (see PLAN.md, the 2026-09-23 write-up on the old
+    # attempts-not-successes counter).
+    "mirror_syncing_progress_failed": {
+        "es": "🔄 Sincronizando... {done} / {total} archivos  ·  ⚠ {failed} fallidos  ·  {free} libres de {total_space}",
+        "en": "🔄 Syncing... {done} / {total} files  ·  ⚠ {failed} failed  ·  {free} free of {total_space}",
+    },
+    "mirror_syncing_progress_failed_no_space": {
+        "es": "🔄 Sincronizando... {done} / {total} archivos  ·  ⚠ {failed} fallidos",
+        "en": "🔄 Syncing... {done} / {total} files  ·  ⚠ {failed} failed",
+    },
     "log_mirror_sync_started": {
         "es": "🔄 Sincronizando segunda copia de \"{name}\"...",
         "en": "🔄 Syncing second copy for \"{name}\"...",

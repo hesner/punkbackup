@@ -302,6 +302,15 @@ feature normally works. These are the messages you might see:
   never re-copies what's already there, and never restarts the visible
   counter from zero — the running count you see already reflects
   everything on that drive, old and new combined.
+- **"⚠ N failed"**, next to the counter during a sync — shows up when
+  some files fail verification, almost always because something else is
+  using the same USB drive at the same time (e.g. a real backup from the
+  iPhone running in parallel). The main counter (**X / Y files**) only
+  counts copies that actually got confirmed correct — it never counts a
+  failed attempt as progress, so if you see it climbing very slowly
+  alongside a growing failed count, that's a real sign something else is
+  competing for that drive — not an app bug. Stop whatever else is using
+  that same drive and sync again.
 
 ## How fast is the second copy (mirror) sync?
 

@@ -674,6 +674,22 @@ reintroduces these problems.
     single sequential fix to the actual bottleneck can outperform a much
     more complex parallel design that speeds up the wrong step.**
 
+    **Addendum, same day, found testing the fix above in real production
+    conditions**: a progress callback that reports the LOOP INDEX (every
+    attempt) instead of a genuine success count is actively misleading
+    whenever failures are possible — confirmed live: under real drive
+    contention, a sync attempted 83 files and succeeded on exactly 0 of
+    them, yet the on-screen counter climbed the whole time, indistinguishable
+    from a healthy sync, because it was reporting `i` (the loop index)
+    instead of `result.copied` (real successes). Cost real debugging time
+    (comparing the mirror folder's actual file count against the DB
+    against the on-screen number) before the mismatch was even noticed.
+    **Any progress indicator over an operation where individual items can
+    fail must report the count of confirmed successes, not attempts** —
+    and pairing it with a live failure count (`⚠ N failed`, shown only
+    when nonzero) turns "is this actually working?" from a forensic
+    investigation into something visible at a glance.
+
 - Unit tests against `BackupEngine`/`ManifestDB` directly (no HTTP) for the
   dedup/conflict/incremental rules — fast, exhaustive.
 - `fastapi.testclient.TestClient` end-to-end tests for the real ASGI app,
@@ -703,7 +719,7 @@ reintroduces these problems.
 
 ## 7. What "done" looks like
 
-- `pytest tests -q` passes (77 tests as of this writing, covering engine
+- `pytest tests -q` passes (78 tests as of this writing, covering engine
   rules, profile isolation/pause/delete, destination-switch correctness,
   concurrent uploads, the `/check` contract, the 0-byte-upload rejection,
   its self-healing retry error-count behavior, a stale-run reap on

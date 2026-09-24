@@ -69,7 +69,7 @@ def sync_mirror(
     primary_root: Path,
     primary_db: ManifestDB,
     mirror_root: Path,
-    progress_callback: Optional[Callable[[int, int], None]] = None,
+    progress_callback: Optional[Callable[[int, int, int], None]] = None,
     cancel_event: Optional[threading.Event] = None,
     profile_label: str = "-",
 ) -> MirrorSyncResult:
@@ -89,12 +89,23 @@ def sync_mirror(
     essentially never for a mirror) is tagged with the right profile —
     same purpose as every other ManifestDB/BackupEngine's profile_label.
 
-    `progress_callback(done, total)`: CUMULATIVE against the mirror's
-    whole target, not just this run's pending list -- resuming a mirror
-    that already has 128 files reports "129 of X", never "1 of Y". A
-    fresh "1/N"-looking readout on a resume looked like data had been
+    `progress_callback(done, total, failed)`: `done` is CUMULATIVE against
+    the mirror's whole target, not just this run's pending list -- resuming
+    a mirror that already has 128 files reports "129 of X", never "1 of Y".
+    A fresh "1/N"-looking readout on a resume looked like data had been
     lost even though nothing had (confirmed confusing on a real device,
-    2026-09-21).
+    2026-09-21). Just as important: `done` counts only files that actually
+    landed and verified successfully -- NOT attempts. A file that fails
+    verification does not advance `done`, even though the loop moves on to
+    the next one. Confirmed live (2026-09-23) that this distinction really
+    matters: under heavy contention for the same physical drive (a real
+    backup running at the same time), ~90% of attempts failed verification
+    and `done` correctly stayed flat -- an earlier version of this callback
+    reported attempts instead, making a sync that was accomplishing almost
+    nothing look like it was progressing normally. `failed` is the running
+    count of verify failures this call, so a caller can show the user
+    "this is actually failing a lot," not just "still going," if it
+    happens again.
 
     Safe to interrupt at any point (drive unplugged, app closed, power
     loss): a file is only ever recorded in the mirror's index AFTER it's
@@ -211,13 +222,14 @@ def sync_mirror(
                 result.verify_failed += 1
 
             if progress_callback is not None:
-                # Cumulative, not "1 of {len(pending)}" -- resuming a mirror
-                # that already has files must never look like it's starting
-                # over from zero (confirmed confusing on a real device,
-                # 2026-09-21: 128 already-verified files, next run's
-                # progress showed "1/6885" with no visible sign of the 128
-                # that were already safely there).
-                progress_callback(baseline + i, grand_total)
+                # baseline + result.copied, NOT baseline + i -- see this
+                # function's docstring. i counts ATTEMPTS (advances even on
+                # a verify failure); result.copied counts real successes.
+                # Reporting i here used to make a sync that was actually
+                # failing almost every file look like it was progressing
+                # normally (confirmed live, 2026-09-23: 83 attempts, 0
+                # successes, the old counter still climbed the whole time).
+                progress_callback(baseline + result.copied, grand_total, result.verify_failed)
     except Exception as exc:  # genuinely unexpected -- still report, never disappear silently
         result.fatal_error = str(exc)
     finally:

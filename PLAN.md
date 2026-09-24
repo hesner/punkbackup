@@ -1982,3 +1982,37 @@ verificación exactamente igual de estrictas.
 detectó que la unidad E: (mirror de "iphone de Hes" y destino de "ipad")
 estaba físicamente desconectada — el usuario fue notificado para que la
 revise; no es un bug de software.
+
+### 17.4 Bug real encontrado en producción el mismo día: el contador contaba intentos, no éxitos (2026-09-23, v1.7.9)
+
+Al probar el arreglo de agrupamiento en producción real (con el iPhone
+subiendo activamente al mismo tiempo — la misma contención documentada
+en §17.1), el usuario reportó "el contador debe mostrar números de
+archivos copiados reales, no intentos" — y tenía razón: se pasó un buen
+rato de diagnóstico (revisando la carpeta en disco, la base de datos, y
+comparando contra el número visible en pantalla) para descubrir que de
+**83 intentos, 0 habían tenido éxito real** — el contador seguía
+subiendo igual, indistinguible de una sincronización sana.
+
+**Causa**: `progress_callback(baseline + i, grand_total)` usaba `i`, el
+índice del loop — que avanza en CADA intento, incluyendo los que fallan
+la verificación por hash y se descartan. `result.copied` (el conteo real
+de éxitos) ya existía y se llevaba correctamente, solo nunca se usó para
+lo que se le mostraba al usuario.
+
+**Arreglo**: `progress_callback` ahora recibe `(done, total, failed)` —
+`done` es `baseline + result.copied` (éxitos reales, nunca intentos),
+`failed` es `result.verify_failed` en vivo. La GUI (`gui/i18n.py`) gana
+dos claves nuevas (`mirror_syncing_progress_failed` /
+`..._no_space`) que se muestran en vez de las normales apenas hay al
+menos un fallo, con un `⚠ N fallidos` visible junto al contador — así la
+próxima vez que esto pase, se ve de inmediato en pantalla en vez de
+requerir la misma investigación forense de hoy (comparar disco vs. base
+de datos vs. contador). Documentado en el Manual de solución de
+problemas (EN/ES), sección de mensajes de la segunda copia.
+
+1 prueba nueva (`test_progress_callback_reports_real_successes_not_attempts`,
+**78/78 pasando**) que reproduce exactamente el escenario real: mitad de
+los archivos fallan verificación a propósito, y confirma que `done`
+nunca supera el conteo real de éxitos aunque el loop siga procesando
+intentos fallidos. Versión: **v1.7.9**.

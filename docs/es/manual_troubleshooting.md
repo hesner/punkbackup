@@ -320,6 +320,16 @@ podrías llegar a ver:
   vuelve a copiar lo que ya está ahí, y nunca reinicia el contador visible
   desde cero — el conteo que ves ya refleja todo lo que hay en esa
   unidad, lo viejo y lo nuevo combinados.
+- **"⚠ N fallidos"**, junto al contador durante la sincronización —
+  aparece cuando algunos archivos no logran pasar la verificación (casi
+  siempre porque otra cosa está usando la misma unidad USB al mismo
+  tiempo, por ejemplo un respaldo real desde el iPhone corriendo en
+  paralelo). El contador principal (**X / Y archivos**) solo cuenta
+  copias que sí se confirmaron correctas — nunca cuenta intentos fallidos
+  como si fueran progreso, así que si lo ves avanzar muy lento junto con
+  un número de fallidos que crece, es una señal real de que algo más
+  está compitiendo por esa unidad — no un error del programa. Detén el
+  proceso que esté usando esa misma unidad y vuelve a sincronizar.
 
 ## ¿Qué tan rápido es la sincronización de la segunda copia (espejo)?
 

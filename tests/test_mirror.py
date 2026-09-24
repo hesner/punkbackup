@@ -34,7 +34,7 @@ def test_first_sync_copies_everything_newest_first(tmp_path):
     seen_order = []
     result = sync_mirror(
         engine.dest_root, engine.db, mirror_root,
-        progress_callback=lambda done, total: seen_order.append(done),
+        progress_callback=lambda done, total, failed: seen_order.append(done),
     )
 
     assert result.copied == 3
@@ -80,7 +80,10 @@ def test_progress_is_cumulative_not_reset_to_one_on_a_resumed_sync(tmp_path):
 
     engine.process_upload("IMG_new.jpg", io.BytesIO(b"brand new"), "2026-02-01T00:00:00", None)
     seen = []
-    sync_mirror(engine.dest_root, engine.db, mirror_root, progress_callback=lambda done, total: seen.append((done, total)))
+    sync_mirror(
+        engine.dest_root, engine.db, mirror_root,
+        progress_callback=lambda done, total, failed: seen.append((done, total)),
+    )
 
     # 1 file pending, but reported against the 3 already there -> "4 of 4", never "1 of 1".
     assert seen == [(4, 4)]
@@ -130,6 +133,48 @@ def test_corrupted_copy_is_not_recorded_and_is_retried(tmp_path, monkeypatch):
     monkeypatch.setattr(mirror_module.shutil, "copy2", real_copy2)
     retry = sync_mirror(engine.dest_root, engine.db, mirror_root)
     assert retry.copied == 1
+
+
+def test_progress_callback_reports_real_successes_not_attempts(tmp_path, monkeypatch):
+    """The real bug (2026-09-23): under real drive contention, a sync can
+    attempt many files while almost all of them fail verification -- the
+    progress callback used to report the ATTEMPT count, so `done` kept
+    climbing while the mirror gained zero real files, making a
+    near-completely-failing sync indistinguishable from a healthy one.
+    `done` must only ever advance on a genuine success; `failed` must
+    track verify failures separately."""
+    import server.mirror as mirror_module
+
+    engine = make_engine(tmp_path)
+    # B and D will fail verification; A and C will succeed.
+    for name in ["A.jpg", "B.jpg", "C.jpg", "D.jpg"]:
+        engine.process_upload(name, io.BytesIO(f"real-{name}".encode()), "2026-01-01T00:00:00", None)
+    mirror_root = tmp_path / "mirror"
+
+    real_copy2 = mirror_module.shutil.copy2
+
+    def flaky_copy2(src, dst, *a, **kw):
+        real_copy2(src, dst, *a, **kw)
+        if Path(src).name in ("B.jpg", "D.jpg"):
+            Path(dst).write_bytes(b"corrupted!!")
+
+    monkeypatch.setattr(mirror_module.shutil, "copy2", flaky_copy2)
+
+    seen = []  # (done, total, failed) after each attempt, in order
+
+    def on_progress(done, total, failed):
+        seen.append((done, total, failed))
+
+    result = sync_mirror(engine.dest_root, engine.db, mirror_root, progress_callback=on_progress)
+
+    assert result.copied == 2
+    assert result.verify_failed == 2
+    # `done` must never exceed the real number of successes so far, and
+    # must never go backwards; `failed` must reach 2 by the end.
+    dones = [d for d, _, _ in seen]
+    assert dones == sorted(dones)
+    assert max(dones) == 2  # never climbed past the real success count
+    assert seen[-1][2] == 2  # failed count reflects both corrupted files by the end
 
 
 def test_reconnecting_a_partially_synced_mirror_resumes_incrementally(tmp_path):
@@ -256,7 +301,7 @@ def test_cancelled_sync_still_commits_the_partial_batch(tmp_path):
     cancel_event = threading.Event()
     seen = []
 
-    def on_progress(done, total):
+    def on_progress(done, total, failed):
         seen.append(done)
         if done == 2:  # well short of COMMIT_BATCH_SIZE -- a partial batch
             cancel_event.set()
@@ -381,7 +426,7 @@ def test_cancelling_mid_sync_stops_cleanly_and_resumes_later(tmp_path):
     cancel_event = threading.Event()
     seen = []
 
-    def progress(done, total):
+    def progress(done, total, failed):
         seen.append(done)
         if done == 2:
             cancel_event.set()  # ask to stop right after the 2nd file lands

@@ -413,15 +413,25 @@ class ProfileManageRow(ctk.CTkFrame):
 
     def set_sync_progress(
         self, done: int, total: int, lang: str, free_bytes: int | None = None, total_bytes: int | None = None,
+        failed: int = 0,
     ) -> None:
+        """`done` is real successes only, `failed` a running verify-failure
+        count -- see sync_mirror's docstring for why this distinction
+        matters (2026-09-23: a real sync failed ~90% of its attempts under
+        drive contention, and the OLD done-counts-attempts version showed
+        it climbing normally the whole time, indistinguishable from a
+        healthy sync). A nonzero `failed` gets its own line in the display
+        so that specific confusion can't happen again."""
         self.lang = lang
-        if free_bytes is not None and total_bytes is not None:
-            text = _t(
-                "mirror_syncing_progress", lang, done=done, total=total,
-                free=format_bytes(free_bytes), total_space=format_bytes(total_bytes),
-            )
+        has_space = free_bytes is not None and total_bytes is not None
+        if failed > 0:
+            key = "mirror_syncing_progress_failed" if has_space else "mirror_syncing_progress_failed_no_space"
         else:
-            text = _t("mirror_syncing_progress_no_space", lang, done=done, total=total)
+            key = "mirror_syncing_progress" if has_space else "mirror_syncing_progress_no_space"
+        text = _t(
+            key, lang, done=done, total=total, failed=failed,
+            free=format_bytes(free_bytes) if has_space else "", total_space=format_bytes(total_bytes) if has_space else "",
+        )
         self.mirror_status_label.configure(text=text)
 
     def update_data(
@@ -1338,8 +1348,8 @@ class MainWindow(ctk.CTk):
             row.set_syncing(True, self.lang)
         self._log_local(self.t("log_mirror_sync_started", name=current.name), profile=current.name)
 
-        def on_progress(done: int, total: int) -> None:
-            self.after(0, lambda: self._on_mirror_progress(profile.id, done, total))
+        def on_progress(done: int, total: int, failed: int) -> None:
+            self.after(0, lambda: self._on_mirror_progress(profile.id, done, total, failed))
 
         def worker() -> None:
             # sync_mirror() itself never raises (see its docstring) -- an
@@ -1364,7 +1374,7 @@ class MainWindow(ctk.CTk):
 
         threading.Thread(target=worker, daemon=True).start()
 
-    def _on_mirror_progress(self, profile_id: str, done: int, total: int) -> None:
+    def _on_mirror_progress(self, profile_id: str, done: int, total: int, failed: int) -> None:
         row = self._settings_rows.get(profile_id)
         if row is None:
             return
@@ -1376,7 +1386,7 @@ class MainWindow(ctk.CTk):
                 free_bytes, total_bytes = usage.free, usage.total
             except OSError:
                 pass  # drive hiccup mid-sync -- just skip the space readout for this one update
-        row.set_sync_progress(done, total, self.lang, free_bytes, total_bytes)
+        row.set_sync_progress(done, total, self.lang, free_bytes, total_bytes, failed)
 
     def _on_mirror_sync_done(self, profile: Profile, result: MirrorSyncResult) -> None:
         self._mirror_cancel_events.pop(profile.id, None)

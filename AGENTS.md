@@ -471,23 +471,61 @@ reintroduces these problems.
       via a real screenshot (2026-09-24): the estimate computed
       `line_count = message.count("\n") + 1` — always 1 for these
       messages — giving a ~44px box for text that actually wrapped to 2-3
-      lines at the dialog's fixed width. **Fixed** by measuring the REAL
-      wrapped line count after layout, via the underlying raw
-      `tkinter.Text` widget CTkTextbox wraps internally
-      (`ctk_textbox._textbox`, confirmed present by reading
-      customtkinter's own source rather than assuming) and its Tcl-level
-      `count(start, end, "displaylines")` — but this requires a FULL
-      `self.update()`, not `update_idletasks()`: confirmed directly that
-      `update_idletasks()` alone leaves the textbox's real on-screen width
-      unresolved at a placeholder `winfo_width() == 1`, so a
-      `displaylines` query against it returns nonsense (measured ~98
-      "lines" for a message that only wraps to 2) — only a full `update()`
-      forces Tk to actually realize geometry before the query is
-      meaningful. To avoid a visible flash where the dialog briefly shows
-      at the wrong size before snapping to its recalculated one, the
-      whole window is `withdraw()`n at construction and only
-      `deiconify()`d in `_show_modal()`, once position AND size are both
-      final.
+      lines at the dialog's fixed width. **First fix attempt (v1.7.16)
+      shipped, then caused a real production freeze the same day and had
+      to be reverted**: it measured the REAL wrapped line count via the
+      raw `tkinter.Text` widget CTkTextbox wraps internally
+      (`ctk_textbox._textbox`) and its Tcl-level `count(start, end,
+      "displaylines")` — confirmed that this genuinely needs a FULL
+      `self.update()`, not `update_idletasks()` (idletasks alone leaves
+      the textbox's on-screen width unresolved at a placeholder
+      `winfo_width() == 1`, so `displaylines` returns nonsense — measured
+      ~98 "lines" for text that only wraps to 2). The user reported the
+      whole app frozen shortly after this shipped: no button responded,
+      no dialog was visible, yet the process still answered Windows'
+      "are you responding" ping and used near-zero CPU — consistent with
+      a `_PunkDialog` stuck construction never reaching
+      `_show_modal()`'s `deiconify()`/`grab_set()`, i.e. an invisible
+      window nonetheless in the way. **Root cause: a full `self.update()`
+      pumps Tk's ENTIRE event queue re-entrantly, including whatever
+      other callback (the ~1.5s background-status `self.after(...)` tick,
+      another queued click, …) happens to be pending at that exact
+      instant** — safe in isolated manual testing (nothing else was ever
+      pending then), unsafe in the always-something-scheduled reality of
+      a running app. **Final fix**: dropped the live Tk measurement
+      entirely in favor of `_estimate_display_lines()`, a pure-Python
+      `textwrap.wrap()`-based estimate tuned against this app's real
+      `warn_*`/`err_*` strings — zero Tk calls, so it cannot re-enter the
+      event loop and cannot hang, at the cost of being a rough estimate
+      (worst case: a little unused blank space in the box) rather than
+      pixel-perfect. Verified safe two ways before shipping: (1) an
+      isolated smoke test wrapped in a hard `timeout` guard, so a hang
+      would be caught by the test itself rather than trusted to "look
+      fine"; (2) a deliberately adversarial stress test — three dialogs
+      back to back with near-instant (<5ms) automated clicks — which DID
+      turn up a real but unrelated, low-severity CustomTkinter-internal
+      quirk (below) and, crucially, did NOT reproduce any hang, which a
+      human could never trigger anyway (no real click lands in <5ms).
+      **General lesson: a full `update()`/`update_idletasks()` call
+      inside any callback that itself might be running from within
+      another Tk callback is a real re-entrancy hazard, not just a
+      performance concern — prefer a measurement or estimate that
+      touches zero live UI state over one that requires pumping the
+      event loop, even when the live measurement is more accurate.**
+    - **Found while stress-testing the fix above, NOT the cause of the
+      freeze, no fix needed**: CustomTkinter's own internal Windows
+      dark-titlebar workaround (`CTkToplevel._windows_set_titlebar_color`
+      → `self.withdraw()` then `self.after(5,
+      _revert_withdraw_after_windows_set_titlebar_color)`) throws
+      `_tkinter.TclError: bad window path name` if the dialog is
+      destroyed within that internal 5ms window — reproduced with
+      automated `.invoke()` clicks fired in a tight polling loop, NOT
+      reproduced at all with a human-realistic ~400ms delay before
+      clicking. Left alone: no real user closes a dialog in under 5
+      milliseconds, so this is a latent quirk in a third-party library,
+      not a practical bug — recorded here so a future "why did this
+      exact traceback appear once in a log" question doesn't restart the
+      investigation from zero.
     - **Destroying a transient, grabbed `Toplevel` while its owner window
       is maximized ("zoomed") can silently drop the owner back to
       "normal" size the instant the dialog closes** — a Windows/Tk

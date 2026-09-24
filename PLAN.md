@@ -2395,3 +2395,61 @@ capa Tkinter, convención ya establecida en el proyecto), así que la
 validación fue manual. Documentado en `AGENTS.md` como dos bullets
 nuevos dentro de la lección 15 (gotchas de CustomTkinter). Versión:
 **v1.7.16**.
+
+## 21. La v1.7.16 congeló la app en producción — encontrado, revertido y arreglado de verdad (2026-09-24, v1.7.17)
+
+Pocas horas después de instalar la v1.7.16, el usuario reportó la app
+completamente congelada: ningún botón respondía, ninguna alerta
+aparecía. Diagnóstico en vivo antes de tocar código:
+`Get-Process` mostraba el proceso como `Responding: True` (el bucle de
+mensajes de Windows seguía vivo) y con **CPU casi nulo** (no estaba en
+un loop ocupado) — eso apuntaba a un bloqueo real, no a un cuelgue por
+consumo de CPU.
+
+**Causa real**: el arreglo de altura del diálogo de la sección 20 usaba
+`self.update()` (un ciclo de eventos COMPLETO, no `update_idletasks()`)
+dentro de la construcción de `_PunkDialog`, para poder medir el texto
+ya renderizado. El problema es que `self.update()` procesa TODA la cola
+de eventos de Tk de forma reentrante — incluida cualquier otra rutina
+que estuviera pendiente en ese instante exacto (el refresco periódico
+de estado cada ~1.5s, otro clic en cola, etc.). En una app real, casi
+siempre hay algo pendiente; en una prueba manual aislada, casi nunca —
+por eso pasó las pruebas de ayer y falló en producción.
+
+**Antes de aceptar la corrección como buena, el usuario pidió cambiar
+el flujo de trabajo**: explicar el plan primero, probar en conjunto
+ANTES de compilar, y solo hacer commit/reinstalación/documentación
+cuando él lo apruebe explícitamente — este proceso se adopta desde
+ahora en adelante para este tipo de cambios.
+
+**Arreglo real**: se abandonó por completo la medición en vivo con Tk.
+`gui/dialogs.py::_estimate_display_lines()` calcula el número de
+líneas visuales con `textwrap.wrap()` en Python puro, contra un ancho
+de caracteres estimado (`_CHARS_PER_LINE = 55`, calibrado contra los
+mensajes reales de la app) — cero llamadas a Tk, así que es
+estructuralmente imposible que esto vuelva a congelar la app, aunque
+el cálculo sea un poco menos preciso (en el peor caso, un poco de
+espacio vacío de más en la caja, nunca un corte). Se quitó también el
+`withdraw()`/`deiconify()` que solo existía para tapar el "flash" de
+redimensionar con la medición en vivo — ya no hace falta.
+
+**Verificación, antes de compilar nada** (según el nuevo proceso
+acordado):
+1. Prueba aislada con guardia `timeout 15` — si se hubiera vuelto a
+   colgar, la prueba misma lo habría detectado, no habría quedado a
+   "parece que funcionó".
+2. Prueba de estrés deliberadamente agresiva: 3 diálogos seguidos con
+   clics automatizados casi instantáneos (<5ms). Esto reveló un bug
+   real pero DISTINTO y de baja severidad: el propio truco interno de
+   CustomTkinter para pintar la barra de título oscura en Windows
+   (`withdraw()` + `self.after(5, ...)` internos) lanza un
+   `TclError` si el diálogo se destruye dentro de esos 5ms. Repetido
+   con un tiempo de reacción realista (~400ms, lo mínimo humanamente
+   posible) salió completamente limpio — no es alcanzable por un clic
+   real, se dejó documentado pero sin arreglar.
+3. `pytest tests -q` — 91/91, sin cambios de cobertura (esta capa
+   sigue sin pytest directo, por convención del proyecto).
+
+Documentado en `AGENTS.md`, reescribiendo el bullet de la sección 20
+que ya no reflejaba el código real, más un bullet nuevo para el hallazgo
+de CustomTkinter. Versión: **v1.7.17**.

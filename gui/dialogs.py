@@ -16,6 +16,8 @@ import.
 """
 from __future__ import annotations
 
+import textwrap
+
 import customtkinter as ctk
 
 from server.paths import app_root
@@ -47,6 +49,34 @@ _BUTTON_LABELS = {
 
 def _btn_text(key: str, lang: str) -> str:
     return _BUTTON_LABELS[key].get(lang, _BUTTON_LABELS[key]["es"])
+
+
+# Rough estimate of how many characters fit on one visual line of the
+# message box (width=420, 13pt font, see _PunkDialog) — tuned against the
+# real warn_*/err_* messages in gui/i18n.py, not derived from font metrics.
+_CHARS_PER_LINE = 55
+
+
+def _estimate_display_lines(message: str) -> int:
+    """A pure-Python estimate of how many visual lines `message` will wrap
+    to — deliberately does NOT ask Tk to measure the real rendered text
+    (e.g. via CTkTextbox's underlying widget and its "displaylines" count),
+    because getting an accurate answer that way requires pumping Tk's
+    event loop with a FULL self.update() (update_idletasks() alone leaves
+    the textbox's on-screen width unresolved) in the middle of building a
+    modal dialog. Confirmed live (2026-09-24) that this froze the whole
+    app: a dialog shown while another Tk callback was still in flight left
+    an invisible, withdrawn window holding the modal grab forever, since
+    _show_modal()'s own deiconify()/grab_set() was never reached — no
+    button responded and no alert was visible, because the "visible"
+    dialog never got shown. A character-count estimate is less accurate
+    (worst case: a little extra blank space in the box) but involves zero
+    Tk calls, so it can never hang the app. See AGENTS.md's dialogs
+    lessons."""
+    lines = 0
+    for line in message.split("\n"):
+        lines += len(textwrap.wrap(line, width=_CHARS_PER_LINE) or [""])
+    return lines
 
 
 def _capture_zoom(parent) -> bool:
@@ -84,11 +114,6 @@ class _PunkDialog(ctk.CTkToplevel):
     def __init__(self, parent, title: str, message: str, dot_color: str):
         super().__init__(parent)
         self.result = None
-        # Hidden until fully laid out, correctly sized (see the
-        # displaylines fix below) and centered by _show_modal() — avoids a
-        # visible flash/jump where the dialog briefly appears the wrong
-        # size before snapping to its final one.
-        self.withdraw()
         self.configure(fg_color=BG)
         self.title(title)
         self.resizable(False, False)
@@ -121,8 +146,8 @@ class _PunkDialog(ctk.CTkToplevel):
             font=ctk.CTkFont(size=15, weight="bold"), anchor="w",
         ).pack(side="left", fill="x", expand=True)
 
-        line_count = message.count("\n") + 1
-        box_height = max(40, min(line_count * 20 + 24, 360))
+        display_lines = _estimate_display_lines(message)
+        box_height = max(40, min(display_lines * 20 + 24, 360))
         body = ctk.CTkTextbox(
             card, width=420, height=box_height, fg_color=CARD_BG, text_color=TEXT_MAIN,
             border_width=1, border_color=BORDER, corner_radius=8, wrap="word",
@@ -135,26 +160,6 @@ class _PunkDialog(ctk.CTkToplevel):
 
         self.button_row = ctk.CTkFrame(card, fg_color="transparent")
         self.button_row.pack(fill="x")
-
-        # The estimate above only counts literal "\n" characters — a
-        # single long sentence with none still WORD-WRAPS to 2-3 visual
-        # lines at this width, and the naive estimate left it clipped
-        # behind a scrollbar (confirmed via a real screenshot, 2026-09-24
-        # — every warn_* dialog is exactly this shape: one long sentence,
-        # zero explicit newlines). `self.update()` (a FULL update, not
-        # update_idletasks() — confirmed needed: idletasks alone leaves
-        # the textbox's real on-screen width unresolved at 1px, so a
-        # "displaylines" query against it returns nonsense) forces real
-        # layout, then Tk's own "displaylines" count gives the TRUE number
-        # of wrapped visual lines, covering explicit "\n" and word-wrap
-        # together in one measurement.
-        self.update()
-        try:
-            display_lines = body._textbox.count("1.0", "end", "displaylines")[0]
-            box_height = max(40, min(display_lines * 20 + 24, 360))
-            body.configure(height=box_height)
-        except Exception:
-            pass  # keep the newline-based estimate above — never worse than before
 
     def _cancel(self) -> None:
         self.result = None
@@ -182,7 +187,6 @@ class _PunkDialog(ctk.CTkToplevel):
         x = max(px + (pw - w) // 2, 0)
         y = max(py + (ph - h) // 2, 0)
         self.geometry(f"+{x}+{y}")
-        self.deiconify()  # was withdrawn in __init__ until sized+positioned
         self.grab_set()
         self.focus_set()
         was_zoomed = _capture_zoom(parent)

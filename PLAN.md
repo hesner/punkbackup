@@ -2453,3 +2453,52 @@ acordado):
 Documentado en `AGENTS.md`, reescribiendo el bullet de la sección 20
 que ya no reflejaba el código real, más un bullet nuevo para el hallazgo
 de CustomTkinter. Versión: **v1.7.17**.
+
+## 22. La restauración de maximizado seguía fallando en un caso específico: arranque automático (2026-09-24, v1.7.18)
+
+Un día después de la sección 20, el usuario reportó el mismo síntoma
+(la ventana pierde el maximizado) pero solo en un caso puntual: "al
+abrir la app, si no hay carpeta destino válida, sale la advertencia —
+al aceptarla, la ventana queda chica."
+
+**Antes de tocar código, se pidió confirmar el escenario exacto** (¿pasa
+al abrir la app con auto-arranque activado, o al hacer clic manual
+después de un rato?) — el usuario confirmó: es al abrir, con "Iniciar
+backup al abrir el programa" activado.
+
+**Causa**: `_capture_zoom()`/`_restore_zoom()` de la sección 20 solo
+protegen un diálogo mostrado DESPUÉS de que la ventana ya está
+maximizada. `MainWindow.__init__` maximiza vía
+`self.after(10, _maximize)` (diferido, porque `state("zoomed")`
+síncrono durante `__init__` no hace nada — la ventana del SO no existe
+todavía). El auto-arranque llamaba a `_toggle_server()` de forma
+síncrona, DENTRO de `__init__`, es decir, antes de que ese callback de
+10ms pudiera correr. Si no había destino configurado, aparecía una
+advertencia cuyo `_capture_zoom()` correctamente veía "todavía no
+maximizada" — pero el maximizado diferido se disparaba MIENTRAS el
+diálogo seguía abierto (`wait_window()` sigue bombeando eventos, incluye
+ese `after()`), maximizando la ventana con el diálogo modal todavía
+encima. Al cerrar el diálogo, el mismo bug de Windows/Tk de la sección
+20 se disparaba — pero `_restore_zoom()` nunca actuaba, porque había
+capturado el estado ANTES del maximizado real.
+
+**Primera prueba aislada (script mínimo de Tk) no reprodujo el bug** —
+la sospecha inicial pareció incorrecta en 4 corridas seguidas. Solo una
+reproducción fiel (la clase `MainWindow` real, un `%APPDATA%` temporal
+aislado, `auto_start_backup=True`, cero perfiles) lo reprodujo de forma
+consistente — y usando `git stash` sobre el arreglo de una sola línea,
+la MISMA reproducción se colgó por completo contra el código anterior,
+confirmando que la prueba de verdad detecta el bug real, no una
+coincidencia.
+
+**Arreglo**: `_toggle_server()` del auto-arranque ahora se dispara
+DESDE DENTRO del callback `_maximize()`, después de `state("zoomed")` —
+no depende de que dos temporizadores independientes casualmente corran
+en el orden correcto; el orden queda estructuralmente garantizado (una
+sola secuencia síncrona).
+
+Verificado en conjunto con el usuario ANTES de compilar (proceso
+acordado en la sección 21): 3 corridas limpias con el arreglo,
+`pytest tests -q` 91/91 sin cambios de cobertura (capa Tkinter, sin
+pytest directo por convención). Documentado en `AGENTS.md` como adenda
+al bullet de zoom de la lección 15. Versión: **v1.7.18**.

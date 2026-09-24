@@ -545,6 +545,46 @@ reintroduces these problems.
       dialog stays un-maximized afterward (never forces a maximize that
       wasn't there to begin with).
 
+      **Addendum, found the very next day (2026-09-24, v1.7.18)**:
+      `_capture_zoom`/`_restore_zoom` above only protects a dialog shown
+      AFTER the window is genuinely already zoomed — it does nothing for
+      one shown WHILE the window is still in the process of becoming
+      zoomed. `MainWindow.__init__` sets `"zoomed"` via a deferred
+      `self.after(10, _maximize)` (synchronous `state("zoomed")` during
+      `__init__` does nothing — the OS hasn't mapped the window yet), and
+      the "Iniciar backup al abrir el programa" preference used to call
+      `_toggle_server()` synchronously, back in `__init__`, i.e.
+      BEFORE that 10ms callback could ever run. If no destination was
+      configured yet, this showed a warning dialog whose
+      `_capture_zoom()` correctly saw "not zoomed yet" (true, at that
+      exact instant) — but the deferred maximize then fired WHILE the
+      dialog's `wait_window()` was still pumping events, zooming the
+      window while the modal dialog stayed open. The dialog's own close
+      then hit the very quirk `_restore_zoom` exists to fix, except
+      `_restore_zoom` never intervened, since it only saw the
+      pre-maximize "not zoomed" snapshot. **Confirmed with the real
+      `MainWindow` class, not a simplified reproduction**: an early,
+      simplified Tk-only repro script consistently did NOT reproduce
+      the bug (the timing happened to land differently with far fewer
+      widgets being constructed), which nearly led to shipping the wrong
+      conclusion — only a faithful repro (the actual `MainWindow`, an
+      isolated temp `%APPDATA%`, `auto_start_backup=True`, zero
+      profiles) reproduced it reliably, and — via `git stash` on just
+      the one-line ordering fix — reproduced a genuine hang against the
+      pre-fix code for the exact same script, confirming the repro
+      actually exercises the real bug rather than coincidentally passing.
+      **Fixed** by moving the `_toggle_server()` call to run FROM WITHIN
+      `_maximize()` itself, strictly after `state("zoomed")` — auto-start
+      can now never show a dialog before the window is genuinely
+      maximized, which isn't a timing coincidence but a structural
+      guarantee (same callback, same synchronous sequence). **General
+      lesson: when two independent deferred/async operations both touch
+      the same piece of window state (one sets it, one reacts to it), a
+      fix that "usually works" because of typical timing is not a fix —
+      make the ordering structurally guaranteed (one triggers the other
+      directly) rather than relying on two independently-scheduled
+      callbacks racing in the right order.**
+
 16. **`ManifestDB`'s dangling-run reap (see point 10, and AGENTS.md §6's
     "ad-hoc read-only status checks" lesson) can fire on a run that is
     genuinely, currently in progress — not just a leftover from a crashed

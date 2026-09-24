@@ -702,6 +702,22 @@ class MainWindow(ctk.CTk):
                 self.state("zoomed")  # open maximized by default (Windows)
             except Exception:
                 pass  # cosmetic — never let this stop the app from opening
+            if self.cfg.auto_start_backup:
+                # Deliberately triggered HERE, after the window is actually
+                # maximized, not synchronously back in __init__ — see the
+                # dialog-maximize-restore fix in gui/dialogs.py
+                # (_capture_zoom/_restore_zoom, AGENTS.md's dialogs lessons):
+                # if this ran before the window was zoomed and a warning
+                # dialog appeared right away (e.g. no destination configured
+                # yet), the dialog would capture "not zoomed yet", then the
+                # window would actually become zoomed moments later while
+                # the dialog was still open (this after() callback firing
+                # during the dialog's own wait_window() pumping), and the
+                # restore-on-close logic would never kick in because it
+                # never saw the window as zoomed to begin with. Confirmed
+                # live (2026-09-24): exactly this sequence left the window
+                # un-maximized after dismissing the startup warning.
+                self._toggle_server()  # same behavior as clicking "Iniciar backup" by hand
 
         # Setting "zoomed" synchronously during __init__() does nothing —
         # the OS window isn't actually mapped by the window manager until
@@ -717,9 +733,6 @@ class MainWindow(ctk.CTk):
             set_start_with_windows(self.cfg.start_with_windows)
         except Exception:
             pass  # best-effort; never block startup over a registry write
-
-        if self.cfg.auto_start_backup:
-            self._toggle_server()  # same behavior as clicking "Iniciar backup" by hand
 
     def t(self, key: str, **kwargs) -> str:
         return _t(key, self.lang, **kwargs)

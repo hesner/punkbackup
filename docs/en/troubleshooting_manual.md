@@ -60,16 +60,24 @@ from happening again.
   never the literal word "Token" typed as plain text.
 - Copy the token again from the app ("Copy token" button on the profile)
   and paste it into the corresponding **Text** action in the Shortcut.
+- Since v1.7.13, the activity log records this too (once per device, not
+  once per photo): "Backup request received from [IP] but no profile
+  matches that token."
 
 ## 403 error "This profile is paused"
 
 - The profile is **Paused**. Open the app → "Main" or "⚙ Settings" →
   switch it to **Active**.
+- Since v1.7.13, the log also records this once: "Backup request received
+  from [profile] but this profile isn't ready to receive it."
 
 ## 409 error "no destination folder configured"
 
 - That profile has no destination folder. Go to **"⚙ Settings"** →
   "Choose folder..." for that profile.
+- Since v1.7.13, the log also records this once, with the same message as
+  the 403 error above (both mean "this profile isn't ready to receive a
+  backup").
 
 ## A profile's card says "⚠ USB not connected" (since v1.7.13)
 

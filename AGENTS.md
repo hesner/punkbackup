@@ -829,6 +829,54 @@ reintroduces these problems.
     what "not connected" looks like to the user, instead of the primary
     path inventing its own, worse-communicated version of the same fact.
 
+27. **A server that binds the port with zero profiles able to receive
+    anything used to fail late, per-request, instead of refusing to start
+    at all — and there was no clean way to make a stuck Shortcut stop
+    without editing the Shortcut itself.** Direct follow-up to lesson 26,
+    same day (2026-09-24): the user asked for a way to make an
+    already-running Shortcut finish without touching its configuration.
+    The real lever turned out to be on the PC side, not the phone —
+    a 503 response (lesson 26) still lets Shortcuts' "Get Contents of
+    URL" succeed at the network level (it got A response, just an error
+    one), so per lesson 11 it silently skips to the next item instead of
+    stopping. A connection that's refused outright (nothing listening on
+    the port at all) is a different failure class Shortcuts treats as a
+    genuine action failure — so the fix was to stop letting the server
+    bind the port in the first place when it's pointless to do so.
+    **Implemented as an explicit readiness gate in `_start_server()`**
+    (`gui/main_window.py`), checked in order, each with its own message
+    (both a popup AND a matching activity-log line via the new
+    `_block_server_start()` helper, so a refusal is never invisible or
+    dialog-only): (1) zero profiles created at all, (2) profiles exist
+    but none is enabled, (3) enabled profiles exist but none has a
+    destination folder configured. Deliberately does NOT check whether a
+    configured destination's drive is CURRENTLY plugged in — that's a
+    separate, recoverable runtime state lesson 26 already handles well
+    (a profile whose USB is briefly unplugged is still "ready," just
+    temporarily unreachable; gating server start on live hardware
+    presence would force a restart for something that self-heals on its
+    own). On a successful start, one log line per actually-ready profile
+    ("Waiting for backup from profile ...") confirms at a glance which
+    profiles the server is really listening for, instead of leaving that
+    implicit. **Server-side counterpart**: once the server IS listening
+    (because some OTHER profile is ready), a request against a profile
+    that ISN'T ready — unknown token (401), paused (403), or no
+    destination (409) — now also gets ONE log line via
+    `_warn_unknown_request()`/`_warn_profile_not_ready()`, but unlike
+    lesson 26's 60-second cooldown, this is logged exactly ONCE per
+    source (client IP for an unknown token, `profile.id` for a known but
+    not-ready one) for the life of the server-listening session, not on
+    a repeating timer — a stray/misconfigured device's requests can't
+    "become" valid by waiting, so repeating the same fact every minute
+    for a whole failed sweep would add nothing lesson 26's cooldown
+    doesn't already prove out. **When designing a "log this once" rule,
+    match the reset behavior to whether the underlying condition can
+    plausibly change on its own**: lesson 26's unreachable-drive case
+    can resolve itself any second (someone plugs the USB back in), so it
+    warrants periodic reminders; an unknown-token or disabled-profile
+    request cannot resolve itself without a human fixing the Shortcut or
+    the profile, so one mention per session is enough.
+
 - Unit tests against `BackupEngine`/`ManifestDB` directly (no HTTP) for the
   dedup/conflict/incremental rules — fast, exhaustive.
 - `fastapi.testclient.TestClient` end-to-end tests for the real ASGI app,
@@ -858,7 +906,7 @@ reintroduces these problems.
 
 ## 7. What "done" looks like
 
-- `pytest tests -q` passes (86 tests as of this writing, covering engine
+- `pytest tests -q` passes (89 tests as of this writing, covering engine
   rules, profile isolation/pause/delete, destination-switch correctness,
   concurrent uploads, the `/check` contract, the 0-byte-upload rejection,
   its self-healing retry error-count behavior, a stale-run reap on
@@ -873,7 +921,8 @@ reintroduces these problems.
   reconciliation step needed — and the unreachable-destination warning
   (once-per-cooldown server log line, cleared on reconnect, and the GUI
   snapshot's distinct `destination_unreachable` flag vs. a genuinely
-  unexpected `status_error`).
+  unexpected `status_error` — and the server-start readiness gate plus
+  its once-per-session "unknown token"/"profile not ready" log lines).
 - A real iPhone can run the Shortcut manually, and files appear in the
   chosen destination with correct extensions, organized by Year/Month, and
   `<dest>/.iphone_backup_index/index.sqlite`'s `backed_up_files` table

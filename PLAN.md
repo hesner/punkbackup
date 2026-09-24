@@ -2251,3 +2251,65 @@ reseteo al reconectar, 2 en `tests/test_gui_status_poller.py` para la
 distinción `destination_unreachable`/`status_error` y el texto de la
 tarjeta, más una tercera de rate-limit) — **86/86 pasando**. Documentado
 en `AGENTS.md` lección 26. Versión: **v1.7.13**.
+
+## 19. El servidor ya no escucha si ningún perfil puede recibir nada, y las peticiones de un perfil no listo se registran (2026-09-24, v1.7.13)
+
+Pregunta directa del usuario después de ver el bug de la sección 18 en
+vivo: "¿hay algún método para que el Atajo finalice sin cambiar nada en
+el Atajo?". La respuesta llevó a una segunda observación del propio
+usuario: si de verdad no hay ningún perfil que pueda recibir un backup
+(sin perfiles, sin ninguno activo, o ninguno con carpeta destino), la
+app ni siquiera debería dejar encender el servidor — evita que el
+Atajo se quede "activo" indefinidamente contra un servidor que nunca
+tuvo nada que ofrecerle.
+
+**Por qué esto sí ayuda a que el Atajo termine, y un 503 no**: un 503
+(sección 18) sigue siendo una respuesta HTTP real — Atajos la recibe
+como "la acción tuvo éxito, con estos datos", así que por la lección 11
+de AGENTS.md, el loop simplemente sigue en silencio al siguiente ítem.
+Un puerto que ni siquiera está escuchando es una clase de fallo
+distinta: la conexión se rechaza de plano, y eso sí lo trata Atajos
+normalmente como un fallo real de la acción, deteniendo la ejecución en
+vez de seguir en silencio.
+
+**Implementado, en orden, cada uno con su propio mensaje** (`gui/main_window.py::_start_server`, vía el nuevo helper `_block_server_start()` que muestra el mismo texto en un diálogo Y en el log de actividad — nunca solo uno de los dos):
+1. Cero perfiles creados → "No hay ningún perfil creado para iniciar
+   backup. Créalo, actívalo y selecciona una carpeta destino."
+2. Hay perfiles pero ninguno Activo → "No hay ningún perfil activado
+   para iniciar backup. Actívalo y asegúrate de tener una carpeta
+   destino seleccionada."
+3. Hay perfiles Activos pero ninguno tiene carpeta destino → "En los
+   perfiles activos no se encuentra seleccionada una carpeta de
+   destino."
+
+**Deliberadamente NO se agregó una cuarta condición** que chequee si la
+unidad de un perfil ya configurado está físicamente conectada en el
+momento de encender el servidor — eso es exactamente el estado que la
+sección 18 ya maneja bien como algo normal y recuperable (reconectas la
+USB y todo sigue solo, sin reiniciar nada). Bloquear el encendido por
+eso obligaría a reiniciar el servidor completo por algo que se
+autorresuelve.
+
+Cuando el servidor SÍ arranca, ahora el log muestra una línea por cada
+perfil realmente listo: `Esperando backup para perfil "X".` — confirma
+de un vistazo para cuáles quedó escuchando de verdad, sin tener que
+adivinar.
+
+**Contraparte del lado del servidor**: si el servidor arranca porque
+ALGÚN perfil está listo, pero una petición real llega para un perfil
+que no lo está (token desconocido → 401, perfil pausado → 403, o sin
+destino → 409), ahora también se registra una línea en el log —
+`server/app.py`'s `_warn_unknown_request()`/`_warn_profile_not_ready()`.
+A diferencia del aviso de unidad desconectada (sección 18, cooldown de
+60s porque esa condición sí puede resolverse sola en cualquier
+momento), este se registra **exactamente una vez** por origen (IP del
+cliente para token desconocido, `profile.id` para un perfil conocido
+pero no listo) durante toda la sesión del servidor — un dispositivo mal
+configurado o un perfil pausado no se van a "arreglar solos" esperando,
+así que repetir el mismo hecho cada minuto durante todo un barrido no
+aporta nada.
+
+3 pruebas nuevas en `tests/test_api.py` (token desconocido, perfil
+pausado, perfil sin destino — cada una confirma que la segunda petición
+igual de inválida NO vuelve a loguear) — **89/89 pasando**. Documentado
+en `AGENTS.md` lección 27.

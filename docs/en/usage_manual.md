@@ -77,6 +77,18 @@ up, e.g. right after antivirus software closes and reopens the app), or
 unavailable), you'll get an error window explaining why instead of a
 false "Listening" status.
 
+**Since v1.7.13**, the app won't let you turn the server on if there's
+genuinely no profile that could receive anything — it tells you why with
+an on-screen warning instead of starting anyway and only failing later,
+once the iPhone actually tries to connect:
+- No profile has been created yet.
+- You have profiles, but none is **Active**.
+- You have Active profiles, but none has a destination folder selected.
+
+Once the server does start, the activity log shows one line per profile
+that's actually ready to receive ("Waiting for backup from profile...")
+— so you can confirm at a glance which ones it's really listening for.
+
 > You don't need to "select" which profile is backing up — as long as the
 > server is on, **any Active profile can upload at any time**, even
 > several at once.

@@ -282,14 +282,22 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
     },
 
     "warn_no_profiles": {
-        "es": 'Agrega al menos un perfil (pestaña "⚙ Configuración") antes de iniciar.',
-        "en": 'Add at least one profile (the "⚙ Settings" tab) before starting.',
+        "es": "No hay ningún perfil creado para iniciar backup. Créalo, actívalo y"
+        " selecciona una carpeta destino.",
+        "en": "No profile has been created to start a backup. Create one, activate it,"
+        " and select a destination folder.",
+    },
+    "warn_no_active_profile": {
+        "es": "No hay ningún perfil activado para iniciar backup. Actívalo y asegúrate"
+        " de tener una carpeta destino seleccionada.",
+        "en": "No profile is activated to start a backup. Activate one and make sure"
+        " it has a destination folder selected.",
     },
     "warn_no_destination": {
-        "es": 'Ningún perfil tiene carpeta destino configurada. Ve a "⚙ Configuración" y'
-        ' usa "Elegir carpeta..." en al menos uno.',
-        "en": 'No profile has a destination folder set. Go to "⚙ Settings" and use'
-        ' "Choose folder..." on at least one.',
+        "es": 'En los perfiles activos no se encuentra seleccionada una carpeta de'
+        ' destino. Ve a "⚙ Configuración" y usa "Elegir carpeta...".',
+        "en": 'None of the active profiles has a destination folder selected. Go to'
+        ' "⚙ Settings" and use "Choose folder...".',
     },
 
     "log_server_starting": {
@@ -298,6 +306,14 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
     },
     "log_server_started": {"es": "Servidor iniciado. A darle.", "en": "Server started. Let's go."},
     "log_server_stopped": {"es": "Servidor detenido.", "en": "Server stopped."},
+    "log_server_not_started": {
+        "es": "No se ha iniciado el servidor debido a: {reason}",
+        "en": "The server was not started because: {reason}",
+    },
+    "log_server_waiting_profile": {
+        "es": 'Esperando backup para perfil "{name}".',
+        "en": 'Waiting for backup from profile "{name}".',
+    },
     "log_profile_activated": {"es": 'Perfil "{name}" activado.', "en": 'Profile "{name}" activated.'},
     "log_profile_paused": {"es": 'Perfil "{name}" pausado.', "en": 'Profile "{name}" paused.'},
     "log_backup_idle": {

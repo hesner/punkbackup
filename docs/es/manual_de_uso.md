@@ -83,6 +83,19 @@ y reabra la app), o `Escuchando en el puerto 8787`. Si de verdad falla al
 iniciar (el puerto sigue sin liberarse), te sale una ventana de error
 explicando por qué, en vez de un falso "Escuchando".
 
+**Desde v1.7.13**, la app no te deja encender el servidor si de verdad no
+hay ningún perfil que pueda recibir algo — te lo explica con un aviso en
+pantalla en vez de encender igual y fallar recién cuando el iPhone
+intente conectarse:
+- No has creado ningún perfil todavía.
+- Tienes perfiles, pero ninguno está **Activo**.
+- Tienes perfiles Activos, pero ninguno tiene una carpeta destino
+  seleccionada.
+
+Una vez que el servidor sí arranca, el log de actividad muestra una línea
+por cada perfil listo para recibir ("Esperando backup para perfil...") —
+así confirmas de un vistazo para cuáles quedó escuchando de verdad.
+
 > No necesitas "seleccionar" qué perfil va a respaldar — mientras el
 > servidor esté encendido, **cualquier perfil Activo puede subir en
 > cualquier momento**, incluso varios al mismo tiempo.

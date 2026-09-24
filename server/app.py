@@ -44,7 +44,7 @@ logger = logging.getLogger("backup_engine")
 
 app = FastAPI(title="PunkBackup")
 
-_state: dict = {"profile_store": None, "engines": {}, "unreachable_warned": {}}
+_state: dict = {"profile_store": None, "engines": {}, "unreachable_warned": {}, "not_ready_warned": set()}
 
 # How long to stay quiet about the SAME profile's destination being
 # unreachable before logging it again — a real device sweeping hundreds of
@@ -61,6 +61,7 @@ def configure(profile_store: ProfileStore) -> None:
     _state["profile_store"] = profile_store
     _state["engines"] = {}
     _state["unreachable_warned"] = {}
+    _state["not_ready_warned"] = set()
 
 
 def is_configured() -> bool:
@@ -86,10 +87,45 @@ def _warn_destination_unreachable(profile: Profile, dest_path: Path, exc: OSErro
     adapter.error("Destination folder not reachable — is the USB drive connected? (%s: %s)", dest_path, exc)
 
 
+def _warn_unknown_request(source: str) -> None:
+    """Logs ONCE per source (not rate-limited on a timer like
+    _warn_destination_unreachable — a request with a token that matches NO
+    profile at all can only mean a misconfigured/stray device, which won't
+    fix itself by waiting, so repeating it hundreds of times adds nothing).
+    Stays quiet for the rest of this server-listening session (cleared by
+    configure(), i.e. the next time the server is started) — see AGENTS.md
+    lesson 27."""
+    warned = _state["not_ready_warned"]
+    key = f"unknown:{source}"
+    if key in warned:
+        return
+    warned.add(key)
+    logging.LoggerAdapter(logger, {"profile": "-"}).warning(
+        "Backup request received from %s but no profile matches that token.", source
+    )
+
+
+def _warn_profile_not_ready(profile: Profile) -> None:
+    """Counterpart to _warn_unknown_request for a KNOWN profile that isn't
+    ready to receive a backup right now (paused, or no destination folder
+    configured) — same once-per-session behavior, keyed by profile.id so a
+    profile that's disabled AND has no destination still only logs once,
+    not twice. See AGENTS.md lesson 27."""
+    warned = _state["not_ready_warned"]
+    if profile.id in warned:
+        return
+    warned.add(profile.id)
+    logging.LoggerAdapter(logger, {"profile": profile.name}).warning(
+        "Backup request received from %s but this profile isn't ready to receive it "
+        "(paused, or no destination folder set).", profile.name
+    )
+
+
 def _engine_for(profile: Profile) -> BackupEngine:
     engines = _state["engines"]
     if profile.id not in engines:
         if not profile.destination_dir:
+            _warn_profile_not_ready(profile)
             raise HTTPException(409, f'Profile "{profile.name}" has no destination folder configured yet.')
         dest_path = Path(profile.destination_dir)
         try:
@@ -133,14 +169,16 @@ def get_aggregate_status() -> dict:
     return {"total_files_backed_up": total, "last_backup_at": last}
 
 
-async def verify_token(x_backup_token: Optional[str] = Header(None)) -> Profile:
+async def verify_token(request: Request, x_backup_token: Optional[str] = Header(None)) -> Profile:
     if not is_configured():
         raise HTTPException(503, "Server has no profiles configured yet.")
     store: ProfileStore = _state["profile_store"]
     profile = store.find_by_token(x_backup_token) if x_backup_token else None
     if profile is None:
+        _warn_unknown_request(request.client.host if request.client else "?")
         raise HTTPException(401, "Missing or invalid X-Backup-Token header.")
     if not profile.enabled:
+        _warn_profile_not_ready(profile)
         raise HTTPException(403, "This profile is paused on the PC.")
     return profile
 

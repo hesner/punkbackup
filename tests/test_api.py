@@ -149,6 +149,62 @@ def test_changing_destination_is_picked_up_after_forget_profile(client, store, t
     assert str(new_dest) in r.json()["dest_path"]
 
 
+def test_unknown_token_request_logs_once_per_source(client, store, caplog):
+    """A request whose token matches NO profile at all can only mean a
+    stray/misconfigured device -- it won't start working by waiting, so
+    unlike the unreachable-destination warning (AGENTS.md lesson 26) this
+    is logged ONCE per source, not on a repeating cooldown. See lesson 27."""
+    import logging
+
+    caplog.set_level(logging.WARNING, logger="backup_engine")
+
+    client.post("/upload", headers={"X-Backup-Token": "not-a-real-token"}, params={"filename": "a.jpg"}, content=b"x")
+    assert len(caplog.records) == 1
+    assert "no profile matches that token" in caplog.records[0].getMessage()
+
+    caplog.clear()
+    client.post("/upload", headers={"X-Backup-Token": "not-a-real-token"}, params={"filename": "b.jpg"}, content=b"x")
+    assert len(caplog.records) == 0  # same source, second time -- stays quiet
+
+
+def test_disabled_profile_request_logs_once(client, store, tmp_path, caplog):
+    """A paused profile's token is real, but requests against it can never
+    succeed until a human re-enables it on the PC -- same once-per-session
+    treatment as an unknown token (AGENTS.md lesson 27)."""
+    import logging
+
+    profile = add_profile_with_dest(store, tmp_path, "iPhone de Hesner")
+    store.set_enabled(profile.id, False)
+    caplog.set_level(logging.WARNING, logger="backup_engine")
+
+    r = client.get("/status", headers={"X-Backup-Token": profile.token})
+    assert r.status_code == 403
+    assert len(caplog.records) == 1
+    assert "isn't ready to receive it" in caplog.records[0].getMessage()
+
+    caplog.clear()
+    client.get("/status", headers={"X-Backup-Token": profile.token})
+    assert len(caplog.records) == 0
+
+
+def test_profile_without_destination_request_logs_once(client, store, caplog):
+    """Same once-per-session treatment for an enabled profile that simply
+    has no destination folder configured yet (AGENTS.md lesson 27)."""
+    import logging
+
+    profile = store.add("iPhone sin carpeta")  # enabled by default, no destination
+    caplog.set_level(logging.WARNING, logger="backup_engine")
+
+    r = client.get("/status", headers={"X-Backup-Token": profile.token})
+    assert r.status_code == 409
+    assert len(caplog.records) == 1
+    assert "isn't ready to receive it" in caplog.records[0].getMessage()
+
+    caplog.clear()
+    client.get("/status", headers={"X-Backup-Token": profile.token})
+    assert len(caplog.records) == 0
+
+
 def test_unreachable_destination_logs_once_via_the_backup_engine_logger(client, store, tmp_path, monkeypatch, caplog):
     """Before this, a request against an unreachable/unplugged destination
     raised straight to a 503 with ZERO logging anywhere -- a real Shortcut

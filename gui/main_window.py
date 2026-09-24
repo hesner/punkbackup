@@ -1019,13 +1019,28 @@ class MainWindow(ctk.CTk):
             self._log_local(f"ERROR:\n{details}")
             show_error(self, self.lang, self.t("dlg_title_error"), self.t("err_toggle_server", details=details))
 
+    def _block_server_start(self, reason: str) -> None:
+        """Refuses to bind the listening socket at all when there is
+        genuinely nowhere an upload could land — a server "listening" with
+        zero ready profiles used to accept the phone's connection and only
+        fail later, per-request, at /check or /upload (AGENTS.md lesson
+        26's 503). Both the popup AND the log line use the exact same
+        `reason` text, so the log always explains a refusal to start the
+        same way the dialog did — see AGENTS.md lesson 27."""
+        self._log_local(self.t("log_server_not_started", reason=reason))
+        show_warning(self, self.lang, self.t("dlg_title_warning"), reason)
+
     def _start_server(self) -> None:
         profiles = self.profile_store.list()
         if not profiles:
-            show_warning(self, self.lang, self.t("dlg_title_warning"), self.t("warn_no_profiles"))
+            self._block_server_start(self.t("warn_no_profiles"))
             return
-        if not any(p.destination_dir for p in profiles):
-            show_warning(self, self.lang, self.t("dlg_title_warning"), self.t("warn_no_destination"))
+        enabled = [p for p in profiles if p.enabled]
+        if not enabled:
+            self._block_server_start(self.t("warn_no_active_profile"))
+            return
+        if not any(p.destination_dir for p in enabled):
+            self._block_server_start(self.t("warn_no_destination"))
             return
 
         app_module.configure(self.profile_store)
@@ -1093,6 +1108,15 @@ class MainWindow(ctk.CTk):
         self.start_btn.configure(text=self.t("btn_stop"), fg_color=RED, hover_color=RED_HOVER, text_color=TEXT_MAIN)
         self.status_label.configure(text=self.t("status_listening", port=self.cfg.port), text_color=GREEN)
         self._log_local(self.t("log_server_started"))
+        # One line per profile actually able to receive a backup right now
+        # (enabled + has a destination configured) -- makes it obvious at a
+        # glance, from the log alone, which profile(s) the server is really
+        # listening for. Deliberately NOT gated on the drive being
+        # currently reachable -- that's a separate, recoverable runtime
+        # state already covered by AGENTS.md lesson 26's own log line.
+        for profile in self.profile_store.list():
+            if profile.enabled and profile.destination_dir:
+                self._log_local(self.t("log_server_waiting_profile", name=profile.name), profile=profile.name)
 
     def _stop_server(self) -> None:
         if self.controller:

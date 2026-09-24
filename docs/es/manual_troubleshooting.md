@@ -59,16 +59,24 @@ deje de pasar.
   (fondo de color), nunca la palabra "Token" escrita como texto plano.
 - Copia el token de nuevo desde la app (botón "Copiar token" en el perfil) y
   pégalo en la acción **Text** correspondiente del Atajo.
+- Desde v1.7.13, el log de actividad registra esto también (una sola vez
+  por dispositivo, no una vez por foto): "Backup request received from
+  [IP] but no profile matches that token."
 
 ## Error 403 "This profile is paused"
 
 - El perfil está **Pausado**. Ve a la app → pantalla Principal o
   ⚙ Configuración → activa el interruptor a **Activo**.
+- Desde v1.7.13, el log también lo registra una sola vez: "Backup request
+  received from [perfil] but this profile isn't ready to receive it."
 
 ## Error 409 "no destination folder configured"
 
 - Ese perfil no tiene carpeta destino. Ve a ⚙ Configuración → "Elegir
   carpeta..." para ese perfil.
+- Desde v1.7.13, el log también lo registra una sola vez, con el mismo
+  mensaje que el error 403 de arriba (ambos casos significan "el perfil
+  no está listo para recibir backup").
 
 ## La tarjeta de un perfil dice "⚠ USB no conectada" (desde v1.7.13)
 

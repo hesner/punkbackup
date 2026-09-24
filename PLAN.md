@@ -2313,3 +2313,39 @@ aporta nada.
 pausado, perfil sin destino — cada una confirma que la segunda petición
 igual de inválida NO vuelve a loguear) — **89/89 pasando**. Documentado
 en `AGENTS.md` lección 27.
+
+### 19.1 Corrección de la corrección: "seleccionada" no es lo mismo que "conectada", y no siempre es una USB (2026-09-24, v1.7.15)
+
+El usuario probó la v1.7.14 en vivo con las dos unidades desconectadas
+(D: y E:) y el servidor arrancó igual, porque el gate de la sección 19
+solo verificaba que hubiera una carpeta **seleccionada** en el perfil
+(`destination_dir` configurado), no que esa carpeta estuviera
+**alcanzable** en ese momento. Pidió agregar un 4° nivel al gate.
+
+Al proponer el primer borrador del mensaje ("ninguna unidad USB está
+conectada"), el usuario corrigió algo más importante que la redacción:
+el destino de un perfil **no tiene por qué ser una USB** — el sistema
+siempre permitió elegir cualquier carpeta, incluida una en el disco
+interno de la PC. Enmarcar el mensaje (y el nombre de la función)
+alrededor de "USB conectada" habría sido activamente incorrecto para
+cualquiera que use un disco interno como destino. El mensaje correcto
+es sobre **validez**, no sobre tipo de almacenamiento: "Ninguno de los
+perfiles activos tiene una carpeta válida para hacer el backup.
+Selecciona al menos un destino válido y vuelve a intentar."
+
+**Implementado**: `gui/main_window.py::_destination_is_valid(path)` —
+función pura, a nivel de módulo (mismo patrón de testeabilidad que
+`_compute_status_snapshot`), que intenta el mismo
+`mkdir(parents=True, exist_ok=True)` que ya usa `_engine_for` del lado
+del servidor, así que los dos coinciden en qué significa "válida" —
+incluyendo el mismo caso de "la carpeta no existe todavía pero la
+ubicación sí es escribible" contando como válida (se crea sola). El
+gate ahora bloquea si, entre los perfiles activos con destino
+seleccionado, **ninguno** tiene una carpeta válida en este momento —
+basta con que uno la tenga para permitir arrancar.
+
+2 pruebas nuevas en `tests/test_gui_status_poller.py` (una carpeta real
+aunque no exista todavía cuenta como válida; una raíz de unidad
+inalcanzable, simulada igual que en la lección 26, cuenta como
+inválida) — **91/91 pasando**. Documentado como adenda de la lección 27
+en `AGENTS.md`.

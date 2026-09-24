@@ -77,13 +77,19 @@ up, e.g. right after antivirus software closes and reopens the app), or
 unavailable), you'll get an error window explaining why instead of a
 false "Listening" status.
 
-**Since v1.7.13**, the app won't let you turn the server on if there's
+**Since v1.7.14**, the app won't let you turn the server on if there's
 genuinely no profile that could receive anything — it tells you why with
 an on-screen warning instead of starting anyway and only failing later,
 once the iPhone actually tries to connect:
 - No profile has been created yet.
 - You have profiles, but none is **Active**.
 - You have Active profiles, but none has a destination folder selected.
+- **Since v1.7.15**: you have Active profiles with a destination
+  selected, but none of those folders is valid right now (e.g. the USB
+  it lives on is unplugged). It doesn't have to be a USB — any folder
+  counts, including one on your PC's internal drive; the only thing that
+  matters is whether it's writable right now. Just ONE of your active
+  folders being available is enough for the server to start.
 
 Once the server does start, the activity log shows one line per profile
 that's actually ready to receive ("Waiting for backup from profile...")

@@ -126,6 +126,24 @@ def _volume_text(profile: Profile, lang: str) -> str:
     return _t("free_of_total", lang, label=label, free=free, total=total)
 
 
+def _destination_is_valid(destination_dir: str) -> bool:
+    """True if `destination_dir` can actually be written to right now —
+    same `mkdir(parents=True, exist_ok=True)` attempt `_engine_for` uses
+    server-side, so the two agree on what "valid" means. Deliberately NOT
+    named/framed around "USB connected": the destination can just as
+    validly be an internal drive folder, a network share, or any other
+    real path — the only thing that matters is whether it can be written
+    to right now, not what kind of storage it happens to be (see AGENTS.md
+    lesson 27's addendum). A folder that doesn't exist YET on an
+    otherwise-writable location still returns True — mkdir creates it,
+    same first-backup case _engine_for already handles."""
+    try:
+        Path(destination_dir).mkdir(parents=True, exist_ok=True)
+        return True
+    except OSError:
+        return False
+
+
 def _compute_status_snapshot(profiles: list[Profile]) -> dict:
     """Every blocking disk/SQLite call the GUI's periodic refresh needs is
     isolated here, deliberately kept as a plain module-level function (not
@@ -1039,8 +1057,12 @@ class MainWindow(ctk.CTk):
         if not enabled:
             self._block_server_start(self.t("warn_no_active_profile"))
             return
-        if not any(p.destination_dir for p in enabled):
+        ready = [p for p in enabled if p.destination_dir]
+        if not ready:
             self._block_server_start(self.t("warn_no_destination"))
+            return
+        if not any(_destination_is_valid(p.destination_dir) for p in ready):
+            self._block_server_start(self.t("warn_no_valid_destination"))
             return
 
         app_module.configure(self.profile_store)

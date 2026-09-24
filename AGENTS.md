@@ -877,6 +877,38 @@ reintroduces these problems.
     request cannot resolve itself without a human fixing the Shortcut or
     the profile, so one mention per session is enough.
 
+    **Addendum, same day**: the first version of the readiness gate only
+    checked whether a destination was *selected* (`destination_dir` set),
+    not whether it was actually *usable* right now — so it let the server
+    start even when every configured destination's drive was currently
+    unplugged (exactly today's live scenario), because "selected" and
+    "reachable" got conflated. The user caught this from a real
+    screenshot and asked for a 4th tier: refuse to start if NONE of the
+    active profiles' destinations can actually be written to. **Then
+    caught a second, more fundamental framing mistake before it shipped**:
+    the natural first instinct was to call this "is the USB connected"
+    (matching lesson 26's vocabulary) — wrong, because a destination
+    doesn't have to be a USB drive at all; this project has always
+    allowed any folder, including one on an internal drive, which is
+    "valid" or not regardless of whether anything is physically plugged
+    in. **Fixed by naming and messaging around validity, not hardware
+    type**: `_destination_is_valid(path)` — a small, pure, module-level
+    function (same testability pattern as `_compute_status_snapshot`,
+    deliberately NOT a `MainWindow` method) that attempts the exact same
+    `mkdir(parents=True, exist_ok=True)` `_engine_for` already uses
+    server-side, so both agree on what "valid" means, including the same
+    not-yet-created-but-on-a-writable-location case counting as valid
+    (mkdir creates it). The dialog and log text say "no tiene una carpeta
+    válida" / "no valid folder", never "USB" or "unidad" — this matters
+    because a future reader could otherwise "fix" the wording back to a
+    USB-specific phrasing that would be actively wrong for anyone backing
+    up to an internal drive or network share. **General lesson: when
+    reusing a check from a feature built for one storage type (USB), ask
+    whether the check's NAME still holds for every storage type the
+    system actually supports before shipping the wording, even if the
+    underlying mechanism (a reachability test) is correctly type-agnostic
+    already.**
+
 - Unit tests against `BackupEngine`/`ManifestDB` directly (no HTTP) for the
   dedup/conflict/incremental rules — fast, exhaustive.
 - `fastapi.testclient.TestClient` end-to-end tests for the real ASGI app,
@@ -906,7 +938,7 @@ reintroduces these problems.
 
 ## 7. What "done" looks like
 
-- `pytest tests -q` passes (89 tests as of this writing, covering engine
+- `pytest tests -q` passes (91 tests as of this writing, covering engine
   rules, profile isolation/pause/delete, destination-switch correctness,
   concurrent uploads, the `/check` contract, the 0-byte-upload rejection,
   its self-healing retry error-count behavior, a stale-run reap on
@@ -921,8 +953,10 @@ reintroduces these problems.
   reconciliation step needed — and the unreachable-destination warning
   (once-per-cooldown server log line, cleared on reconnect, and the GUI
   snapshot's distinct `destination_unreachable` flag vs. a genuinely
-  unexpected `status_error` — and the server-start readiness gate plus
-  its once-per-session "unknown token"/"profile not ready" log lines).
+  unexpected `status_error` — the server-start readiness gate plus its
+  once-per-session "unknown token"/"profile not ready" log lines, and
+  `_destination_is_valid`'s writable-folder check used by that gate's
+  4th tier).
 - A real iPhone can run the Shortcut manually, and files appear in the
   chosen destination with correct extensions, organized by Year/Month, and
   `<dest>/.iphone_backup_index/index.sqlite`'s `backed_up_files` table

@@ -299,6 +299,12 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "en": 'None of the active profiles has a destination folder selected. Go to'
         ' "⚙ Settings" and use "Choose folder...".',
     },
+    "warn_no_valid_destination": {
+        "es": "Ninguno de los perfiles activos tiene una carpeta válida para hacer"
+        " el backup. Selecciona al menos un destino válido y vuelve a intentar.",
+        "en": "None of the active profiles has a valid folder to back up to."
+        " Select at least one valid destination and try again.",
+    },
 
     "log_server_starting": {
         "es": "Iniciando backup... (puede reintentar unos segundos si el puerto tarda en liberarse)",

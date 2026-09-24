@@ -25,7 +25,7 @@ import server.profiles as profiles_module
 from server.manifest_db import ManifestDB
 from server.profiles import ProfileStore
 from server.storage import BackupEngine
-from gui.main_window import _compute_status_snapshot, _profile_stats_text
+from gui.main_window import _compute_status_snapshot, _destination_is_valid, _profile_stats_text
 
 
 @pytest.fixture()
@@ -134,6 +134,28 @@ def test_stats_text_shows_not_connected_instead_of_stale_empty_stats(store, tmp_
     assert str(dest) in text
     assert "conectad" in text.lower()  # "no conectada" -- distinct from the normal stats layout
     assert "0 archivos" not in text  # must not look like a real, empty-but-reachable destination
+
+
+def test_destination_is_valid_for_a_real_writable_folder_even_if_not_created_yet(tmp_path):
+    """A brand-new profile's first-ever destination doesn't exist on disk
+    yet, but is perfectly valid -- mkdir() creates it. Deliberately NOT
+    about whether it's a USB: an internal-drive folder is just as valid
+    (see AGENTS.md lesson 27's addendum)."""
+    dest = tmp_path / "not-created-yet"
+    assert not dest.exists()
+    assert _destination_is_valid(str(dest)) is True
+    assert dest.is_dir()  # side effect is the same mkdir _engine_for relies on
+
+
+def test_destination_is_valid_returns_false_for_an_unreachable_root(monkeypatch):
+    """A drive root that doesn't exist at all (unplugged USB, or any other
+    reason mkdir() can't create the path) must report False, not raise."""
+
+    def failing_mkdir(self, *a, **k):
+        raise OSError(3, "The system cannot find the path specified")
+
+    monkeypatch.setattr(Path, "mkdir", failing_mkdir)
+    assert _destination_is_valid("E:/does-not-exist") is False
 
 
 def test_snapshot_never_raises_when_nothing_is_configured(store):

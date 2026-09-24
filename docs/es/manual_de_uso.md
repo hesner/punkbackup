@@ -83,7 +83,7 @@ y reabra la app), o `Escuchando en el puerto 8787`. Si de verdad falla al
 iniciar (el puerto sigue sin liberarse), te sale una ventana de error
 explicando por qué, en vez de un falso "Escuchando".
 
-**Desde v1.7.13**, la app no te deja encender el servidor si de verdad no
+**Desde v1.7.14**, la app no te deja encender el servidor si de verdad no
 hay ningún perfil que pueda recibir algo — te lo explica con un aviso en
 pantalla en vez de encender igual y fallar recién cuando el iPhone
 intente conectarse:
@@ -91,6 +91,13 @@ intente conectarse:
 - Tienes perfiles, pero ninguno está **Activo**.
 - Tienes perfiles Activos, pero ninguno tiene una carpeta destino
   seleccionada.
+- **Desde v1.7.15**: tienes perfiles Activos con destino seleccionado,
+  pero ninguna de esas carpetas es válida ahora mismo (por ejemplo, la
+  USB donde vive esa carpeta está desconectada). No tiene que ser una
+  USB — cualquier carpeta cuenta, incluida una en el disco interno de tu
+  PC; lo único que importa es si ahora mismo se puede escribir ahí.
+  Basta con que **una** de tus carpetas activas esté disponible para que
+  el servidor arranque.
 
 Una vez que el servidor sí arranca, el log de actividad muestra una línea
 por cada perfil listo para recibir ("Esperando backup para perfil...") —

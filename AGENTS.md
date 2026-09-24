@@ -725,7 +725,14 @@ reintroduces these problems.
     after.** Confirmed the regression test actually catches this: reverted
     the fix via `git stash`, watched the new test fail with the exact
     mismatch, restored the fix, watched it pass — never trust a new test
-    without watching it fail first.
+    without watching it fail first. **Retroactive fix run the same day**
+    against both real production destinations (`ManifestDB.update_sha256`,
+    same commit-batching pattern as point 23): 540 videos checked, 529
+    corrected, 0 errors — the 11 that needed no correction were exactly
+    the 11 mislabeled-HEIC-as-mp4 files from this project's very first
+    test batch (point 12's downstream note), which never go through the
+    video patch at all, a clean consistency check that the fix targeted
+    the right rows.
 
 - Unit tests against `BackupEngine`/`ManifestDB` directly (no HTTP) for the
   dedup/conflict/incremental rules — fast, exhaustive.
@@ -756,7 +763,7 @@ reintroduces these problems.
 
 ## 7. What "done" looks like
 
-- `pytest tests -q` passes (79 tests as of this writing, covering engine
+- `pytest tests -q` passes (80 tests as of this writing, covering engine
   rules, profile isolation/pause/delete, destination-switch correctness,
   concurrent uploads, the `/check` contract, the 0-byte-upload rejection,
   its self-healing retry error-count behavior, a stale-run reap on

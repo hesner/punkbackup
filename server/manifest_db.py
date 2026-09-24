@@ -223,6 +223,24 @@ class ManifestDB:
         with self._lock:
             self._conn.commit()
 
+    def update_sha256(self, dest_path: str, new_sha256: str, commit: bool = True) -> None:
+        """Corrects an already-recorded row's hash to match what's
+        actually on disk now — used by the one-off retroactive fix for
+        the video creation_time stale-hash bug (PLAN.md §17.5): a row
+        recorded before that fix has a `sha256` that no longer matches
+        its file's real bytes (the creation_time patch changed them after
+        the hash was recorded), and there's no other way to correct it
+        after the fact than to re-hash the real file and update the row.
+        `commit=False` mirrors record_file()'s batching — a maintenance
+        script touching hundreds of rows should batch this the same way."""
+        with self._lock:
+            self._conn.execute(
+                "UPDATE backed_up_files SET sha256 = ? WHERE dest_path = ?",
+                (new_sha256, dest_path),
+            )
+            if commit:
+                self._conn.commit()
+
     def all_sha256s(self) -> set[str]:
         """Every content hash this destination already has. Used by
         server/mirror.py to cheaply tell, in one query, which rows of the

@@ -248,6 +248,23 @@ def test_backup_engine_log_records_carry_the_same_profile_label(tmp_path, caplog
     assert all(getattr(r, "profile", None) == "iphone de Hesner" for r in new_records)
 
 
+def test_update_sha256_corrects_a_row_without_touching_anything_else(tmp_path):
+    """update_sha256() is what the retroactive fix for the video
+    creation_time stale-hash bug (PLAN.md §17.5) uses on real production
+    data -- it must correct exactly the sha256 field, by dest_path, and
+    nothing else about the row."""
+    engine = make_engine(tmp_path)
+    result = engine.process_upload("A.jpg", io.BytesIO(b"hello"), "2026-01-01T00:00:00", None)
+    dest_path = result["dest_path"]
+
+    engine.db.update_sha256(dest_path, "corrected" * 8)
+
+    row = engine.db.find_by_dest_path(dest_path)
+    assert row["sha256"] == "corrected" * 8
+    assert row["filename"] == "A.jpg"
+    assert row["taken_at"] == "2026-01-01T00:00:00"
+
+
 def test_reap_dangling_runs_false_never_touches_a_genuinely_live_run(tmp_path):
     """Found live, 2026-09-22: server/mirror.py's sync needs to open a
     SECOND ManifestDB on the SAME primary dest_root, from within the SAME

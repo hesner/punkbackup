@@ -2075,10 +2075,28 @@ que la prueba SÍ detecta el bug real: revertida temporalmente la
 corrección (`git stash`), la prueba falla exactamente como se esperaba
 (hashes distintos), confirmando que no es una prueba vacía.
 
-**Pendiente, no resuelto todavía**: este arreglo solo cubre subidas
-NUEVAS a partir de ahora. Los videos ya existentes en la base de datos
-primaria (posiblemente miles, cualquiera subido con fecha conocida antes
-de este fix) siguen teniendo el hash viejo guardado — el mirror va a
-seguir fallando en ellos hasta que se haga una corrección retroactiva
-(recalcular y actualizar el hash de cada video ya registrado). Decisión
-pendiente con el usuario sobre cómo y cuándo hacer esa corrección.
+**Corrección retroactiva — hecha el mismo día**: `ManifestDB` gana
+`update_sha256(dest_path, new_sha256, commit=False)` (mismo patrón de
+agrupamiento que `record_file`/`commit()` de §17.1-17.4). Script puntual
+(no versionado en el repo, mismo patrón que otros scripts de
+mantenimiento de este proyecto) recorre cada video con fecha conocida en
+ambos destinos primarios reales, recalcula su hash actual en disco, y
+corrige el registro solo si no coincide — nunca toca el archivo en sí.
+
+Corrido con la app cerrada (evita competir con el servidor en vivo):
+
+| Destino | Perfil | Videos revisados | Corregidos |
+|---|---|---|---|
+| `D:\Backup Fotos y Videos` | iphone de Hes | 456 | **445** |
+| `E:\Ipad photos` | ipad | 84 | **84** |
+
+0 errores, 0 archivos faltantes en ambos. Los 11 de D: que NO
+necesitaron corrección son exactamente los 11 archivos del primer lote
+de pruebas (2026-09-10) mal etiquetados como `.mp4` siendo en realidad
+HEIC (ver sección 5.11) — nunca pasan por el parche de video, así que su
+hash siempre estuvo correcto; coincide perfecto con lo ya documentado.
+
+Verificado con el mismo archivo usado para confirmar el bug original
+(`IMG_0750.mov`): su hash grabado ahora coincide exactamente con su
+contenido real en disco. El backup secundario debería ahora sincronizar
+estos 529 videos corregidos sin ningún fallo de verificación.

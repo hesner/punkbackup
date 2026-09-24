@@ -2529,3 +2529,44 @@ pasando**. Documentado en `AGENTS.md` como adenda a la lección 26:
 un diseño ya razonado y documentado sigue valiendo la pena revisarlo
 cuando el uso real (no el razonamiento) muestra que resultó más
 ruidoso de lo previsto. Versión: **v1.7.19**.
+
+## 24. Posicionamiento inicial para visibilidad open-source (2026-09-24)
+
+El usuario pidió ayuda para pensar cómo dar más visibilidad a
+`punkbackup.com` dentro de su categoría (backup de fotos self-hosted).
+Diferenciador real identificado: la mayoría de las alternativas
+(Immich, PhotoPrism) asumen un servidor corriendo 24/7, casi siempre
+con Docker y/o un NAS — PunkBackup es lo opuesto (apagado por defecto,
+sin Docker, sin NAS, solo un `.exe` de Windows + una USB). Decisión
+tomada (el usuario delegó cuál hilo trabajar primero): el README es el
+prerequisito real antes de cualquier canal de lanzamiento, porque nada
+de eso convierte tráfico si el repo no vende el diferenciador en los
+primeros segundos.
+
+**Cambios aplicados**:
+- `README.md`: badges (licencia, plataforma, cliente iOS), una frase de
+  posicionamiento más filosa arriba, un párrafo honesto de alcance
+  ("PunkBackup no reemplaza tu galería de fotos — no hace reconocimiento
+  facial, álbumes ni compartir; si quieres eso, usa Immich/PhotoPrism"),
+  y una tabla comparativa (PunkBackup vs. Immich/PhotoPrism vs.
+  PhotoSync vs. iCloud/Google Photos) sobre 5 ejes: si el servidor
+  corre 24/7, la instalación, dónde viven los archivos, el costo, y
+  para quién es cada opción.
+- Repo de GitHub: no tenía **ningún topic** configurado
+  (`repositoryTopics: null`) ni "website" — ambos son señales reales
+  que usa GitHub para búsqueda/descubrimiento y que curadores de listas
+  tipo `awesome-selfhosted` suelen revisar. Se aplicaron 12 topics
+  (`self-hosted`, `photo-backup`, `backup`, `ios`, `iphone`,
+  `ios-shortcuts`, `privacy`, `local-first`, `python`, `fastapi`,
+  `windows`, `no-cloud`) y `homepage = https://punkbackup.com` vía
+  `gh repo edit`.
+
+**Pendiente, próxima sesión si se retoma este hilo**: no hay ninguna
+captura/GIF del flujo real en el README — deliberadamente no se generó
+una automáticamente en esta sesión porque la app instalada tiene datos
+reales de los perfiles del usuario ("iphone de Hes", "ipad") visibles
+en pantalla; hace falta una instancia limpia/de demo antes de capturar
+algo para un README público. Los otros dos hilos de la conversación
+original (canales de lanzamiento — awesome-lists, r/selfhosted, Show
+HN — y la decisión de alcance de plataforma, hoy solo Windows) quedaron
+sin desarrollar, a la espera de que el usuario quiera continuar.

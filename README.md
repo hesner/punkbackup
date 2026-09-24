@@ -4,19 +4,44 @@
 
 **Tus recuerdos. Tu USB. Cero dependencia de la nube.**
 
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+[![Platform: Windows](https://img.shields.io/badge/platform-Windows-0078d6.svg)](https://github.com/hesner/punkbackup/releases/latest)
+[![Client: iOS Shortcuts](https://img.shields.io/badge/iOS%20client-Shortcuts%20app-black.svg)](shortcuts/SHORTCUT_INSTRUCTIONS.md)
+
 **[🌐 punkbackup.com](https://punkbackup.com)**
 
 A one-directional (iPhone/iPad → PC) photo and video backup system over
-local WiFi. No cable, no iCloud, no subscription. Multiple people/devices,
-each with their own profile and their own destination drive.
+local WiFi. No cable, no iCloud, no subscription, no Docker, no NAS —
+just a Windows PC, a USB drive, and your iPhone's built-in Shortcuts app.
+Multiple people/devices, each with their own profile and their own
+destination drive.
 
 ## Why
 
 Cloud photo backups are convenient and also: a recurring bill, someone
 else's server, and a company that can change the terms whenever it wants.
-PunkBackup does the boring, useful thing instead — it copies your files to
-a drive you own, over a network you control, using nothing but your
-iPhone's built-in Shortcuts app and a small Python server on your own PC.
+Self-hosted photo servers like Immich or PhotoPrism solve the cloud part,
+but trade it for a different chore — Docker, a reverse proxy, a NAS or a
+server that has to stay on 24/7. PunkBackup skips both: it copies your
+files to a drive you own, over a network you control, using nothing but
+your iPhone's built-in Shortcuts app and a small Python server on your own
+PC that's off by default and only runs while you're actually backing up.
+
+**PunkBackup isn't trying to replace your photo gallery app** — it doesn't
+do face recognition, albums, or sharing. It does one thing: get every
+photo and video off your iPhone and onto a drive you physically own,
+incrementally, without ever touching or deleting anything on the phone.
+If you want a full self-hosted Google Photos replacement, Immich or
+PhotoPrism do more than this ever will — PunkBackup is for when you just
+want the boring backup part, with nothing else to configure or maintain.
+
+|  | **PunkBackup** | Immich / PhotoPrism | PhotoSync | iCloud / Google Photos |
+|---|---|---|---|---|
+| Server runs | Only when you turn it on | 24/7 (Docker/NAS) | — (device-to-device) | Someone else's, always |
+| Setup | One `.exe` + one iOS Shortcut | Docker + reverse proxy + storage | App Store app | Just sign in |
+| Your files live on | A USB drive you own | A disk/NAS you own | Flexible (local, cloud, NAS) | Their cloud |
+| Cost | Free, open source | Free, open source | Paid app | Subscription past the free tier |
+| Good for | "Just back up my iPhone, nothing fancy" | A full photo library: search, AI, sharing | Flexible power-user sync without self-hosting | Zero setup, don't mind the lock-in |
 
 ## How it works
 

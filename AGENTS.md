@@ -630,6 +630,50 @@ reintroduces these problems.
     unit-testable without any Tkinter dependency at all, since the
     snapshot function is pure: see `tests/test_gui_status_poller.py`.
 
+23. **SQLite's per-write `commit()` is a real `fsync` to physical media,
+    not a cheap bookkeeping call — on USB flash it can dominate total
+    time even when the actual file I/O it's protecting is fast.**
+    Measured directly (2026-09-23, instrumenting `server/mirror.py`'s
+    sync loop with per-step timers, on real pending production files,
+    with the app fully closed to rule out contention as a confound):
+    copying a file took a median 205ms, hashing it to verify took a
+    median 1ms (never the bottleneck — pure CPU, no disk touch at all),
+    and **committing its one-row database record took a median 4,856ms
+    — 81% of total per-file time** — for files a few hundred KB to a few
+    MB in size, where none of that time should plausibly be about the
+    number of bytes involved. **Fixed** by giving `ManifestDB.record_file()`
+    an optional `commit: bool = True` param and a separate explicit
+    `commit()` method, so a caller with many inserts in a row (only
+    `server/mirror.py::sync_mirror()` so far — the real iPhone-facing
+    upload path keeps its default per-file commit, unchanged, since batching
+    it wasn't asked for and has different risk/benefit characteristics)
+    can defer the expensive part until `COMMIT_BATCH_SIZE` (25) files have
+    accumulated, plus an unconditional flush in a `finally` block so an
+    interruption never leaves more than one batch's worth of
+    already-verified work uncommitted. **Validated end-to-end against 30
+    real pending production files with the app closed: 960ms/file
+    average, a 4-5x real speedup**, with the copy and hash-verify steps
+    completely untouched — same strictness, same protection against USB
+    write corruption, only the commit *cadence* changed. Safe specifically
+    because this project's manifest DB is already designed to be
+    self-healing: a row that never got committed (crash, power loss)
+    simply isn't in the index next time it's opened, so the file just
+    gets harmlessly re-copied and re-verified — never silently
+    mis-recorded, never a data-loss risk, the same tolerance already
+    relied on for the 0-byte retry (point 12) and the reap logic
+    (point 16). **A more elaborate alternative was considered and
+    deliberately not built**: copying into a staging folder via
+    independent worker threads, verifying in batches, then moving
+    verified files into place. It would have worked, but it targets the
+    COPY step (only 18.8% of measured time) rather than the commit
+    (81.2%), and adds real new complexity (thread coordination, a
+    staging-to-final move step, tracking which staged files are verified)
+    for a smaller win than the much simpler commit-batching fix already
+    captures. **When a "batch of many small operations" is slow, measure
+    which SPECIFIC step is slow before reaching for concurrency — a
+    single sequential fix to the actual bottleneck can outperform a much
+    more complex parallel design that speeds up the wrong step.**
+
 - Unit tests against `BackupEngine`/`ManifestDB` directly (no HTTP) for the
   dedup/conflict/incremental rules — fast, exhaustive.
 - `fastapi.testclient.TestClient` end-to-end tests for the real ASGI app,
@@ -659,7 +703,7 @@ reintroduces these problems.
 
 ## 7. What "done" looks like
 
-- `pytest tests -q` passes (74 tests as of this writing, covering engine
+- `pytest tests -q` passes (77 tests as of this writing, covering engine
   rules, profile isolation/pause/delete, destination-switch correctness,
   concurrent uploads, the `/check` contract, the 0-byte-upload rejection,
   its self-healing retry error-count behavior, a stale-run reap on

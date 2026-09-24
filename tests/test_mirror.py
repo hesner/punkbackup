@@ -163,6 +163,117 @@ def test_reconnecting_a_partially_synced_mirror_resumes_incrementally(tmp_path):
     assert result.copied == 2
 
 
+def test_sync_batches_commits_instead_of_one_fsync_per_file(tmp_path, monkeypatch):
+    """The actual optimization (2026-09-23, PLAN.md's mirror-speed
+    write-up): commit() is real disk work (fsync) and was measured as
+    ~81% of total mirror-sync time on real USB media when called once per
+    file. This must now be called far less often than once per file for a
+    sync bigger than one batch."""
+    import server.mirror as mirror_module
+
+    engine = make_engine(tmp_path)
+    for i in range(mirror_module.COMMIT_BATCH_SIZE * 2 + 3):
+        engine.process_upload(f"IMG_{i}.jpg", io.BytesIO(f"content-{i}".encode()), "2026-01-01T00:00:00", None)
+    mirror_root = tmp_path / "mirror"
+
+    commit_calls = []
+    real_commit = ManifestDB.commit
+
+    def counting_commit(self):
+        commit_calls.append(1)
+        real_commit(self)
+
+    monkeypatch.setattr(ManifestDB, "commit", counting_commit)
+
+    total_files = mirror_module.COMMIT_BATCH_SIZE * 2 + 3
+    result = sync_mirror(engine.dest_root, engine.db, mirror_root)
+    assert result.copied == total_files
+
+    # 2 full batches + 1 final flush for the 3 leftover files -- NOT one
+    # commit per file (which would be `total_files` calls).
+    assert len(commit_calls) == 3
+    assert len(commit_calls) < total_files
+
+    # And correctness is untouched: every file is really there, verified.
+    mirror_db = ManifestDB(mirror_root)
+    assert mirror_db.all_sha256s() == engine.db.all_sha256s()
+
+
+def test_interrupted_batch_self_heals_without_losing_or_duplicating_anything(tmp_path):
+    """Simulates the real failure mode batching introduces: the app gets
+    killed (not gracefully closed) after some files in the CURRENT batch
+    were copied+verified but before that batch's commit() ran. Those rows
+    must simply not exist yet -- never partially there, never marked done
+    without really being committed -- and the next sync must pick them
+    back up cleanly, with no duplicate rows and no leftover partial files."""
+    engine = make_engine(tmp_path)
+    for i in range(5):
+        engine.process_upload(f"IMG_{i}.jpg", io.BytesIO(f"content-{i}".encode()), "2026-01-01T00:00:00", None)
+    mirror_root = tmp_path / "mirror"
+    mirror_root.mkdir()
+
+    # Manually replay what sync_mirror's loop does for 3 of the 5 files,
+    # but WITHOUT ever calling commit() -- then close the connection
+    # exactly like a hard process kill would (no clean shutdown, no final
+    # flush), to prove the rows really never landed.
+    mirror_db = ManifestDB(mirror_root)
+    rows = engine.db.iter_files_by_recency()[:3]
+    for row in rows:
+        dest = mirror_root / Path(row["dest_path"]).relative_to(engine.dest_root)
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        dest.write_bytes(Path(row["dest_path"]).read_bytes())
+        mirror_db.record_file(row["filename"], row["sha256"], row["taken_at"], str(dest), row["size_bytes"], commit=False)
+    mirror_db._conn.close()  # raw close, bypassing ManifestDB.close()/commit() -- simulates a hard kill
+
+    # Reopening confirms the uncommitted rows are genuinely gone, not just
+    # hidden -- SQLite's own rollback-on-close, not anything this project
+    # implements itself.
+    reopened = ManifestDB(mirror_root)
+    assert reopened.all_sha256s() == set()
+    reopened.close()
+
+    # A real sync now must cleanly pick up all 5 (including the 3 "ghost"
+    # files whose bytes are still sitting on disk from the simulated
+    # crash) -- overwriting the leftover partial files harmlessly, no
+    # duplicates, no crash.
+    result = sync_mirror(engine.dest_root, engine.db, mirror_root)
+    assert result.copied == 5
+    assert result.pending_before == 5
+    final_db = ManifestDB(mirror_root)
+    assert final_db.all_sha256s() == engine.db.all_sha256s()
+    assert len(final_db.iter_files_by_recency()) == 5  # no duplicate rows
+
+
+def test_cancelled_sync_still_commits_the_partial_batch(tmp_path):
+    """A cancellation (e.g. to safely eject the drive) must flush whatever
+    was already verified in the current, not-yet-full batch -- otherwise
+    batching would make Cancel lose more progress than it used to."""
+    engine = make_engine(tmp_path)
+    for i in range(4):
+        engine.process_upload(f"IMG_{i}.jpg", io.BytesIO(f"content-{i}".encode()), "2026-01-01T00:00:00", None)
+    mirror_root = tmp_path / "mirror"
+
+    cancel_event = threading.Event()
+    seen = []
+
+    def on_progress(done, total):
+        seen.append(done)
+        if done == 2:  # well short of COMMIT_BATCH_SIZE -- a partial batch
+            cancel_event.set()
+
+    result = sync_mirror(
+        engine.dest_root, engine.db, mirror_root,
+        progress_callback=on_progress, cancel_event=cancel_event,
+    )
+    assert result.cancelled is True
+    assert result.copied == 2
+
+    # Even though 2 is far short of a full batch, it must already be
+    # durably recorded -- not lost because the sync stopped early.
+    mirror_db = ManifestDB(mirror_root)
+    assert len(mirror_db.all_sha256s()) == 2
+
+
 def test_replacing_mirror_with_a_different_empty_folder_is_a_full_fresh_sync(tmp_path):
     """Swapping the physical drive at the configured mirror path for a
     different, empty one must never be treated as 'already synced' --

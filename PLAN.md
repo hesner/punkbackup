@@ -1898,3 +1898,87 @@ causó el bug) durante ~16 segundos (10+ ciclos de sondeo) sin ningún
 error ni traceback.
 
 Documentado como lección nueva en AGENTS.md (§22). Versión: **v1.7.7**.
+
+## 17. Backup secundario más rápido: agrupar los commits a SQLite (2026-09-23)
+
+Pregunta del usuario: "analiza la velocidad del backup secundario, piensa
+en estrategias para optimizarlo" — llevó a medir con evidencia real
+(instrumentando `sync_mirror` con timers por paso, sobre archivos
+pendientes reales de producción) antes de proponer nada a ciegas.
+
+### 17.1 Medición real, sin ruido
+
+Primer intento de medir salió confuso (8.35s de copia para un PNG de
+2MB, commits de ~19-32s) — la causa no era el algoritmo sino que la app
+de producción seguía subiendo activamente desde el iPhone al mismo
+tiempo (contención real sobre D:), y se probó también pausar Avast
+(descartado: no cambió nada, incluso salió peor por la contención
+concurrente). **Medición limpia real**, con la app completamente
+cerrada, 8 archivos reales pendientes:
+
+| Paso | Mediana | % del tiempo total |
+|---|---|---|
+| Copiar | 205ms | 18.8% |
+| Verificar (hash) | 1ms | ~0% |
+| **Commit a SQLite (`fsync` por archivo)** | **4,856ms** | **81.2%** |
+
+Verificar por hash nunca fue el problema (nunca toca disco, es puro
+CPU). El costo real es la confirmación física en disco de **cada**
+registro individual en la base de datos de la segunda copia — típico de
+escritura en flash USB, donde cada `fsync` es cara e impredecible
+(165ms–6.5s de rango, en la misma prueba).
+
+### 17.2 Arreglo: agrupar commits, no tocar copia ni verificación
+
+Se evaluó y se descartó la propuesta del usuario de copiar en hilos
+independientes hacia una carpeta temporal con verificación por lotes —
+técnicamente válida, pero ataca la copia (18.8% del costo) en vez del
+commit (81.2%), y agrega concurrencia/estado nuevo (varios hilos,
+carpeta temporal, seguimiento de qué quedó verificado) para un problema
+que no es el que realmente pesa. También se evaluó `PRAGMA synchronous`
+más permisivo (`NORMAL`/`OFF`) como palanca adicional — el usuario pidió
+probar **solo** el agrupamiento de commits primero, sin combinar.
+
+**Implementado**: `ManifestDB.record_file()` gana un parámetro
+`commit: bool = True` (el `True` por defecto no cambia nada para
+ninguna llamada existente, incluyendo el camino real de subida desde el
+iPhone) y un método nuevo `ManifestDB.commit()` explícito.
+`server/mirror.py::sync_mirror()` ahora llama
+`record_file(..., commit=False)` y confirma explícitamente cada
+`COMMIT_BATCH_SIZE` (25) archivos verificados, **más un flush final
+garantizado en el `finally`** — sin importar si la corrida termina
+normal, se cancela, se corta por un error de disco, o lanza una
+excepción inesperada, así que nunca queda un lote a medio confirmar más
+tiempo del necesario.
+
+**Por qué es seguro**: si la app se cierra de golpe (o se corta la luz)
+a mitad de un lote, los archivos ya copiados y verificados pero sin
+confirmar simplemente no aparecen en el índice la próxima vez que se
+abre — SQLite descarta la transacción sin confirmar por su cuenta, sin
+código adicional de este proyecto. La siguiente sincronización los ve
+como "pendientes" y los vuelve a copiar/verificar sin duplicar ni
+corromper nada — mismo principio de autosanación que ya usa el
+reintento de 0 bytes y la reap logic (AGENTS.md lecciones 12 y 16).
+
+### 17.3 Pruebas y validación real
+
+3 pruebas nuevas en `tests/test_mirror.py` (**77/77 pasando**): confirma
+que `commit()` se llama muchas menos veces que `record_file()` (2
+lotes + 1 flush final para 53 archivos, no 53 commits); simula un
+"apagón" real a mitad de lote (escribe filas con `commit=False` y cierra
+la conexión cruda, sin pasar por `close()`) y confirma que esas filas
+genuinamente no existen al reabrir, y que una sincronización posterior
+las recupera sin duplicar; confirma que una cancelación a mitad de un
+lote parcial (2 de 25) igual deja esos 2 archivos confirmados, no
+perdidos.
+
+**Validado con datos reales de producción, no solo pruebas sintéticas**:
+30 archivos reales pendientes, sincronizados con el código nuevo →
+**28.79s totales, 960ms/archivo en promedio** — entre 4 y 5 veces más
+rápido que la línea base limpia medida en §17.1, con la copia y la
+verificación exactamente igual de estrictas.
+
+**Hallazgo aparte, no relacionado**: durante esta sesión de pruebas se
+detectó que la unidad E: (mirror de "iphone de Hes" y destino de "ipad")
+estaba físicamente desconectada — el usuario fue notificado para que la
+revise; no es un bug de software.

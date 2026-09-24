@@ -28,6 +28,15 @@ from typing import Callable, Optional
 from .manifest_db import ManifestDB
 from .storage import CHUNK_SIZE
 
+# How many verified files accumulate before their DB rows get physically
+# confirmed to disk in one go, instead of one fsync per file -- see
+# sync_mirror's commit=False comment for the real measurement behind this.
+# Not so large that an interruption right before a commit wastes much
+# re-copy+re-verify work next time (each file's own work is cheap -- ~206ms
+# copy, ~1ms hash, per the same measurement), not so small that most of the
+# original per-file fsync cost survives.
+COMMIT_BATCH_SIZE = 25
+
 
 @dataclass
 class MirrorSyncResult:
@@ -91,6 +100,12 @@ def sync_mirror(
     loss): a file is only ever recorded in the mirror's index AFTER it's
     been copied AND verified, so the next call simply picks up whatever
     is still missing — no in-progress state is ever persisted or trusted.
+    Records are committed to disk in batches of COMMIT_BATCH_SIZE (see
+    that constant's docstring for why), not one at a time — an
+    interruption can therefore leave up to COMMIT_BATCH_SIZE-1 already
+    copied-and-verified files uncommitted; the only consequence is they
+    get harmlessly re-copied and re-verified on the next sync, never lost
+    or silently mis-recorded.
 
     Never raises — every failure mode (drive full, drive yanked instead of
     safely ejected mid-copy, anything else unexpected) comes back as a
@@ -130,6 +145,8 @@ def sync_mirror(
         except OSError:
             pass  # can't tell free space right now -- the copy loop below will surface any real problem
 
+        uncommitted = 0  # rows recorded since the last commit() -- flushed below
+
         for i, row in enumerate(pending, start=1):
             if cancel_event is not None and cancel_event.is_set():
                 result.cancelled = True
@@ -165,10 +182,24 @@ def sync_mirror(
                 break
 
             if verified:
+                # commit=False: batching this WAY down reduced real mirror
+                # sync time dramatically. Measured (2026-09-23, real USB
+                # media, no antivirus/contention confound -- see PLAN.md):
+                # the per-file fsync alone was ~81% of total sync time (4.9s
+                # median), while the actual copy (205ms) and hash (1ms)
+                # were never the bottleneck. Committing once per
+                # COMMIT_BATCH_SIZE files instead of once per file cuts the
+                # number of those expensive fsyncs by the same factor,
+                # without changing what gets copied or how it's verified.
                 mirror_db.record_file(
-                    row["filename"], row["sha256"], row["taken_at"], str(dest), row["size_bytes"]
+                    row["filename"], row["sha256"], row["taken_at"], str(dest), row["size_bytes"],
+                    commit=False,
                 )
                 result.copied += 1
+                uncommitted += 1
+                if uncommitted >= COMMIT_BATCH_SIZE:
+                    mirror_db.commit()
+                    uncommitted = 0
             else:
                 # Corrupted copy (bad USB write, etc.) — never record it;
                 # left for a retry on the next sync rather than aborting
@@ -190,6 +221,16 @@ def sync_mirror(
     except Exception as exc:  # genuinely unexpected -- still report, never disappear silently
         result.fatal_error = str(exc)
     finally:
+        # Flush whatever's left in the current batch no matter how the loop
+        # above ended (finished normally, cancelled, stopped_with_error, or
+        # the unexpected-exception path above) -- minimizes how much
+        # already-copied-and-verified work would need re-doing next time,
+        # without which an interruption could leave up to COMMIT_BATCH_SIZE-1
+        # correctly-verified files sitting uncommitted.
+        try:
+            mirror_db.commit()
+        except Exception:
+            pass
         try:
             mirror_db.close()
         except Exception:

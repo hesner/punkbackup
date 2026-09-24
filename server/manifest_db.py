@@ -188,7 +188,15 @@ class ManifestDB:
         dest_path: str,
         size_bytes: int,
         original_filename: Optional[str] = None,
+        commit: bool = True,
     ) -> None:
+        """`commit=False` lets a caller batch many inserts into one physical
+        disk confirmation via a later explicit commit() call — see
+        commit()'s docstring for why this matters and when it's safe.
+        Defaults to True (commit every call, today's behavior, unchanged)
+        so every existing caller — the real iPhone-facing upload path
+        included — keeps its current per-file durability with no code
+        change needed."""
         with self._lock:
             self._conn.execute(
                 """INSERT INTO backed_up_files
@@ -196,6 +204,23 @@ class ManifestDB:
                    VALUES (?, ?, ?, ?, ?, ?, ?)""",
                 (filename, sha256, taken_at, _now(), dest_path, size_bytes, original_filename or filename),
             )
+            if commit:
+                self._conn.commit()
+
+    def commit(self) -> None:
+        """Explicit commit, paired with record_file(..., commit=False) to
+        batch several inserts into one physical disk confirmation instead
+        of one per file. Measured (2026-09-23, real USB media, mirror
+        sync): the per-file commit's fsync was ~81% of total sync time —
+        far more than the actual file copy or hash verification, which
+        this change never touches. Safe to skip/delay: a row that isn't
+        committed yet (app closed, power loss) simply isn't in the index
+        next time it's opened, so the next sync just re-copies and
+        re-verifies that one file — the same self-healing behavior this
+        project already relies on elsewhere (see AGENTS.md lessons 12/20),
+        never a risk of silently recording something that wasn't really
+        there."""
+        with self._lock:
             self._conn.commit()
 
     def all_sha256s(self) -> set[str]:

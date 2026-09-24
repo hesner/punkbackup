@@ -71,6 +71,28 @@ from happening again.
 - That profile has no destination folder. Go to **"⚙ Settings"** →
   "Choose folder..." for that profile.
 
+## A profile's card says "⚠ USB not connected" (since v1.7.13)
+
+- It means exactly that: that profile's destination folder points at a
+  USB drive that isn't currently connected to the PC. This isn't a
+  PunkBackup error — it's real information, and before v1.7.13 it wasn't
+  shown clearly (the card used to say "0 files, never" as if the
+  destination were simply empty, and the log said nothing when the
+  Shortcut actually tried to reach it).
+- Fix: plug in that specific USB and wait a few seconds — the card
+  updates on its own (automatic refresh every ~1.5s), no need to restart
+  the app or the profile.
+- If the iPhone's Shortcut runs while the USB is disconnected, every
+  attempt fails silently on the phone's side (this is a Shortcuts
+  limitation, not PunkBackup's — see "The phone freezes while the
+  Shortcut runs" below) while the app logs a line in the activity log
+  like "Destination folder not reachable — is the USB drive connected?"
+  — at most once per minute per profile, so a Shortcut retrying hundreds
+  of photos doesn't flood the log.
+- A folder that doesn't exist YET but is on a drive that IS connected
+  (e.g. a brand-new profile's very first backup) does NOT trigger this
+  warning — that folder just gets created normally.
+
 ## The Shortcut runs but doesn't upload any new photo
 
 - Check **"Find Photos"** has no stray filter beyond the `Date Taken is

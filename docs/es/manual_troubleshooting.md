@@ -70,6 +70,28 @@ deje de pasar.
 - Ese perfil no tiene carpeta destino. Ve a ⚙ Configuración → "Elegir
   carpeta..." para ese perfil.
 
+## La tarjeta de un perfil dice "⚠ USB no conectada" (desde v1.7.13)
+
+- Es exactamente lo que dice: la carpeta destino de ese perfil apunta a
+  una unidad (USB) que ahora mismo no está conectada a la PC. No es un
+  error de la app — es información real, y antes de v1.7.13 no se
+  mostraba con claridad (la tarjeta mostraba "0 archivos, nunca" como si
+  el destino estuviera simplemente vacío, y el log no decía nada cuando
+  el Atajo lo intentaba de verdad).
+- Solución: conecta esa USB específica y espera unos segundos — la
+  tarjeta se actualiza sola (revisión automática cada ~1.5s), sin
+  necesidad de reiniciar la app ni el perfil.
+- Si el Atajo del iPhone corre mientras la USB está desconectada, cada
+  intento fallará en silencio desde el lado del teléfono (esto es una
+  limitación de Atajos, no de PunkBackup — ver "El teléfono se traba
+  mientras corre el Atajo" más abajo) mientras la app registra en el log
+  de actividad una línea como "Destination folder not reachable — is
+  the USB drive connected?" — como máximo una vez por minuto por perfil,
+  para no llenar el log si el Atajo insiste con cientos de fotos.
+- Una carpeta que todavía no existe pero está en una unidad SÍ
+  conectada (por ejemplo, el primer respaldo real de un perfil nuevo) NO
+  dispara este aviso — esa carpeta se crea sola normalmente.
+
 ## El Atajo corre pero no sube ninguna foto nueva
 
 - Revisa que **"Find Photos"** no tenga ningún filtro raro además del

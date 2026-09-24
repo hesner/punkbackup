@@ -2188,3 +2188,66 @@ evento real — usando `%r` específicamente para distinguir `None` de una
 cadena vacía `''`, que se comportan igual en `bump_run()`
 (`if not run_id: return`) pero apuntarían a causas distintas. Pendiente
 de un evento real para revisar. Versión: **v1.7.12**.
+
+## 18. Unidad destino desconectada: ahora se ve y se registra con claridad (2026-09-24, v1.7.13)
+
+El usuario, probando con una USB a propósito desconectada, notó dos
+cosas: la tarjeta del perfil no decía en ningún lado que la unidad
+seleccionada no estaba presente, y cuando corrió el Atajo del iPhone la
+app no mostró absolutamente nada aunque el Atajo siguió "activo".
+
+**Causa real, dos huecos distintos**:
+1. `_engine_for()` (`server/app.py`) ya convertía correctamente un
+   `mkdir()` fallido en un `503` — pero nunca registraba nada antes de
+   lanzar la excepción. Una corrida real del Atajo contra una unidad
+   desconectada, golpeando `/check`/`/upload` repetidamente, no dejaba
+   ningún rastro nuevo en el log en el momento real en que pasaba. El
+   único log posible era un traceback crudo desde el chequeo periódico
+   de inactividad (`_check_idle_backups`), y solo la primera vez tras
+   abrir la app — mucho antes de que el usuario tocara el teléfono.
+2. `_profile_stats_text()` (GUI) solo recibía un `status` o `None` — un
+   `None` por "nunca respaldado" y un `None` por "no alcanzable ahora"
+   se veían exactamente igual: "Total: 0 archivos | Última copia:
+   nunca".
+
+**Arreglo, extendiendo un patrón que ya existía y funcionaba bien para
+la segunda copia (mirror)**: `get_mirror_status()` ya devuelve un `None`
+limpio para "no conectada" que la GUI ya renderiza como un mensaje
+distinto — el destino primario simplemente nunca recibió el mismo
+tratamiento.
+- `_engine_for`'s `except OSError` ahora llama a
+  `_warn_destination_unreachable()`, que registra una línea clara vía el
+  mismo logger `"backup_engine"` que ya usan `BackupEngine`/`ManifestDB`
+  (llega gratis al panel de actividad en vivo de la GUI), con límite de
+  una vez cada 60 segundos por perfil (`_UNREACHABLE_WARN_COOLDOWN`,
+  guardado en `_state["unreachable_warned"]`) — y se borra en cuanto ese
+  `mkdir()` vuelve a tener éxito, así que un ciclo desconectar →
+  reconectar → desconectar dentro de una misma ventana de 60s sigue
+  avisando de inmediato en el segundo corte, en vez de quedarse en
+  silencio.
+- `_compute_status_snapshot` ahora distingue el `HTTPException` con
+  `status_code == 503` específicamente (nueva bandera
+  `entry["destination_unreachable"]`), separada de `status_error`
+  (cualquier OTRO error, genuinamente inesperado, sigue mostrando el
+  traceback completo como antes). `_profile_stats_text` muestra la línea
+  dedicada "⚠ USB no conectada: {ruta}" en vez del bloque de
+  estadísticas normal, tanto en Principal como en Configuración.
+
+**Cuidado que evitó una versión ingenua y rota del arreglo**: un perfil
+nuevo apuntando a una carpeta que todavía no existe en una unidad SÍ
+conectada NO debe marcarse como "no conectada" — `mkdir(parents=True,
+exist_ok=True)` la crea sola en el primer backup real, comportamiento
+correcto y ya existente (confirmado con
+`test_snapshot_has_independent_entries_per_profile`, cuyo `dest2` nunca
+se crea a mano y sigue funcionando). Por eso el arreglo NO usa un chequeo
+barato tipo `Path.is_dir()` (habría marcado como "desconectada" a
+cualquier perfil recién configurado que aún no tuvo su primer backup) —
+deja correr el `mkdir()` real de siempre y solo distingue el RESULTADO
+(503 = la raíz de la unidad no existe en absoluto, ej. `E:\` no está
+montada, vs. éxito = unidad alcanzable, subcarpeta creada sin drama).
+
+5 pruebas nuevas (2 en `tests/test_api.py` para el log con cooldown y su
+reseteo al reconectar, 2 en `tests/test_gui_status_poller.py` para la
+distinción `destination_unreachable`/`status_error` y el texto de la
+tarjeta, más una tercera de rate-limit) — **86/86 pasando**. Documentado
+en `AGENTS.md` lección 26. Versión: **v1.7.13**.

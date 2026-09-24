@@ -2016,3 +2016,69 @@ problemas (EN/ES), sección de mensajes de la segunda copia.
 los archivos fallan verificación a propósito, y confirma que `done`
 nunca supera el conteo real de éxitos aunque el loop siga procesando
 intentos fallidos. Versión: **v1.7.9**.
+
+### 17.5 Causa raíz real de las "fallas": el hash guardado para videos quedaba desactualizado desde siempre (2026-09-23)
+
+El usuario, con criterio correcto, no aceptó "es contención de disco"
+como explicación de un 0% de éxito sostenido ("no es un comportamiento
+esperado que ningún archivo se haya copiado correctamente") — pidió
+analizar la causa real en vez de asumirla. Tenía razón: no era
+contención.
+
+**Investigación, con evidencia real en cada paso** (nunca se asumió
+nada sin confirmarlo):
+1. Se probó copiar y verificar manualmente el primer archivo pendiente
+   (`IMG_0780.png`, una foto) — funcionó perfecto, sin fallar.
+2. Se probó lo mismo con una muestra de 15 archivos pendientes reales
+   en sucesión rápida: **14 de 15 fallaron**, todos con el mismo patrón
+   exacto — tamaño correcto, hash distinto — y **los 14 eran videos**
+   (`.mov`/`.mp4`). El único que pasó era la única foto de la muestra.
+3. Confirmación directa y definitiva, sin ningún mirror de por medio:
+   se tomó un video real (`IMG_0750.mov`, `taken_at` conocido) y se
+   comparó su hash ACTUAL en disco contra el hash guardado en la propia
+   base de datos PRIMARIA (D:, no el mirror) — **no coincidían**. El
+   archivo nunca tocó el mirror; el problema ya estaba en el origen.
+
+**Causa raíz**: `finalize_upload()` (`server/storage.py`) grababa el
+`sha256` en la base de datos **antes** de aplicar el parche de fecha
+interna del video (`_maybe_fix_video_creation_time`, ver §5.11 — corrige
+`creation_time` en `mvhd`/`mdhd` para que herramientas como PhotoPrism
+muestren la fecha real). Ese parche cambia bytes reales del archivo
+**después** de que su hash ya quedó guardado — así que para **todo
+video con fecha conocida** (la gran mayoría), el hash en la base de
+datos primaria queda permanentemente desactualizado respecto al
+contenido real del archivo, desde el momento mismo en que se sube. No
+tenía ningún síntoma visible en el camino principal (nada ahí vuelve a
+comparar un archivo existente contra su propio hash guardado), pero
+hacía fallar la verificación del mirror el 100% de las veces para
+cualquier video — no aleatorio, no por contención, determinístico.
+
+**Arreglo**: se reordena `finalize_upload()` para aplicar el parche de
+fecha **antes** de grabar el registro, y se recalcula el hash **solo
+cuando el parche realmente cambió el archivo** (nunca para fotos, nunca
+para videos sin fecha conocida) — así el hash guardado siempre
+corresponde al contenido real en disco, sin agregar una segunda
+escritura a la base de datos (sigue siendo un solo `record_file()`, un
+solo commit, igual que antes).
+
+**Costo real, explicado al usuario antes de implementar**: una pasada
+extra de lectura + hash por cada video parchado — no hay forma de
+evitarla, un hash no se puede "parchar" incrementalmente. Proporcional al
+tamaño del video, probablemente entre medio segundo y un par de
+segundos en el hardware real de este proyecto — pequeño comparado con
+los ~8-17s que ya toma la subida por WiFi del mismo video.
+
+**Prueba de regresión** (`test_recorded_sha256_matches_disk_content_after_video_creation_time_fix`,
+**79/79 pasando**): confirma que el hash grabado coincide con el
+contenido real en disco después del parche. Verificado explícitamente
+que la prueba SÍ detecta el bug real: revertida temporalmente la
+corrección (`git stash`), la prueba falla exactamente como se esperaba
+(hashes distintos), confirmando que no es una prueba vacía.
+
+**Pendiente, no resuelto todavía**: este arreglo solo cubre subidas
+NUEVAS a partir de ahora. Los videos ya existentes en la base de datos
+primaria (posiblemente miles, cualquiera subido con fecha conocida antes
+de este fix) siguen teniendo el hash viejo guardado — el mirror va a
+seguir fallando en ellos hasta que se haga una corrección retroactiva
+(recalcular y actualizar el hash de cada video ya registrado). Decisión
+pendiente con el usuario sobre cómo y cuándo hacer esa corrección.

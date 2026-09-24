@@ -690,6 +690,43 @@ reintroduces these problems.
     when nonzero) turns "is this actually working?" from a forensic
     investigation into something visible at a glance.
 
+24. **If a file's hash gets recorded, then something ELSE modifies that
+    same file's bytes afterward, the recorded hash is now permanently
+    wrong — even though nothing about the recording step itself was
+    buggy.** Found the same day as point 23, initially misdiagnosed as
+    "disk contention" (a 0% mirror-sync success rate looked plausible
+    under real concurrent load) until the user pushed back: "it's not
+    expected behavior that NO file copies correctly" — correctly refusing
+    to accept a plausible-sounding explanation without evidence. Real
+    cause: `finalize_upload()` recorded a video's sha256, THEN called
+    `_maybe_fix_video_creation_time()` (point 12's in-place `mvhd`/`mdhd`
+    patch), which changes real bytes on disk — but the already-recorded
+    hash never gets updated to match. Confirmed directly, no mirror
+    involved at all: a real video's CURRENT on-disk sha256 didn't match
+    its own primary database's stored sha256. 100% reproducible for every
+    video with a known `taken_at` (the vast majority) — not flaky, not
+    contention, a permanent, silent mismatch baked in at upload time. Had
+    zero visible symptom on the primary path (nothing there re-hashes an
+    existing file against its own stored value) but made the mirror's
+    hash verification fail on every single video. **Fixed by reordering,
+    not by re-verifying later**: apply the byte-changing operation FIRST,
+    then compute (or recompute) the hash that actually gets recorded —
+    never record a hash before every mutation the same upload will still
+    perform on that file has happened. Recomputing costs one extra
+    read+hash pass, but only for files that were genuinely modified (a
+    boolean return from the patch function gates it), so untouched files
+    (all photos, videos with no known date) pay nothing extra, and no
+    second database write is needed if the corrected hash is threaded
+    into the SAME `record_file()` call that was always going to happen.
+    **General lesson: any pipeline step that both hashes a file for
+    identity AND separately mutates that file's bytes must guarantee the
+    hash is computed AFTER the last mutation — if a later refactor adds a
+    new byte-changing step, it must go before the hash, not be tacked on
+    after.** Confirmed the regression test actually catches this: reverted
+    the fix via `git stash`, watched the new test fail with the exact
+    mismatch, restored the fix, watched it pass — never trust a new test
+    without watching it fail first.
+
 - Unit tests against `BackupEngine`/`ManifestDB` directly (no HTTP) for the
   dedup/conflict/incremental rules — fast, exhaustive.
 - `fastapi.testclient.TestClient` end-to-end tests for the real ASGI app,
@@ -719,7 +756,7 @@ reintroduces these problems.
 
 ## 7. What "done" looks like
 
-- `pytest tests -q` passes (78 tests as of this writing, covering engine
+- `pytest tests -q` passes (79 tests as of this writing, covering engine
   rules, profile isolation/pause/delete, destination-switch correctness,
   concurrent uploads, the `/check` contract, the 0-byte-upload rejection,
   its self-healing retry error-count behavior, a stale-run reap on

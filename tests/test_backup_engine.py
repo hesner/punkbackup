@@ -334,6 +334,36 @@ def test_reencoded_video_with_same_content_is_deduped_not_kept_both(tmp_path):
     assert len(files) == 1  # no wasted duplicate copy
 
 
+def test_recorded_sha256_matches_disk_content_after_video_creation_time_fix(tmp_path):
+    """The real bug (2026-09-23, PLAN.md §17.5): the video creation_time
+    patch rewrites a handful of bytes in the file's OWN container AFTER
+    it lands on disk. The old code recorded the pre-patch hash, then
+    patched -- so the database's sha256 permanently stopped matching the
+    file's real, current bytes for every video with a known taken_at.
+    Had no visible symptom on the primary path itself, but made the
+    second-copy mirror's hash verification fail 100% of the time for
+    every video (confirmed live: 14/15 real pending files, every one a
+    video). The recorded hash must always match what's actually on disk,
+    even after the in-place patch."""
+    import hashlib
+
+    engine = make_engine(tmp_path)
+    mov_bytes = _synthetic_mov(mvhd_creation=1000, mdhd_creation=2000, mdat=b"\xde\xad\xbe\xef" * 8)
+
+    result = engine.process_upload("IMG_1234.mov", io.BytesIO(mov_bytes), "2026-05-01T12:00:00", None)
+    assert result["status"] == "new"
+    dest_path = Path(result["dest_path"])
+
+    # The patch must have actually changed the bytes -- otherwise this
+    # test would trivially pass without exercising the fix at all.
+    on_disk_bytes = dest_path.read_bytes()
+    assert on_disk_bytes != mov_bytes
+
+    real_hash_of_disk_content = hashlib.sha256(on_disk_bytes).hexdigest()
+    row = engine.db.find_by_dest_path(str(dest_path))
+    assert row["sha256"] == real_hash_of_disk_content
+
+
 def test_reencoded_video_with_different_content_still_kept_both(tmp_path):
     """A genuine content difference in an mdat-bearing video must still be
     kept as a separate file — content_signature must not be over-broad."""

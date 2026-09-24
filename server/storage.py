@@ -272,35 +272,66 @@ class BackupEngine:
 
                 final_path = self._next_conflict_name(target_dir, candidate_path)
                 shutil.move(str(staging_path), str(final_path))
+                sha256 = self._sha256_after_video_fix(final_path, taken_at, sha256)
                 self.db.record_file(safe_name, sha256, taken_at, str(final_path), size, original_name)
                 self._resolve_error_both(run_id, safe_name, original_name)
                 self.db.bump_run(run_id, "files_conflict")
-                self._maybe_fix_video_creation_time(final_path, taken_at)
                 self.logger.warning("! %s: name conflict, kept both -> %s", safe_name, final_path.name)
                 return {"status": "conflict_kept_both", "dest_path": str(final_path)}
 
             shutil.move(str(staging_path), str(candidate_path))
+            sha256 = self._sha256_after_video_fix(candidate_path, taken_at, sha256)
             self.db.record_file(safe_name, sha256, taken_at, str(candidate_path), size, original_name)
             self._resolve_error_both(run_id, safe_name, original_name)
             self.db.bump_run(run_id, "files_new")
-            self._maybe_fix_video_creation_time(candidate_path, taken_at)
             self.logger.info("+ %s backed up (%.1f MB)", safe_name, size / (1024 * 1024))
             return {"status": "new", "dest_path": str(candidate_path)}
         finally:
             staging_path.unlink(missing_ok=True)  # no-op once moved
 
-    def _maybe_fix_video_creation_time(self, path: Path, taken_at: Optional[str]) -> None:
+    def _sha256_after_video_fix(self, path: Path, taken_at: Optional[str], original_sha256: str) -> str:
+        """Applies the video creation_time fix (if applicable) and returns
+        the hash that actually matches what ends up on disk — MUST be
+        called, and its result recorded, BEFORE record_file(), never
+        after.
+
+        Real bug found and fixed 2026-09-23 (PLAN.md §17.5): the video
+        creation_time patch (see _maybe_fix_video_creation_time) rewrites
+        a handful of bytes in the file's own container AFTER it's already
+        on disk. The original code recorded `original_sha256` (hashed
+        from the pre-patch bytes) and only THEN patched the file — so the
+        database's own sha256 for every video with a known taken_at
+        permanently stopped matching the file's real, current content the
+        moment it was patched. This was silent and had no user-visible
+        symptom on the primary backup path itself (nothing there ever
+        re-hashes an existing file against its own stored sha256), but
+        made the second-copy mirror's hash verification fail 100% of the
+        time for every video, confirmed live: 14 of 15 real pending files
+        failed, every single one a video, size correct, hash different —
+        not corruption, not drive contention, just a stale recorded hash.
+        Costs one extra full read+hash pass, but only for videos that
+        actually got patched (a real taken_at, a recognized container) —
+        untouched videos and all photos pay nothing extra, and no second
+        database write is added (the corrected hash goes into the SAME
+        record_file() call this always led to)."""
+        if self._maybe_fix_video_creation_time(path, taken_at):
+            return self._hash_existing(path)
+        return original_sha256
+
+    def _maybe_fix_video_creation_time(self, path: Path, taken_at: Optional[str]) -> bool:
         """Best-effort — see video_metadata.py's docstring for why this
         exists. Only worth attempting for video containers, and only when
         a real taken_at is known (writing "now" into the file would just
-        recreate the same problem for a different reason)."""
+        recreate the same problem for a different reason). Returns True
+        if the file's bytes were actually changed — see
+        _sha256_after_video_fix, the only caller, for why that matters."""
         if not taken_at or path.suffix.lower() not in VIDEO_EXTENSIONS:
-            return
+            return False
         try:
             dt = datetime.fromisoformat(taken_at.replace("Z", "+00:00"))
         except ValueError:
-            return
-        fix_creation_time(path, dt)
+            return False
+        return fix_creation_time(path, dt)
 
     def _resolve_error_both(self, run_id: Optional[str], safe_name: str, original_name: str) -> None:
         """resolve_error() under both names a same-run mark_error() could

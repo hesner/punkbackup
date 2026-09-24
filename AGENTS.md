@@ -734,6 +734,36 @@ reintroduces these problems.
     video patch at all, a clean consistency check that the fix targeted
     the right rows.
 
+25. **A retroactive data-correction script that only touches ONE of two
+    related databases leaves them mutually inconsistent — and the code
+    that reads both may not be prepared for that.** Direct consequence of
+    point 24, confirmed live the very next real sync after the retroactive
+    fix ran (2026-09-23): correcting the PRIMARY destination's stale video
+    hashes without also correcting the MIRROR's own already-recorded copy
+    of those same facts left the mirror's `already_have` set stale — a
+    file the mirror genuinely already had now looked "still pending"
+    (its new primary hash wasn't in the mirror's old hash set), got
+    re-copied and re-verified successfully, and then crashed the whole
+    sync trying to INSERT a second row at a `dest_path` that already had
+    one (`UNIQUE constraint failed`). **Two real fixes, at two different
+    levels**: (1) the immediate one-off — re-ran the same retroactive
+    correction against the mirror's own database too, confirmed zero
+    remaining mismatches between the two before moving on; (2) the
+    durable one — `ManifestDB.record_file()` now upserts
+    (`INSERT ... ON CONFLICT(dest_path) DO UPDATE`) instead of a plain
+    INSERT, since a collision on `dest_path` specifically can never mean
+    "two different files disputing one record" — it's one physical
+    location with a newer fact to record — so overwriting is always
+    correct, never a real conflict to reject. **When a fix touches
+    "the same logical fact" stored in more than one place (a primary and
+    its mirror, a cache and its source, two replicas), a partial
+    correction is often WORSE than no correction — it creates a new kind
+    of inconsistency instead of removing the old one.** Also reinforces
+    point 17's earlier lesson from the same day: making a database write
+    tolerant of "this exact fact may already be recorded" (upsert instead
+    of insert-or-die) is generally safer than trying to guarantee it can
+    never happen.
+
 - Unit tests against `BackupEngine`/`ManifestDB` directly (no HTTP) for the
   dedup/conflict/incremental rules — fast, exhaustive.
 - `fastapi.testclient.TestClient` end-to-end tests for the real ASGI app,
@@ -763,7 +793,7 @@ reintroduces these problems.
 
 ## 7. What "done" looks like
 
-- `pytest tests -q` passes (80 tests as of this writing, covering engine
+- `pytest tests -q` passes (81 tests as of this writing, covering engine
   rules, profile isolation/pause/delete, destination-switch correctness,
   concurrent uploads, the `/check` contract, the 0-byte-upload rejection,
   its self-healing retry error-count behavior, a stale-run reap on

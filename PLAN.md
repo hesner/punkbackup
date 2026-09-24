@@ -2100,3 +2100,60 @@ Verificado con el mismo archivo usado para confirmar el bug original
 (`IMG_0750.mov`): su hash grabado ahora coincide exactamente con su
 contenido real en disco. El backup secundario debería ahora sincronizar
 estos 529 videos corregidos sin ningún fallo de verificación.
+
+### 17.6 Consecuencia real de la corrección retroactiva: choque de `UNIQUE constraint` en el mirror (2026-09-23, v1.7.11)
+
+Al primer intento real de sincronizar después de la corrección
+retroactiva (§17.5), el mirror falló con un error nuevo: `No se pudo
+completar la sincronización de la segunda copia: UNIQUE constraint
+failed: backed_up_files.dest_path` — reportado por el usuario con una
+captura de pantalla real.
+
+**Causa**: la corrección retroactiva de §17.5 solo tocó las bases de
+datos PRIMARIAS (D: y E:/Ipad photos) — nunca actualizó el hash que el
+propio **mirror** ya tenía guardado para los archivos que ya había
+copiado antes con el hash viejo. Resultado: para los archivos que YA
+estaban correctamente en el mirror, su hash primario cambió (corregido)
+pero su hash en el mirror no — así que `sync_mirror()` los veía como
+"todavía pendientes" (su nuevo hash primario no estaba en
+`already_have`, que seguía reflejando el hash viejo del mirror), los
+volvía a copiar y verificar (con éxito, usando el hash ya corregido), y
+al intentar **grabar** ese resultado chocaba con la fila que YA existía
+para esa misma ruta — un `INSERT` simple no puede coexistir con una fila
+previa en la misma `dest_path` (columna `UNIQUE`).
+
+Confirmado con evidencia real antes de arreglar nada: comparando
+directamente las dos bases de datos por `dest_path`, se encontraron
+**10 archivos** con hash distinto entre D: (primario, ya corregido) y
+`E:\Backup 2 Hesner` (mirror, todavía con el hash viejo) — coincide
+exactamente con los mismos 10 videos usados en las pruebas manuales de
+esta sesión.
+
+**Arreglo inmediato**: se corrieron los mismos 10 archivos por
+`ManifestDB.update_sha256()`, esta vez sobre la base de datos del
+mirror, igualándola a la primaria. Verificado: 0 diferencias
+remanentes entre las dos bases.
+
+**Arreglo de fondo, en el código**: `ManifestDB.record_file()` ahora
+hace un UPSERT (`INSERT ... ON CONFLICT(dest_path) DO UPDATE`) en vez de
+un `INSERT` simple — si ya existe una fila para esa `dest_path` exacta,
+se actualiza con los datos nuevos en vez de fallar. Es siempre correcto
+hacerlo así: `dest_path` identifica una ubicación física única en
+disco, así que un choque ahí nunca es "dos archivos distintos peleando
+por el mismo registro" — es la misma ubicación, con un hecho más
+reciente que grabar (el archivo se acaba de copiar y verificar de
+nuevo). Esto no solo resuelve el incidente puntual de hoy sino que hace
+que **cualquier** re-verificación futura de un archivo ya presente sea
+segura por diseño, sin depender de que `already_have` esté
+perfectamente sincronizado con la realidad.
+
+1 prueba nueva (`test_record_file_upserts_on_a_repeated_dest_path_instead_of_crashing`,
+**81/81 pasando**) que reproduce el incidente real exacto: graba dos
+veces la misma `dest_path` con datos distintos y confirma que actualiza
+en vez de fallar, y que sigue habiendo exactamente una fila, no dos.
+
+**Lección del día completo (§17.5 + §17.6)**: una corrección retroactiva
+de datos que toca solo UNA de dos bases de datos relacionadas (primaria
+y mirror, cada una con su propio registro del "mismo" archivo) deja las
+dos fuentes de verdad desincronizadas entre sí — hay que corregir AMBAS
+o ninguna. Versión: **v1.7.11**.

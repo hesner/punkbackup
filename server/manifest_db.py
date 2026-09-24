@@ -196,12 +196,32 @@ class ManifestDB:
         Defaults to True (commit every call, today's behavior, unchanged)
         so every existing caller — the real iPhone-facing upload path
         included — keeps its current per-file durability with no code
-        change needed."""
+        change needed.
+
+        Upserts by `dest_path` (ON CONFLICT DO UPDATE) rather than a plain
+        INSERT — a row for this exact path may legitimately already exist
+        (e.g. the mirror re-verifying a file it already has, after an
+        UPDATE to the PRIMARY side's own recorded hash — see PLAN.md
+        §17.5/17.6 for the real incident this fixes: a `UNIQUE constraint
+        failed: backed_up_files.dest_path` crash the first time a
+        retroactive hash correction on the primary left the mirror's own
+        copy of that same fact stale). The path genuinely has this
+        content now (it was just copied+verified), so overwriting the
+        existing row's fields with the new truth is always correct — this
+        is never a case of two DIFFERENT files disputing one path, since
+        `dest_path` identifies one physical location on disk."""
         with self._lock:
             self._conn.execute(
                 """INSERT INTO backed_up_files
                    (filename, sha256, taken_at, received_at, dest_path, size_bytes, original_filename)
-                   VALUES (?, ?, ?, ?, ?, ?, ?)""",
+                   VALUES (?, ?, ?, ?, ?, ?, ?)
+                   ON CONFLICT(dest_path) DO UPDATE SET
+                       filename = excluded.filename,
+                       sha256 = excluded.sha256,
+                       taken_at = excluded.taken_at,
+                       received_at = excluded.received_at,
+                       size_bytes = excluded.size_bytes,
+                       original_filename = excluded.original_filename""",
                 (filename, sha256, taken_at, _now(), dest_path, size_bytes, original_filename or filename),
             )
             if commit:

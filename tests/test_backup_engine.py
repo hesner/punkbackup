@@ -265,6 +265,33 @@ def test_update_sha256_corrects_a_row_without_touching_anything_else(tmp_path):
     assert row["taken_at"] == "2026-01-01T00:00:00"
 
 
+def test_record_file_upserts_on_a_repeated_dest_path_instead_of_crashing(tmp_path):
+    """The real incident (2026-09-23, PLAN.md §17.6): after a retroactive
+    hash correction updated the PRIMARY's recorded sha256 for a video
+    without touching the MIRROR's own already-existing row for that same
+    physical file, the mirror's next sync re-verified the file (now
+    matching the corrected hash) and tried to record it again at the SAME
+    dest_path -- a plain INSERT crashed the whole sync with `UNIQUE
+    constraint failed: backed_up_files.dest_path`. record_file() must
+    upsert: the path genuinely has this content now, so the existing
+    row's fields should just be brought up to date, never a crash."""
+    engine = make_engine(tmp_path)
+    result = engine.process_upload("A.jpg", io.BytesIO(b"hello"), "2026-01-01T00:00:00", None)
+    dest_path = result["dest_path"]
+
+    # Simulates exactly what happened: re-recording the SAME dest_path
+    # with a different sha256 (as if the file's true hash was corrected
+    # and this path is being re-verified) must not raise.
+    engine.db.record_file("A.jpg", "a" * 64, "2026-01-01T00:00:00", dest_path, 12345, "A.jpg")
+
+    row = engine.db.find_by_dest_path(dest_path)
+    assert row["sha256"] == "a" * 64
+    assert row["size_bytes"] == 12345
+    # Still exactly one row for this path -- an upsert, not a duplicate.
+    all_rows = [r for r in engine.db.iter_files_by_recency() if r["dest_path"] == dest_path]
+    assert len(all_rows) == 1
+
+
 def test_reap_dangling_runs_false_never_touches_a_genuinely_live_run(tmp_path):
     """Found live, 2026-09-22: server/mirror.py's sync needs to open a
     SECOND ManifestDB on the SAME primary dest_root, from within the SAME

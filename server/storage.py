@@ -249,6 +249,18 @@ class BackupEngine:
                         self.db.backfill_original_filename(str(candidate_path), original_name)
                     self._resolve_error_both(run_id, safe_name, original_name)
                     self.db.bump_run(run_id, "files_skipped")
+                    # TEMP DIAGNOSTIC (PLAN.md §17.7) — files_skipped has
+                    # essentially never incremented across this project's
+                    # whole run history (1 of 153 real runs, ever) despite
+                    # thousands of real skip events, even though an
+                    # isolated /upload test with a known-good run_id
+                    # proved bump_run() itself works correctly, and the
+                    # Shortcut's own run_id= wiring was visually confirmed
+                    # correct in both the direct and retry upload actions.
+                    # Logging the ACTUAL received run_id here, every time,
+                    # until the next real occurrence is caught -- remove
+                    # once the cause is found.
+                    self.logger.info("DIAG skip: run_id received = %r", run_id)
                     self.logger.info("= %s already backed up, skipped", safe_name)
                     return {"status": "skipped_duplicate", "dest_path": str(candidate_path)}
 
@@ -267,6 +279,8 @@ class BackupEngine:
                             self.db.backfill_original_filename(str(candidate_path), original_name)
                         self._resolve_error_both(run_id, safe_name, original_name)
                         self.db.bump_run(run_id, "files_skipped")
+                        # TEMP DIAGNOSTIC — see the other skip branch above.
+                        self.logger.info("DIAG skip: run_id received = %r", run_id)
                         self.logger.info("= %s already backed up (re-encoded copy, content unchanged), skipped", safe_name)
                         return {"status": "skipped_duplicate", "dest_path": str(candidate_path)}
 

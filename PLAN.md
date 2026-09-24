@@ -2157,3 +2157,34 @@ de datos que toca solo UNA de dos bases de datos relacionadas (primaria
 y mirror, cada una con su propio registro del "mismo" archivo) deja las
 dos fuentes de verdad desincronizadas entre sí — hay que corregir AMBAS
 o ninguna. Versión: **v1.7.11**.
+
+### 17.7 Bug real, distinto, sin resolver todavía: `files_skipped` casi nunca sube (2026-09-23)
+
+El usuario notó algo real en la pantalla principal: "Última corrida: 0
+guardados, 0 ya existían" — a pesar de actividad real reciente. No
+aceptó la explicación superficial y pidió investigar la causa.
+
+**Confirmado con evidencia real, en varios niveles**:
+- En **todo el historial del proyecto**: de 140 corridas de "iphone de
+  Hes", solo **1** tuvo `files_skipped > 0` (máximo alcanzado: 3). De 13
+  corridas de "ipad", **ninguna**. Mientras tanto `files_new` sí
+  funciona con normalidad (63/140 y 9/13 respectivamente). Mismo patrón
+  en los dos dispositivos, desde siempre — no es algo nuevo de hoy.
+- **El servidor funciona bien**: prueba aislada real vía `curl` — subir
+  el mismo contenido de un archivo ya respaldado, con un `run_id` válido
+  recién creado por `/run/start` — incrementó `files_skipped` de 0 a 1
+  exactamente como se esperaba.
+- **El Atajo se ve bien configurado**: el usuario compartió capturas de
+  pantalla reales de las DOS acciones `/upload` (intento directo y
+  reintento con Encode Media) — ambas muestran `&run_id=` conectado
+  correctamente al chip de la variable `RunID`, no texto suelto.
+
+**Conclusión honesta**: con el servidor probado correcto y el Atajo
+visualmente correcto, la causa real todavía no está identificada. Se
+agregó un log de diagnóstico temporal (`server/storage.py`,
+`"DIAG skip: run_id received = %r"`, en los dos puntos donde ocurre un
+skip) para capturar el valor EXACTO de `run_id` que llega en el próximo
+evento real — usando `%r` específicamente para distinguir `None` de una
+cadena vacía `''`, que se comportan igual en `bump_run()`
+(`if not run_id: return`) pero apuntarían a causas distintas. Pendiente
+de un evento real para revisar. Versión: **v1.7.12**.

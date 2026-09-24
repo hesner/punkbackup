@@ -228,14 +228,16 @@ def test_unreachable_destination_logs_once_via_the_backup_engine_logger(client, 
     assert any("not reachable" in rec.getMessage() for rec in caplog.records)
 
 
-def test_unreachable_destination_warning_is_rate_limited_per_profile(client, store, tmp_path, monkeypatch, caplog):
+def test_unreachable_destination_warning_logs_only_once_per_disconnect(client, store, tmp_path, monkeypatch, caplog):
     """A real Shortcut sweep retries /check and /upload for every item in
-    the library against the SAME disconnected destination -- without a
-    cooldown, that's hundreds of identical log lines for one underlying
-    fact. See AGENTS.md lesson 26."""
+    the library against the SAME disconnected destination -- without this,
+    that's hundreds of identical log lines for one underlying fact. A
+    first version repeated this once every 60s for as long as the drive
+    stayed disconnected, which still looked noisy/repetitive on a real,
+    long-running disconnect (confirmed via a real screenshot, 2026-09-24)
+    -- changed to log exactly once per disconnect episode instead. See
+    AGENTS.md lesson 26."""
     import logging
-
-    import server.app as app_mod
 
     profile = add_profile_with_dest(store, tmp_path, "iPhone de Hesner")
 
@@ -243,32 +245,27 @@ def test_unreachable_destination_warning_is_rate_limited_per_profile(client, sto
         raise OSError(3, "The system cannot find the path specified")
 
     monkeypatch.setattr(Path, "mkdir", failing_mkdir)
-    fake_now = [1000.0]
-    monkeypatch.setattr(app_mod.time, "monotonic", lambda: fake_now[0])
     caplog.set_level(logging.ERROR, logger="backup_engine")
 
     client.post("/run/start", headers={"X-Backup-Token": profile.token})
     assert len(caplog.records) == 1
 
     caplog.clear()
-    fake_now[0] += 10  # well inside the cooldown
     client.post("/run/start", headers={"X-Backup-Token": profile.token})
-    assert len(caplog.records) == 0
+    assert len(caplog.records) == 0  # same disconnect episode -- stays quiet
 
     caplog.clear()
-    fake_now[0] += app_mod._UNREACHABLE_WARN_COOLDOWN + 1  # past the cooldown
     client.post("/run/start", headers={"X-Backup-Token": profile.token})
-    assert len(caplog.records) == 1
+    assert len(caplog.records) == 0  # still quiet, no matter how many more requests come in
 
 
 def test_unreachable_destination_warns_again_right_after_a_real_reconnect(client, store, tmp_path, monkeypatch, caplog):
     """A successful request (drive genuinely reconnected) must clear the
-    rate-limit state -- otherwise a disconnect -> reconnect -> disconnect
-    cycle inside one cooldown window would wrongly stay silent on the
-    second disconnect, even though it's a fresh, newly-true fact."""
+    already-warned flag -- otherwise a disconnect -> reconnect ->
+    disconnect cycle would wrongly stay silent on the second disconnect,
+    even though it's a fresh, newly-true fact worth telling the user
+    about again."""
     import logging
-
-    import server.app as app_mod
 
     profile = add_profile_with_dest(store, tmp_path, "iPhone de Hesner")
     real_mkdir = Path.mkdir
@@ -280,24 +277,20 @@ def test_unreachable_destination_warns_again_right_after_a_real_reconnect(client
         return real_mkdir(self, *a, **k)
 
     monkeypatch.setattr(Path, "mkdir", maybe_failing_mkdir)
-    fake_now = [1000.0]
-    monkeypatch.setattr(app_mod.time, "monotonic", lambda: fake_now[0])
     caplog.set_level(logging.ERROR, logger="backup_engine")
 
     client.post("/run/start", headers={"X-Backup-Token": profile.token})
     assert len(caplog.records) == 1
 
     fail["on"] = False
-    fake_now[0] += 1  # still well inside the cooldown, but the drive is back
     r = client.post("/run/start", headers={"X-Backup-Token": profile.token})
     assert r.status_code == 200
 
     caplog.clear()
     fail["on"] = True
     app_module.forget_profile(profile.id)
-    fake_now[0] += 1
     client.post("/run/start", headers={"X-Backup-Token": profile.token})
-    assert len(caplog.records) == 1  # not suppressed by the earlier cooldown
+    assert len(caplog.records) == 1  # a genuinely new disconnect episode -- warns again
 
 
 def test_check_endpoint_matches_actual_destination(client, store, tmp_path):

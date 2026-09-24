@@ -59,7 +59,7 @@ deje de pasar.
   (fondo de color), nunca la palabra "Token" escrita como texto plano.
 - Copia el token de nuevo desde la app (botón "Copiar token" en el perfil) y
   pégalo en la acción **Text** correspondiente del Atajo.
-- Desde v1.7.13, el log de actividad registra esto también (una sola vez
+- Desde v1.7.14, el log de actividad registra esto también (una sola vez
   por dispositivo, no una vez por foto): "Backup request received from
   [IP] but no profile matches that token."
 
@@ -67,14 +67,14 @@ deje de pasar.
 
 - El perfil está **Pausado**. Ve a la app → pantalla Principal o
   ⚙ Configuración → activa el interruptor a **Activo**.
-- Desde v1.7.13, el log también lo registra una sola vez: "Backup request
+- Desde v1.7.14, el log también lo registra una sola vez: "Backup request
   received from [perfil] but this profile isn't ready to receive it."
 
 ## Error 409 "no destination folder configured"
 
 - Ese perfil no tiene carpeta destino. Ve a ⚙ Configuración → "Elegir
   carpeta..." para ese perfil.
-- Desde v1.7.13, el log también lo registra una sola vez, con el mismo
+- Desde v1.7.14, el log también lo registra una sola vez, con el mismo
   mensaje que el error 403 de arriba (ambos casos significan "el perfil
   no está listo para recibir backup").
 
@@ -94,8 +94,10 @@ deje de pasar.
   limitación de Atajos, no de PunkBackup — ver "El teléfono se traba
   mientras corre el Atajo" más abajo) mientras la app registra en el log
   de actividad una línea como "Destination folder not reachable — is
-  the USB drive connected?" — como máximo una vez por minuto por perfil,
-  para no llenar el log si el Atajo insiste con cientos de fotos.
+  the USB drive connected?" — una sola vez por desconexión (desde
+  v1.7.19; antes salía cada minuto), para no llenar el log si el Atajo
+  insiste con cientos de fotos. Vuelve a avisar si conectas la unidad y
+  luego se desconecta de nuevo.
 - Una carpeta que todavía no existe pero está en una unidad SÍ
   conectada (por ejemplo, el primer respaldo real de un perfil nuevo) NO
   dispara este aviso — esa carpeta se crea sola normalmente.

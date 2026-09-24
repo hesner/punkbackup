@@ -60,7 +60,7 @@ from happening again.
   never the literal word "Token" typed as plain text.
 - Copy the token again from the app ("Copy token" button on the profile)
   and paste it into the corresponding **Text** action in the Shortcut.
-- Since v1.7.13, the activity log records this too (once per device, not
+- Since v1.7.14, the activity log records this too (once per device, not
   once per photo): "Backup request received from [IP] but no profile
   matches that token."
 
@@ -68,14 +68,14 @@ from happening again.
 
 - The profile is **Paused**. Open the app → "Main" or "⚙ Settings" →
   switch it to **Active**.
-- Since v1.7.13, the log also records this once: "Backup request received
+- Since v1.7.14, the log also records this once: "Backup request received
   from [profile] but this profile isn't ready to receive it."
 
 ## 409 error "no destination folder configured"
 
 - That profile has no destination folder. Go to **"⚙ Settings"** →
   "Choose folder..." for that profile.
-- Since v1.7.13, the log also records this once, with the same message as
+- Since v1.7.14, the log also records this once, with the same message as
   the 403 error above (both mean "this profile isn't ready to receive a
   backup").
 
@@ -95,8 +95,9 @@ from happening again.
   limitation, not PunkBackup's — see "The phone freezes while the
   Shortcut runs" below) while the app logs a line in the activity log
   like "Destination folder not reachable — is the USB drive connected?"
-  — at most once per minute per profile, so a Shortcut retrying hundreds
-  of photos doesn't flood the log.
+  — once per disconnect (since v1.7.19; it used to repeat every minute),
+  so a Shortcut retrying hundreds of photos doesn't flood the log. It
+  warns again if you reconnect the drive and it later disconnects again.
 - A folder that doesn't exist YET but is on a drive that IS connected
   (e.g. a brand-new profile's very first backup) does NOT trigger this
   warning — that folder just gets created normally.

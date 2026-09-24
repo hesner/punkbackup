@@ -25,7 +25,6 @@ from __future__ import annotations
 
 import hashlib
 import logging
-import time
 import uuid
 from pathlib import Path
 from typing import Optional
@@ -44,23 +43,14 @@ logger = logging.getLogger("backup_engine")
 
 app = FastAPI(title="PunkBackup")
 
-_state: dict = {"profile_store": None, "engines": {}, "unreachable_warned": {}, "not_ready_warned": set()}
-
-# How long to stay quiet about the SAME profile's destination being
-# unreachable before logging it again — a real device sweeping hundreds of
-# items against a disconnected USB hits _engine_for on every single
-# /check and /upload, and without this a whole sweep would flood the
-# activity log with hundreds of copies of the same fact. A long-running
-# sweep still gets periodic reminders, just not one per request. See
-# AGENTS.md lesson 26.
-_UNREACHABLE_WARN_COOLDOWN = 60.0  # seconds
+_state: dict = {"profile_store": None, "engines": {}, "unreachable_warned": set(), "not_ready_warned": set()}
 
 
 def configure(profile_store: ProfileStore) -> None:
     """Called by the GUI right before the server starts listening."""
     _state["profile_store"] = profile_store
     _state["engines"] = {}
-    _state["unreachable_warned"] = {}
+    _state["unreachable_warned"] = set()
     _state["not_ready_warned"] = set()
 
 
@@ -74,15 +64,21 @@ def _warn_destination_unreachable(profile: Profile, dest_path: Path, exc: OSErro
     a request against an unreachable/unplugged destination raised straight
     to an HTTPException with no logging at all, so a real Shortcut run
     against a disconnected USB produced zero visible trace in the app: not
-    in the log, not on the profile card (see AGENTS.md lesson 26). Rate
-    limited per profile via _UNREACHABLE_WARN_COOLDOWN so a whole failing
-    sweep doesn't flood the log with the same fact on every request."""
+    in the log, not on the profile card (see AGENTS.md lesson 26).
+
+    Logs ONCE per disconnect episode, not on a repeating timer — a first
+    version repeated this every 60s for as long as the drive stayed
+    unplugged, which looked noisy/repetitive in practice on a real,
+    long-running disconnect (confirmed via a real screenshot, 2026-09-24)
+    — four near-identical lines in a few minutes for one unchanging fact.
+    Silenced here the moment it's logged once; _engine_for's success path
+    clears the flag the instant the destination is reachable again, so a
+    genuinely NEW disconnect (reconnect, then unplug again) still warns
+    right away rather than staying quiet forever."""
     warned = _state["unreachable_warned"]
-    now = time.monotonic()
-    last = warned.get(profile.id)
-    if last is not None and (now - last) < _UNREACHABLE_WARN_COOLDOWN:
+    if profile.id in warned:
         return
-    warned[profile.id] = now
+    warned.add(profile.id)
     adapter = logging.LoggerAdapter(logger, {"profile": profile.name})
     adapter.error("Destination folder not reachable — is the USB drive connected? (%s: %s)", dest_path, exc)
 
@@ -133,7 +129,7 @@ def _engine_for(profile: Profile) -> BackupEngine:
         except OSError as exc:
             _warn_destination_unreachable(profile, dest_path, exc)
             raise HTTPException(503, f"Destination folder is not reachable (is the drive connected?): {exc}")
-        _state["unreachable_warned"].pop(profile.id, None)
+        _state["unreachable_warned"].discard(profile.id)
         engines[profile.id] = BackupEngine(dest_path, ManifestDB(dest_path, profile_label=profile.name))
     return engines[profile.id]
 

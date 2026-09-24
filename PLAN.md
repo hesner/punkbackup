@@ -2502,3 +2502,30 @@ acordado en la sección 21): 3 corridas limpias con el arreglo,
 `pytest tests -q` 91/91 sin cambios de cobertura (capa Tkinter, sin
 pytest directo por convención). Documentado en `AGENTS.md` como adenda
 al bullet de zoom de la lección 15. Versión: **v1.7.18**.
+
+## 23. El aviso de "unidad no alcanzable" seguía siendo repetitivo — de cada 60s a una sola vez por desconexión (2026-09-24, v1.7.19)
+
+El usuario compartió una captura real del log con la unidad E: (perfil
+"ipad") desconectada por varios minutos: la línea "Destination folder
+not reachable..." aparecía cuatro veces, una por minuto, exactamente
+como se diseñó en la sección "USB no conectada" (lección 26 de
+AGENTS.md) — pero en la práctica, viéndolo de verdad en pantalla, seguía
+sintiéndose repetitivo. Pidió que saliera **una sola vez**.
+
+**Cambio**: `server/app.py::_warn_destination_unreachable` pasó de un
+cooldown de 60 segundos (`_state["unreachable_warned"]` como
+`{profile_id: último_timestamp}`) a una bandera simple de "ya avisado"
+(`_state["unreachable_warned"]` como `set` de ids) — registra
+exactamente una vez por episodio de desconexión, sin importar cuánto
+dure, y solo vuelve a avisar si la unidad estuvo alcanzable al menos
+una vez de por medio (se limpia en el mismo punto de siempre: cuando
+`_engine_for` logra acceder de nuevo). Esto permitió borrar por completo
+`_UNREACHABLE_WARN_COOLDOWN` y el `import time` que ya no hacía falta en
+`server/app.py` — quedó más simple, no más complejo.
+
+2 pruebas de `tests/test_api.py` reescritas (ya no dependen de
+`monkeypatch` sobre `time.monotonic`, más simples también) — **91/91
+pasando**. Documentado en `AGENTS.md` como adenda a la lección 26:
+un diseño ya razonado y documentado sigue valiendo la pena revisarlo
+cuando el uso real (no el razonamiento) muestra que resultó más
+ruidoso de lo previsto. Versión: **v1.7.19**.

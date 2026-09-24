@@ -950,6 +950,28 @@ reintroduces these problems.
     what "not connected" looks like to the user, instead of the primary
     path inventing its own, worse-communicated version of the same fact.
 
+    **Addendum, found the next day (2026-09-24, v1.7.19)**: the 60-second
+    cooldown above was a deliberate design choice, reasoned through and
+    documented at the time — but in practice, on a real long-running
+    disconnect, it still produced a near-identical log line once a
+    minute for as long as the drive stayed unplugged, which the user
+    flagged directly from a real screenshot as still too repetitive (four
+    almost-identical lines inside a few minutes for one unchanging fact).
+    **Changed from a timer-based cooldown to a plain "already warned"
+    flag** (`_state["unreachable_warned"]` went from a `{profile_id:
+    last_warned_timestamp}` dict to a `set` of profile ids) — logs
+    exactly once per disconnect EPISODE, however long that episode lasts,
+    and only warns again once the destination has been reachable at
+    least once in between (same clearing point as before, `_engine_for`'s
+    success path). This also let `_UNREACHABLE_WARN_COOLDOWN` and the
+    `time` import it needed be deleted entirely — a simpler mechanism for
+    a design the user judged still too noisy, not a more complex one.
+    **Lesson: a periodic-reminder design that was reasoned through and
+    documented is still worth revisiting once real usage (not the
+    reasoning) shows it's noisier than intended — "we thought about this
+    already" is not a reason to resist a direct report from actually
+    using it.**
+
 27. **A server that binds the port with zero profiles able to receive
     anything used to fail late, per-request, instead of refusing to start
     at all — and there was no clean way to make a stuck Shortcut stop

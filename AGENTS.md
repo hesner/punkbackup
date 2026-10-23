@@ -1052,6 +1052,74 @@ reintroduces these problems.
     underlying mechanism (a reachability test) is correctly type-agnostic
     already.**
 
+28. **A client-side failure to even BUILD a request has no HTTP response
+    for the always-200-with-`detail` pattern (point 11) to protect —
+    design the retry around the step that can actually fail, not just
+    around the response it would have produced if it had run.** Found
+    live (2026-10-23), a new failure shape for the same video-upload
+    problem point 12 already solved once: the alert
+    `WFPhotoMediaContentItem produced no file representation for type
+    public.mpeg-4`, shown by Shortcuts itself, attached (confirmed via a
+    screenshot of the editor, error banner pinned directly above the
+    action) to the DIRECT upload attempt's own `Get Contents of URL`
+    action — not to the `Encode Media` retry built in point 12. This
+    matters because that retry is gated on `Get Dictionary Value` reading
+    a `detail` field out of the direct attempt's HTTP response (point
+    12's design, also PLAN.md §5.1) — but here, Shortcuts fails to
+    coerce the Photos item into file bytes at all, client-side, before
+    any network request is sent. There is no HTTP response to inspect,
+    so `Get Value for detail` never finds anything meaningful and the
+    `Encode Media` retry can never fire for this failure shape, no
+    matter how correctly it's wired. Point 12's two known root causes for
+    a 0-byte body (iCloud "Optimize Storage" placeholder not yet
+    downloaded; an exotic codec/container — ProRes, Dolby Vision/HDR,
+    Cinematic mode, Spatial Video) are also the leading candidates here,
+    just surfacing as an outright coercion failure instead of a silent
+    empty body for this particular item/iOS version.
+
+    **Fixed by restructuring, not by adding a second retry tier**: moved
+    `Encode Media` (`Size: Passthrough`) from "only after the direct
+    attempt fails" to "proactively, for every video item, before the
+    only upload attempt" — gated solely by step b's `/check` (so an
+    item the server already has never pays this cost at all, see
+    `shortcuts/MANUAL_BUILD_INSTRUCTIONS.md` section 4, step c.0). A
+    `Repeat Item → Media Type is Video` branch (fallback: `File
+    Extension is MOV/MP4/M4V` if a given iOS version doesn't expose
+    "Media Type" on a Photos item) decides whether to run `Encode Media`
+    and store its result in a new `ItemFile` variable, or to use the raw
+    `Repeat Item` directly for a photo — `ItemFile` is then the only
+    thing ever attached as the `/upload` request body. This removed 4
+    actions (the old `detail` dictionary lookup, its nested `If`, the old
+    conditional `Encode Media`, and the second `Get Contents of URL`
+    retry) and replaced them with the upfront branch — net simpler, not
+    more complex, despite covering a failure shape the old design
+    structurally couldn't.
+
+    **Verified this doesn't introduce a silent-data-loss risk, even
+    though it removes the same-run retry safety net**: traced the
+    invariant through `server/app.py`'s `/upload` and
+    `server/storage.py`'s `finalize_upload` — a 0-byte body, an `OSError`
+    mid-write, and any other upload failure are ALL cleaned up (staging
+    file deleted) and NEVER recorded in `backed_up_files`, by design
+    (same self-healing property as points 12/14). So even if this
+    redesign's single upload attempt fails for some reason `Encode
+    Media` doesn't fix, the next run's `/check` still reports it missing
+    and retries automatically — strictly slower in that rare case (an
+    extra sweep instead of an instant same-run retry), never a video
+    silently marked "already backed up" when it wasn't, since nothing
+    about what counts as "already backed up" changed: still path
+    existence on disk or an exact `original_filename` match (point 20),
+    both of which only ever get created by a genuinely successful
+    `finalize_upload`. Confirmed in production the same day: a live run
+    (`activity.log`) uploaded videos up to 69.8 MB with zero `0 bytes`
+    rejection lines and zero coercion-error interruptions. **General
+    lesson: when a fix is "retry action X if the response says it
+    failed," ask whether action X can fail in a way that never produces
+    a response at all — if so, the retry needs to run unconditionally
+    (or on a client-observable precondition) rather than conditionally
+    on inspecting a result that, for that failure shape, will never
+    exist.**
+
 - Unit tests against `BackupEngine`/`ManifestDB` directly (no HTTP) for the
   dedup/conflict/incremental rules — fast, exhaustive.
 - `fastapi.testclient.TestClient` end-to-end tests for the real ASGI app,

@@ -180,7 +180,37 @@ Todo lo que sigue, hasta el final de la sección 4, va **dentro** de este
       to" ni escribir `false` en ningún lado, "has any value" ya es la
       opción correcta):
 
-        - **Obtener contenido de URL** (dentro del "Si"):
+        - **Paso c.0) Si** (primera acción dentro del "Si" del paso c —
+          decide si este ítem necesita Encode Media ANTES de intentar
+          subirlo, no como reintento después de que falle):
+
+            - Condición: toca **Elemento de repetición** → atributo
+              **Media Type** → `is` → `Video`. (Si tu versión de iOS no
+              ofrece "Media Type" en la lista de atributos del Elemento
+              de repetición, usa en su lugar: **Elemento de repetición →
+              File Extension** `is` `MOV`, y con **+** agrega más
+              condiciones unidas por **Or**: `is` `MP4`, `Or` → `is`
+              `M4V`.)
+
+            - **Rama Video** (dentro de este "Si"):
+                - Acción **Encode Media** → Ítem: inserta **Elemento de
+                  repetición** — una sola vez, sin volver a tocarlo
+                  (mismo cuidado de siempre con este chip).
+                - **Size**: `Passthrough` (no reduce calidad ni
+                  resolución — solo fuerza a Shortcuts a leer el archivo
+                  completo, que es justo lo que falla para algunos
+                  videos — ver la nota de más abajo).
+                - **Set Variable** → nómbrala `ItemFile` → valor: el
+                  resultado de Encode Media de arriba.
+
+            - **Rama "Si no"** (foto, no video):
+                - **Set Variable** → nómbrala `ItemFile` → valor: inserta
+                  **Elemento de repetición** directo — una sola vez, sin
+                  volver a tocarlo.
+
+        - **Paso c.1) Obtener contenido de URL** (dentro del "Si" del
+          paso c, después del c.0 — este es ahora el único intento de
+          subida):
 
             - URL: toca el campo e inserta, EN ESTE ORDEN, dentro del
               mismo campo de texto: chip **ServidorURL** → escribe
@@ -195,68 +225,47 @@ Todo lo que sigue, hasta el final de la sección 4, va **dentro** de este
             - Método: **POST**
             - **Request Body** → cámbialo a **File** (ya NO es
               Formulario).
-            - En el campo de valor que aparece, toca la barra de
-              variables e inserta **Elemento de repetición** — **una
-              sola vez, sin volver a tocar el chip después**. (Si lo
-              tocas de nuevo, se abre un menú de atributos tipo
-              "Name/Album/Width..." — si eso pasa y terminas con algo
-              distinto de "Repeat Item" a secas, bórralo con "Clear
-              Variable" y vuelve a insertarlo desde cero sin tocarlo
-              otra vez). Si este chip alguna vez aparece resaltado en
-              rojo/"roto" en el editor — puede pasar después de editar
-              otras acciones más arriba en el mismo loop — bórralo y
-              vuelve a insertarlo igual que antes; una referencia rota
-              aquí sube un archivo vacío (0 bytes) en vez de dar un
-              error visible.
+            - En el campo de valor que aparece, inserta la variable
+              **`ItemFile`** (del paso c.0) — NO Elemento de repetición,
+              NO Encode Media directo. Si este chip alguna vez aparece
+              resaltado en rojo/"roto" en el editor — puede pasar
+              después de editar otras acciones más arriba en el mismo
+              loop — bórralo y vuelve a insertarlo igual que antes; una
+              referencia rota aquí sube un archivo vacío (0 bytes) en
+              vez de dar un error visible.
             - Encabezados: `X-Backup-Token` → variable `Token`.
-
-        - **Paso c.1) Obtener valor de diccionario** — revisa si esa
-          subida falló (los videos importados de WhatsApp/otras apps a
-          veces llegan vacíos, 0 bytes — ver la nota de más abajo):
-            - **Obtener valor de**: escribe `detail`
-            - **en**: el resultado del `Obtener contenido de URL` de
-              arriba (aparece como "Contents of URL" en la lista de
-              variables recientes).
-
-        - **Paso c.2) Si** (nuevo, anidado dentro del "Si" del paso c):
-          condición = el resultado del paso c.1 **has any value** (si la
-          subida directa funcionó, el servidor no manda el campo
-          `detail`, así que esta condición da falso y se salta todo este
-          bloque — igual idioma que el "has any value" del paso c).
-
-            - **Paso c.3) Encode Media** (dentro de este "Si" nuevo):
-                - Ítem: **Elemento de repetición** — insértalo directo,
-                  una sola vez, sin volver a tocarlo (mismo cuidado de
-                  siempre con este chip).
-                - **Size**: `Passthrough` (no reduce calidad ni
-                  resolución — solo fuerza a Shortcuts a leer el archivo
-                  completo, que es justo lo que falla para estos videos).
-
-            - **Paso c.4) Obtener contenido de URL** (segundo intento —
-              lo más seguro es copiar el de arriba y pegarlo aquí, para
-              no volver a escribir la URL a mano):
-                - Misma URL, mismo Método POST, mismos Encabezados que el
-                  `Obtener contenido de URL` original de arriba.
-                - **Request Body** → **File** → valor: el resultado de
-                  **Encode Media** (paso c.3) — NO Elemento de repetición
-                  esta vez.
-
-            - No hace falta nada en el "Si no" de este "Si" anidado.
 
         - (No hace falta ninguna acción en el "Si no" del "Si" del paso c
           — si ya estaba respaldada, simplemente no se hace nada y se
           sigue con la siguiente foto).
 
-> ⚠️ **Por qué existe este reintento**: se confirmó que un video
-> importado de WhatsApp/Mensajes/otras apps a veces llega al servidor
-> como 0 bytes en el primer intento — Shortcuts no logra leer sus datos
-> reales de la librería de Fotos directamente. "Encode Media" con
-> `Size: Passthrough` sí logra forzar esa lectura completa (confirmado
-> comparando el video original contra el procesado con `ffprobe`: mismo
-> códec, misma resolución, mismo bitrate — sin pérdida real). Por eso el
-> reintento SOLO se activa si la subida directa falla — los videos de
-> cámara nativa (`IMG_XXXX`) casi siempre suben bien a la primera, sin
-> tocar Encode Media.
+> ⚠️ **Por qué Encode Media corre por adelantado en vez de como
+> reintento**: se confirmaron, en dispositivo real, dos problemas
+> distintos con la misma raíz. Primero (2026-09-16): un video importado
+> de WhatsApp/Mensajes/otras apps a veces llega al servidor como 0 bytes
+> — Shortcuts no logra leer sus datos reales de la librería de Fotos
+> directamente. Segundo, y la razón de este rediseño (2026-10-23):
+> algunos videos hacen que el intento directo falle por completo, en el
+> propio editor de Shortcuts, con la alerta `WFPhotoMediaContentItem
+> produced no file representation for type public.mpeg-4` — un fallo al
+> convertir el ítem de Fotos en bytes de archivo, ANTES de que se envíe
+> cualquier petición HTTP. El diseño anterior (intentar el ítem crudo
+> primero, reintentar con Encode Media solo si la respuesta del servidor
+> traía un campo `detail`) nunca podía atrapar esta segunda falla, porque
+> no existe ninguna respuesta del servidor que revisar — la acción de
+> subida ni siquiera llega a ejecutarse. Correr "Encode Media" con
+> `Size: Passthrough` para todo video, sin condición (filtrado solo por
+> el `/check` del paso b, así que un video ya respaldado nunca paga este
+> costo), evita ambos problemas a la vez. Confirmado sin pérdida real de
+> calidad (comparación con `ffprobe`: mismo códec, misma resolución,
+> mismo bitrate — ver PLAN.md §5.1) y confirmado en producción
+> (2026-10-23): una corrida real subió videos de hasta 69.8 MB sin
+> ningún rechazo de 0 bytes y sin ningún error de conversión. Ver
+> AGENTS.md §5, lección 28, para el análisis completo — incluyendo por
+> qué esto no crea riesgo de perder un video aunque ya no exista
+> reintento dentro de la misma corrida (el servidor nunca registra una
+> subida fallida o parcial como respaldada, así que el `/check` la vuelve
+> a detectar en la siguiente corrida).
 
 Todavía dentro del "Repetir con cada elemento" **interno**, después de su
 propio "End Repeat" pero **antes** del "End Repeat" externo de la

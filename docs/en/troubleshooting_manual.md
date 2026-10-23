@@ -175,18 +175,21 @@ forever (a plain `Limit` with no way to advance).
   several times in a row rather than pushing `Repeticiones` very high on
   the first try — watch the PC app's activity log (use "⤢ Expand" for a
   bigger view) to see it's keeping up before raising the number.
-- **Videos can currently arrive empty (0 bytes) — sometimes consistently,
-  not just occasionally.** The server always detects and rejects this
-  automatically, so it's never recorded as a real backup and the same
-  video is simply retried on a later run instead — but the underlying
-  cause (why the iPhone sometimes sends an empty body for a video
-  specifically) isn't fully understood yet: it's not iCloud storage
-  optimization, not a fixed file-size limit, and it isn't reliably fixed
-  by keeping the Shortcuts app in the foreground either — this is an open
-  issue, not a solved one. Photos are unaffected (confirmed reliable).
-  Keeping the screen on and the Shortcuts app in the foreground during a
-  large manual run may still help, and does no harm, but don't count on it
-  fixing every case.
+- **Videos could arrive empty (0 bytes), or Shortcuts could fail outright
+  trying to read them (the "WFPhotoMediaContentItem produced no file
+  representation..." alert) — both are now fixed (2026-10-23).** The
+  server never records a video like that as a real backup, so before the
+  fix the same video would simply retry itself on a later run. Root
+  cause: Shortcuts sometimes can't read a video's real data straight from
+  the Photos library (an iCloud asset not yet downloaded locally, or an
+  uncommon codec/container — ProRes, HDR/Dolby Vision, Cinematic mode,
+  Spatial Video). The Shortcut now runs every video through "Encode
+  Media" (`Size: Passthrough`) before uploading it, instead of trying the
+  raw item first — confirmed no real quality loss (same codec,
+  resolution, bitrate via `ffprobe`). Photos are unaffected (they skip
+  this step entirely). If you built the Shortcut by hand before this
+  date, see section 4 (step c.0) of the alternate Manual Build guide to
+  update your copy.
 - If a run gets interrupted (you leave home, or tap Stop), nothing is lost
   — anything already uploaded stays backed up permanently. The next run
   just starts sweeping from your newest photos again rather than exactly

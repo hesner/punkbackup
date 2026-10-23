@@ -180,19 +180,22 @@ conjunto fijo sin avanzar (`Limit` fijo sin forma de avanzar).
   vez de subir `Repeticiones` muy alto desde el primer intento — revisa el
   log de actividad de la app en la PC (usa "⤢ Expandir" para verlo más
   grande) para confirmar que va avanzando bien antes de subir el número.
-- **Los videos actualmente pueden llegar vacíos (0 bytes) — a veces de
-  forma sistemática, no solo ocasional.** El servidor siempre detecta y
-  rechaza esto automáticamente, así que nunca queda registrado como
-  respaldado de verdad y ese mismo video simplemente se reintenta en una
-  corrida posterior — pero la causa real (por qué el iPhone a veces manda
-  el cuerpo vacío específicamente para un video) todavía no está resuelta:
-  no es optimización de almacenamiento de iCloud, no es un límite de
-  tamaño fijo, y ni siquiera se arregla de forma confiable manteniendo
-  Atajos en primer plano — es un problema abierto, no resuelto. Las fotos
-  no se ven afectadas (confirmado confiable al 100%). Mantener la pantalla
-  encendida y Atajos en primer plano durante una corrida manual grande
-  puede ayudar igual, y no hace daño, pero no cuentes con que arregle
-  todos los casos.
+- **Los videos podían llegar vacíos (0 bytes), o Shortcuts podía fallar
+  directamente al intentar leerlos (alerta "WFPhotoMediaContentItem
+  produced no file representation...") — ambos casos ya están resueltos
+  (2026-10-23).** El servidor nunca registra un video así como
+  respaldado de verdad, así que antes del arreglo ese mismo video se
+  reintentaba solo en una corrida posterior. Causa raíz identificada:
+  Shortcuts a veces no logra leer los datos reales del video directo de
+  la librería de Fotos (asset de iCloud aún no descargado, o un
+  codec/contenedor poco común — ProRes, HDR/Dolby Vision, modo Cinematic,
+  Spatial Video). El Atajo ahora procesa TODO video con la acción
+  "Encode Media" (`Size: Passthrough`) antes de subirlo — sin pérdida real
+  de calidad (mismo códec, resolución y bitrate, confirmado con
+  `ffprobe`) — en vez de intentarlo directo primero. Las fotos no se ven
+  afectadas (no pasan por este paso). Si construiste el Atajo a mano
+  antes de esta fecha, revisa la sección 4 (paso c.0) de la guía
+  alternativa de Construcción Manual para actualizar tu copia.
 - Si una corrida se interrumpe (sales de casa, o le das Stop), no se pierde
   nada — todo lo ya subido queda respaldado para siempre. La siguiente
   corrida simplemente vuelve a empezar desde tus fotos más recientes, no

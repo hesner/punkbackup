@@ -387,6 +387,52 @@ de cada `commit()` (no solo `PRAGMA busy_timeout`) — la GUI sondea el
 estado cada 1.5s y la carpeta destino suele ser una USB externa lenta; ver
 AGENTS.md §5 punto 10 para el detalle completo.
 
+### 5.1.1 Addendum (2026-10-23): segundo problema distinto con la misma raíz — el reintento condicional nunca podía atraparlo
+
+El reintento diseñado en §5.1 (intento directo → si la respuesta trae
+`detail`, Encode Media → segundo intento) asume que existe una respuesta
+HTTP del servidor que inspeccionar. Un usuario reportó, con captura de
+pantalla del editor de Shortcuts en vivo, un error distinto pero
+relacionado: `WFPhotoMediaContentItem produced no file representation
+for type public.mpeg-4`, mostrado por Shortcuts mismo y anclado
+directamente sobre la acción `Obtener contenido de URL` del **intento
+directo** — no sobre el `Encode Media` de reintento. Esto confirma que
+Shortcuts falla al convertir el ítem de Fotos en bytes de archivo
+**antes** de enviar cualquier petición de red: no hay respuesta que
+inspeccionar, así que `Obtener valor de diccionario` → `detail` nunca
+encuentra nada y el reintento nunca se dispara para este caso, sin
+importar qué tan bien esté armado.
+
+**Rediseño**: en vez de un reintento condicional, `Encode Media`
+(`Size: Passthrough`) ahora corre **por adelantado, sin condición, para
+todo ítem de tipo Video** — filtrado únicamente por el `/check` del paso
+b (un ítem ya respaldado nunca entra a este bloque, así que nunca paga
+el costo de Encode Media). Un nuevo `Si Media Type is Video` decide, por
+cada ítem que SÍ hace falta subir, si pasa por Encode Media (guardado en
+una variable `ItemFile`) o se usa el `Elemento de repetición` crudo
+(fotos) — `ItemFile` es lo único que se adjunta al cuerpo de `/upload`.
+Esto elimina las 4 acciones del reintento viejo (`detail`, el `Si`
+anidado, el `Encode Media` condicional, el segundo intento) y las
+reemplaza por el branch de arriba — menos acciones totales, no más, a
+pesar de cubrir una falla que el diseño anterior no podía cubrir
+estructuralmente.
+
+**Verificado que esto no crea riesgo de pérdida de datos** pese a quitar
+el reintento dentro de la misma corrida: `server/app.py`/`server/
+storage.py` nunca registran una subida de 0 bytes, un `OSError` a mitad
+de escritura, u otro fallo como respaldada — siempre se limpia el
+archivo de staging y nunca se toca `backed_up_files`. Así que si el
+único intento de este nuevo diseño falla por algo que Encode Media no
+arregla, la siguiente corrida simplemente lo vuelve a ver como "missing"
+vía `/check` y lo reintenta solo — más lento (una corrida extra) pero
+nunca un video marcado como respaldado sin estarlo. Confirmado en
+producción el mismo día: una corrida real (`activity.log`) subió videos
+de hasta 69.8 MB sin ninguna línea de rechazo de 0 bytes y sin ningún
+error de conversión. Ver AGENTS.md §5, lección 28, y
+`shortcuts/INSTRUCCIONES_ATAJO_MANUAL.md`/`shortcuts/
+MANUAL_BUILD_INSTRUCTIONS.md` (sección 4, paso c.0) para el detalle
+completo del nuevo flujo.
+
 ### 5.3 Bug histórico: notificación final vacía / `finished_at` nunca se completaba — RESUELTO
 
 Desde el inicio del proyecto, prácticamente ninguna corrida completaba

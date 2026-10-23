@@ -174,7 +174,37 @@ Everything below, through the end of section 4, goes **inside** this outer
       and the "If" is skipped — you do NOT need "is equal to" or to type
       `false` anywhere, "has any value" is already the right option):
 
-        - **Get Contents of URL** (inside the "If"):
+        - **Step c.0) If** (first action inside step c's "If" — decide
+          whether this item needs Encode Media BEFORE attempting any
+          upload, not as a retry after one fails):
+
+            - Condition: tap **Repeat Item** → attribute **Media Type**
+              → `is` → `Video`. (If your iOS version doesn't offer
+              "Media Type" in the Repeat Item attribute list, use instead:
+              **Repeat Item → File Extension** `is` `MOV`, then tap **+**
+              to add more conditions joined by **Or**: `is` `MP4`,
+              `Or` → `is` `M4V`.)
+
+            - **Video branch** (inside this "If"):
+                - **Encode Media** action → Item: insert **Repeat Item**
+                  — once, and don't tap the chip again afterward. (Same
+                  care as always: tapping it a second time opens a
+                  "Name/Album/Width..." property menu instead of the raw
+                  item.)
+                - **Size**: `Passthrough` (doesn't reduce quality or
+                  resolution — it just forces Shortcuts to read the full
+                  file, which is exactly what fails for some videos
+                  otherwise — see the note below).
+                - **Set Variable** → name it `ItemFile` → value: the
+                  result of Encode Media above.
+
+            - **Otherwise branch** (photo, not video):
+                - **Set Variable** → name it `ItemFile` → value: insert
+                  **Repeat Item** directly — once, and don't tap it again
+                  afterward.
+
+        - **Step c.1) Get Contents of URL** (inside step c's "If", after
+          step c.0 — this is now the only upload attempt):
 
             - URL: tap the field and insert, IN THIS ORDER, inside the
               same text field: the **ServerURL** chip → type
@@ -188,65 +218,45 @@ Everything below, through the end of section 4, goes **inside** this outer
               automatically.
             - Method: **POST**
             - **Request Body** → change it to **File** (no longer Form).
-            - In the value field that appears, open the variable bar and
-              insert **Repeat Item** — **once, and don't tap the chip
-              again afterward**. (Tapping it again opens a
-              "Name/Album/Width..." property menu — if that happens and
-              you end up with anything other than plain "Repeat Item",
-              clear it with "Clear Variable" and re-insert it without
-              touching it a second time.) If this chip ever shows up
-              highlighted in red/"broken" in the editor — it can happen
-              after editing actions earlier in the same loop — delete it
-              and re-insert it fresh the same way; a broken reference
-              here silently uploads an empty (0-byte) file instead of
-              erroring visibly.
+            - In the value field that appears, insert the **`ItemFile`**
+              variable (from step c.0) — NOT Repeat Item, NOT Encode
+              Media directly. If this chip ever shows up highlighted in
+              red/"broken" in the editor — it can happen after editing
+              actions earlier in the same loop — delete it and
+              re-insert it fresh; a broken reference here silently
+              uploads an empty (0-byte) file instead of erroring visibly.
             - Headers: `X-Backup-Token` → `Token` variable.
-
-        - **Step c.1) Get Dictionary Value** — check whether that upload
-          failed (videos imported from WhatsApp/other apps sometimes
-          arrive empty, 0 bytes — see the note below):
-            - **Get Value for**: type `detail`
-            - **in**: the result of the `Get Contents of URL` above (it
-              appears as "Contents of URL" in the recent variables list).
-
-        - **Step c.2) If** (new, nested inside step c's "If"): condition
-          = the result of step c.1 **has any value** (if the direct
-          upload succeeded, the server doesn't send a `detail` field, so
-          this condition is false and the whole block is skipped — same
-          "has any value" idiom as step c itself).
-
-            - **Step c.3) Encode Media** (inside this new "If"):
-                - Item: **Repeat Item** — insert it directly, once, and
-                  don't tap it again afterward (same care as always with
-                  this chip).
-                - **Size**: `Passthrough` (doesn't reduce quality or
-                  resolution — it just forces Shortcuts to read the full
-                  file, which is exactly what fails for these videos).
-
-            - **Step c.4) Get Contents of URL** (second attempt —
-              safest to copy the one above and paste it here, instead of
-              retyping the URL by hand):
-                - Same URL, same Method POST, same Headers as the
-                  original `Get Contents of URL` above.
-                - **Request Body** → **File** → value: the result of
-                  **Encode Media** (step c.3) — NOT Repeat Item this
-                  time.
-
-            - Nothing needed in this nested "If"'s "Otherwise".
 
         - (Nothing needed in the outer "Otherwise" branch of step c — if
           it was already backed up, just move on to the next item.)
 
-> ⚠️ **Why this retry exists**: confirmed on a real device that a video
-> imported from WhatsApp/Messages/other apps sometimes arrives at the
-> server as 0 bytes on the first attempt — Shortcuts fails to read its
-> real data straight from the Photos library. "Encode Media" with
-> `Size: Passthrough` does force that full read to succeed (confirmed by
-> comparing the original video against the processed one with `ffprobe`:
-> same codec, same resolution, same bitrate — no real quality loss). The
-> retry only kicks in when the direct upload fails — camera-native
-> videos (`IMG_XXXX`) almost always upload fine on the first try,
-> without ever touching Encode Media.
+> ⚠️ **Why Encode Media runs proactively instead of as a retry**:
+> confirmed on a real device, twice, two different failure shapes. First
+> (2026-09-16): a video imported from WhatsApp/Messages/other apps
+> sometimes arrives at the server as 0 bytes — Shortcuts fails to read
+> its real data straight from the Photos library. Second, and the reason
+> for this redesign (2026-10-23): some videos make the DIRECT upload
+> attempt's own "Get Contents of URL" action fail outright, in the
+> Shortcuts editor itself, with the alert `WFPhotoMediaContentItem
+> produced no file representation for type public.mpeg-4` — a
+> client-side failure to coerce the Photos item into file bytes at all,
+> happening BEFORE any HTTP request is sent. The original design (try
+> the raw item first, retry with Encode Media only if the server's
+> response contained a `detail` field) could never catch this second
+> failure shape, because there was no server response to inspect — the
+> upload action itself never ran. Running `Encode Media` with
+> `Size: Passthrough` unconditionally for every video (gated only by
+> step b's `/check`, so an already-backed-up video never pays this cost)
+> avoids both failure shapes at once, since it forces the full read/remux
+> to happen before Shortcuts ever tries to attach the item as a request
+> body. Confirmed harmless to quality (`ffprobe` comparison: same codec,
+> resolution, bitrate — no real loss, see PLAN.md §5.1) and confirmed in
+> production (2026-10-23): a live run uploaded videos up to 69.8 MB with
+> zero 0-byte rejections and zero coercion errors. See AGENTS.md §5,
+> lesson 28, for the full analysis, including why this doesn't create a
+> data-loss risk even though it drops the same-run retry (the server
+> never records a failed/partial upload as backed up, so `/check` simply
+> catches it again on the next run).
 
 Still inside the **inner** "Repeat with Each", after its own "End Repeat"
 but **before** the outer "End Repeat" from section 3 — these two actions

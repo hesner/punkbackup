@@ -1271,9 +1271,9 @@ Tabla `runs` (una corrida de backup, para `/status`):
       mayor capacidad, y los escenarios de prueba manual 4/6/7 (rama
       `feature/second-usb-mirror`, todavía sin mezclar a `main`).
 
-- [ ] Backup por cable y convivencia con WiFi (v1.8.0): arquitectura, diseño y regla de
+- [x] Backup por cable y convivencia con WiFi (publicado en v1.8.0): arquitectura, diseño y regla de
       duplicados aprobados por el usuario, desarrollado e instalado en la PC del usuario.
-      Pendiente: terminar sus pruebas, commit y release. Ver secciones 25 y 26.
+      Pendiente: cerrar sus pruebas. Ver secciones 25 y 26.
 
 ## 13. Segunda copia de respaldo (USB secundaria) — diseño (2026-09-21)
 
@@ -2636,8 +2636,8 @@ una fecha comprometida. Estados: 🔵 en curso · ⚪ pendiente · ✅ hecho.
 
 | # | Mejora | Estado |
 |---|---|---|
-| 1 | **Backup inicial o de gran volumen por cable.** Una opción para respaldar por USB cuando el volumen hace impráctico el WiFi; el WiFi sigue siendo el camino del día a día. | 🔵 Desarrollado, sin commit ni release; en pruebas del usuario. Secciones 26 y 26.2 |
-| 2 | **Convivencia de cable y WiFi sin duplicados.** Ambos caminos reconocen por contenido los archivos del otro. | 🔵 Desarrollado con el punto 1; en pruebas del usuario. Sección 26.2 |
+| 1 | **Backup inicial o de gran volumen por cable.** Una opción para respaldar por USB cuando el volumen hace impráctico el WiFi; el WiFi sigue siendo el camino del día a día. | ✅ Publicado en v1.8.0 (2026-10-31); quedan pruebas del usuario por cerrar. Secciones 26 y 26.2 |
+| 2 | **Convivencia de cable y WiFi sin duplicados.** Ambos caminos reconocen por contenido los archivos del otro. | ✅ Publicado en v1.8.0; queda confirmar la segunda pasada del Atajo. Sección 26.2 |
 | 3 | **Reparar en WiFi los archivos sin registro.** Tras un corte, un archivo puede quedar completo en disco sin su fila en el índice: el Atajo lo da por respaldado y la segunda copia nunca lo copia. El cable ya lo repara. Sección 26.1 | ⚪ Pendiente, para considerar |
 | 4 | **Forzar la escritura a disco en WiFi antes de registrar cada archivo.** Tras un corte de luz o una USB desconectada de golpe, una fila podría quedar sobre datos que seguían en la caché de Windows. El cable ya lo hace. Analizar primero cuánto frena cada subida. | ⚪ Pendiente, para analizar |
 | 5 | **Videos que llegan por WiFi con extensión de foto.** `IMG_2105.jpeg` (169 MB) era en realidad un video QuickTime: la extensión la pone el Atajo y el servidor solo la corrige si falta. Algunos visores no lo abrirían bien y no recibe el parche de fecha. Investigar la causa en el Atajo. | ⚪ Pendiente |

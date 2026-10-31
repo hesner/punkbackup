@@ -8,7 +8,7 @@
 ## What this system does
 
 Automatically backs up photos and videos from one or more iPhones/iPads to
-your Windows PC, over local WiFi, no cable, no iCloud dependency. Each
+your Windows PC, over local WiFi or by cable, no iCloud dependency. Each
 person/device gets its own profile with its own destination folder.
 
 ## ⚠ Important: this app is not code-signed
@@ -142,3 +142,9 @@ optionally, the WiFi automation.
   your photos inside.
 
 If something's not working, see the **Troubleshooting Manual**.
+
+## To use backup by cable (optional)
+
+You only need the iPhone's cable. If Windows doesn't recognize the phone, install **Apple
+Devices** from the Microsoft Store. The first time, unlock the iPhone and tap **Trust**. Backup
+by cable doesn't use the network or the Firewall rule. See the **Usage Manual**.

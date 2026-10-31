@@ -107,11 +107,32 @@ class ServerController:
             time.sleep(0.05)
         return self.actually_listening
 
-    def stop(self, timeout: float = 5.0) -> None:
+    def stop(self, timeout: float = 5.0, force: bool = False) -> None:
+        """`force` doesn't wait for transfers in progress: a graceful stop can
+        outlast `timeout` during a large upload, leaving the server running
+        after the caller moved on. A cut-off upload is never recorded, so the
+        Shortcut simply asks for that file again next time. Blocking — never
+        call it with force from the GUI's event-loop thread."""
         if not self.running or self._server is None:
             return
         self._server.should_exit = True
-        self._thread.join(timeout=timeout)
+        self._server.force_exit = force
+        if not force:
+            self._thread.join(timeout=timeout)
+            return
+        # force_exit alone isn't enough: since Python 3.12 the server's
+        # wait_closed() waits for every open connection, and an upload in
+        # progress keeps its own open until the phone finishes sending. Keeps
+        # cutting them until the thread ends, since a new one can slip in
+        # before uvicorn stops accepting.
+        deadline = time.monotonic() + timeout
+        while self.running and time.monotonic() < deadline:
+            for connection in list(self._server.server_state.connections):
+                try:
+                    connection.loop.call_soon_threadsafe(connection.transport.abort)
+                except (AttributeError, RuntimeError):
+                    pass  # already closing, or the loop has just gone away
+            self._thread.join(timeout=0.2)
 
     def start_with_retry(self, attempts: int = 4, retry_delay: float = 2.0) -> bool:
         """Like start() + wait_until_listening(), but retries a few times

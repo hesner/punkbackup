@@ -403,3 +403,33 @@ mejor — pero no esperes que una USB casi llena aguante el ritmo.
 
 Contacta a quien te ayudó a instalar el sistema, o revisa el repositorio del
 proyecto en GitHub para reportar el problema.
+
+## Backup por cable
+
+**«No veo ningún iPhone».** Prueba otro cable o puerto USB y desbloquea el teléfono.
+Si Windows no lo reconoce como dispositivo, instala **Apple Devices** desde la
+Microsoft Store.
+
+**«Desbloquea el iPhone y toca Confiar».** Toca **Confiar** en el teléfono. Si no
+aparece, desconecta y vuelve a conectar el cable.
+
+**«El iPhone dejó de responder».** Suele ser que se bloqueó o se movió el cable. Lo
+copiado queda guardado: conéctalo, desbloquéalo y pulsa **Continuar**.
+
+**Faltan fotos respecto a la app Fotos.** Con «Optimizar almacenamiento» de iCloud,
+los originales que no están en el teléfono no se ven por cable. Corre el Atajo por WiFi.
+
+**Veo JPG donde esperaba HEIC.** Revisa Ajustes → Fotos → Transferir a Mac o PC y
+elige **Mantener originales**.
+
+**Después de un backup por cable, el Atajo vuelve a enviar archivos.** Es normal en la
+primera pasada: el servidor no puede comparar contenido hasta recibirlo. En el registro de
+actividad verás `already backed up as ..., skipped`: no se guardan de nuevo, y en la
+siguiente pasada ya no se piden. Esa primera pasada puede tardar bastante.
+
+**El Atajo subió un video que el cable no copió.** Es correcto: el cable solo ve lo que el
+iPhone muestra por USB, y el Atajo le pide los archivos a la app Fotos. Por eso conviene
+correr los dos.
+
+**Los dos archivos parecen el mismo video pero se conservaron ambos.** Si hay dudas, la app
+conserva los dos: compara fotogramas y audio, y prefiere un duplicado a perder un video.

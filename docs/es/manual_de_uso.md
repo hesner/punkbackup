@@ -4,6 +4,13 @@ Esta guía explica qué hace cada pantalla y cada botón de la app. Para
 instalarla por primera vez, usa el **Manual de instalación**; para
 problemas, el **Manual de solución de problemas**.
 
+## Dos caminos: WiFi y cable
+
+PunkBackup respalda por WiFi con el Atajo, o por cable con el botón **Backup por
+cable**. Los perfiles, las carpetas y las reglas son los mismos. El fondo te dice en
+cuál estás: oscuro en WiFi y claro en cable. La app siempre abre en WiFi. Ver la
+sección «Backup por cable».
+
 ## La ventana tiene 2 pantallas
 
 - **Principal**: encender/apagar el backup, ver a qué dirección deben
@@ -251,6 +258,47 @@ quien quiera tener sus fotos en más de una unidad física.
   falta volver a subir nada desde el teléfono.
 
 ---
+
+## Backup por cable
+
+Para un primer backup o un gran volumen de fotos, el cable es mucho más rápido
+que el WiFi. El WiFi sigue siendo el camino del día a día.
+
+1. Conecta el iPhone con el cable, desbloquéalo y, si te lo pregunta, toca
+   **Confiar**.
+2. En la pantalla Principal, pulsa **Backup por cable**, arriba a la derecha. La
+   app cambia a fondo claro para que siempre sepas en qué modo estás. Esto apaga
+   el servidor WiFi, incluso a mitad de una copia: lo ya copiado queda guardado y
+   el Atajo retoma lo demás la próxima vez. Si hay una copia en curso, la app te
+   pide confirmar.
+3. En la tarjeta del perfil, pulsa **Iniciar backup por cable**. La primera vez te
+   pide confirmar que ese iPhone es de ese perfil, y luego te avisa si conectas
+   otro.
+4. Revisa el resumen y pulsa **Revisar y copiar**. Mantén el iPhone conectado y
+   desbloqueado. Puedes detener la copia cuando quieras y continuarla después sin
+   repetir lo ya copiado.
+5. Al terminar, pulsa **Backup por WiFi** para volver. Si el servidor estaba
+   encendido antes de cambiar, vuelve a encenderse.
+
+**Lo que conviene saber:**
+
+- Solo se lee del teléfono: nada se borra ni se modifica.
+- El destino y las reglas son los mismos del WiFi. Nada se sobrescribe, y lo que
+  ya está respaldado con otro nombre no se guarda dos veces.
+- Se copia una sola vez por perfil a la vez. Un perfil pausado también puede usar
+  el cable, porque pausar solo bloquea el WiFi.
+- **«Todo respaldado» por cable significa todo lo que el iPhone muestra por USB, no
+  necesariamente toda tu Fototeca.** Con iCloud y «Optimizar almacenamiento», los
+  originales que no están en el teléfono no se pueden copiar por cable, y también hemos
+  visto un video reciente que no apareció por USB. Corre siempre el Atajo por WiFi
+  después, sobre todo antes de borrar fotos del teléfono.
+- Cada archivo copiado queda en el registro de actividad, con su nombre y su hora.
+- El cable y el WiFi se reconocen entre sí por contenido, aunque el nombre sea
+  distinto, así que puedes usar los dos sin crear duplicados. La primera pasada del
+  Atajo después de un cable vuelve a enviar una vez los archivos que no son de cámara
+  (por ejemplo, de WhatsApp): el servidor los descarta y no se los vuelve a pedir.
+  Esa primera pasada tarda más y usa más batería, sobre todo con videos.
+- Mantén la PC enchufada durante una copia larga.
 
 ## Flujo típico de uso diario
 

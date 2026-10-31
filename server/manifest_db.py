@@ -44,9 +44,31 @@ CREATE TABLE IF NOT EXISTS runs (
     files_new INTEGER NOT NULL DEFAULT 0,
     files_skipped INTEGER NOT NULL DEFAULT 0,
     files_conflict INTEGER NOT NULL DEFAULT 0,
-    files_error INTEGER NOT NULL DEFAULT 0
+    files_error INTEGER NOT NULL DEFAULT 0,
+    source TEXT NOT NULL DEFAULT 'wifi'
+);
+
+CREATE TABLE IF NOT EXISTS cable_aliases (
+    name TEXT NOT NULL,
+    size_bytes INTEGER NOT NULL,
+    dest_path TEXT NOT NULL,
+    PRIMARY KEY (name, size_bytes)
+);
+
+CREATE TABLE IF NOT EXISTS name_aliases (
+    name TEXT NOT NULL,
+    taken_at TEXT NOT NULL,
+    dest_path TEXT NOT NULL,
+    PRIMARY KEY (name, taken_at)
 );
 """
+
+
+def path_key(path) -> str:
+    """YYYY/MM/name, lowercase: the part of a recorded path that identifies the
+    file. Windows ignores case (the phone says .HEIC, the Shortcut .heic) and a
+    USB can come back with a different letter."""
+    return "/".join(Path(path).parts[-3:]).lower()
 
 
 def _now() -> str:
@@ -75,7 +97,7 @@ class ManifestDB:
         # told apart at a glance instead of only by the message text.
         self.logger = logging.LoggerAdapter(logger, {"profile": profile_label})
         self._lock = threading.Lock()
-        self._conn = sqlite3.connect(self.db_path, check_same_thread=False)
+        self._conn = sqlite3.connect(self.db_path, check_same_thread=False, timeout=30)  # slow USB: lesson 10
         self._conn.row_factory = sqlite3.Row
         with self._lock:
             self._conn.executescript(SCHEMA)
@@ -86,6 +108,8 @@ class ManifestDB:
             existing_cols = {row[1] for row in self._conn.execute("PRAGMA table_info(backed_up_files)")}
             if "original_filename" not in existing_cols:
                 self._conn.execute("ALTER TABLE backed_up_files ADD COLUMN original_filename TEXT")
+            if "source" not in {row[1] for row in self._conn.execute("PRAGMA table_info(runs)")}:
+                self._conn.execute("ALTER TABLE runs ADD COLUMN source TEXT NOT NULL DEFAULT 'wifi'")
             self._conn.execute(
                 "CREATE INDEX IF NOT EXISTS idx_backed_up_files_original_filename "
                 "ON backed_up_files(original_filename)"
@@ -163,6 +187,66 @@ class ManifestDB:
                 "SELECT * FROM backed_up_files WHERE original_filename = ? LIMIT 1", (original_filename,)
             )
             return cur.fetchone()
+
+    def find_by_sha256(self, sha256: str) -> list[sqlite3.Row]:
+        """The cable and the Shortcut name the same non-camera file differently,
+        so finalize_upload looks for its content under any name (PLAN.md 26.2)."""
+        with self._lock:
+            return self._conn.execute(
+                "SELECT * FROM backed_up_files WHERE sha256 = ?", (sha256,)
+            ).fetchall()
+
+    def find_near_date(self, dates: list[str]) -> list[sqlite3.Row]:
+        """Rows whose taken_at starts with one of these YYYY-MM-DD days."""
+        clause = " OR ".join("taken_at LIKE ?" for _ in dates)
+        with self._lock:
+            return self._conn.execute(
+                f"SELECT * FROM backed_up_files WHERE {clause}", [f"{day}%" for day in dates]
+            ).fetchall()
+
+    def indexed_paths(self) -> set[str]:
+        """path_key() of every recorded file, for telling whether a file on
+        disk has a row without depending on name case or the drive letter."""
+        with self._lock:
+            rows = self._conn.execute("SELECT dest_path FROM backed_up_files").fetchall()
+        return {path_key(row["dest_path"]) for row in rows}
+
+    def find_name_alias(self, name: str, taken_at: str) -> Optional[str]:
+        """Where a file already lives when it was sent under another name. The date
+        is part of the key on purpose: camera names get reused over the years, and
+        matching on the name alone would hide a new photo. The Shortcut sends the
+        same date for the same item on every sweep."""
+        with self._lock:
+            row = self._conn.execute(
+                "SELECT dest_path FROM name_aliases WHERE name = ? AND taken_at = ?", (name.lower(), taken_at),
+            ).fetchone()
+        return row["dest_path"] if row else None
+
+    def record_name_alias(self, name: str, taken_at: str, dest_path: str, commit: bool = True) -> None:
+        with self._lock:
+            self._conn.execute(
+                "INSERT OR REPLACE INTO name_aliases (name, taken_at, dest_path) VALUES (?, ?, ?)",
+                (name.lower(), taken_at, dest_path),
+            )
+            if commit:
+                self._conn.commit()
+
+    def cable_aliases(self) -> dict[tuple[str, int], str]:
+        """(lowercase cable name, size) -> where that content already lives.
+        Remembers what a cable import had to read in full to recognize, so the
+        next scan of the same phone doesn't have to read it again."""
+        with self._lock:
+            rows = self._conn.execute("SELECT name, size_bytes, dest_path FROM cable_aliases").fetchall()
+        return {(row["name"], row["size_bytes"]): row["dest_path"] for row in rows}
+
+    def record_cable_alias(self, name: str, size_bytes: int, dest_path: str, commit: bool = True) -> None:
+        with self._lock:
+            self._conn.execute(
+                "INSERT OR REPLACE INTO cable_aliases (name, size_bytes, dest_path) VALUES (?, ?, ?)",
+                (name.lower(), size_bytes, dest_path),
+            )
+            if commit:
+                self._conn.commit()
 
     def backfill_original_filename(self, dest_path: str, original_filename: str) -> None:
         """Opportunistically fills in original_filename on a row that
@@ -284,16 +368,16 @@ class ManifestDB:
 
     # -- runs -------------------------------------------------------------
 
-    def start_run(self) -> str:
+    def start_run(self, source: str = "wifi") -> str:
         run_id = uuid.uuid4().hex
         with self._lock:
             self._conn.execute(
-                "INSERT INTO runs (id, started_at) VALUES (?, ?)", (run_id, _now())
+                "INSERT INTO runs (id, started_at, source) VALUES (?, ?, ?)", (run_id, _now(), source)
             )
             self._conn.commit()
         return run_id
 
-    def bump_run(self, run_id: Optional[str], field: str) -> None:
+    def bump_run(self, run_id: Optional[str], field: str, commit: bool = True) -> None:
         """Increment a counter column on a run. No-op if run_id is None
         (the Shortcut is allowed to call /upload without bracketing a run)."""
         if not run_id:
@@ -303,7 +387,8 @@ class ManifestDB:
             self._conn.execute(
                 f"UPDATE runs SET {field} = {field} + 1 WHERE id = ?", (run_id,)
             )
-            self._conn.commit()
+            if commit:
+                self._conn.commit()
 
     def mark_error(self, run_id: Optional[str], filename: str) -> None:
         """Like bump_run(run_id, "files_error"), but remembers the filename
@@ -347,6 +432,16 @@ class ManifestDB:
                 "SELECT * FROM runs WHERE id = ?", (run_id,)
             ).fetchone()
         return dict(row) if row else {}
+
+    def finish_open_runs(self) -> None:
+        """Closes every run still open. For when the PC itself ends the WiFi
+        session (switching to cable mode): the Shortcut can no longer reach
+        /run/finish, and leaving the run open would falsely trip the idle
+        notice. Same effect as the reap in __init__, without waiting for the
+        next app launch."""
+        with self._lock:
+            self._conn.execute("UPDATE runs SET finished_at = ? WHERE finished_at IS NULL", (_now(),))
+            self._conn.commit()
 
     # -- status -------------------------------------------------------------
 

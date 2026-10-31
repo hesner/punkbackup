@@ -106,6 +106,8 @@ Backup photos/
 │   │                              reintenta ante conflictos transitorios de puerto)
 │   ├── video_metadata.py        (corrige el creation_time real dentro del contenedor de video)
 │   ├── mirror.py                (segunda copia opcional: sync_mirror() PC-side, hacia otra carpeta/USB)
+│   ├── device_source.py         (lectura del iPhone por USB vía WPD, solo GENERIC_READ)
+│   ├── cable_import.py          (backup por cable: analiza, filtra por contenido y copia)
 │   ├── config.py                (AppConfig: puerto, idioma, preferencias de inicio, timeout de inactividad)
 │   ├── paths.py                 (rutas dev vs. instalado — app_root()/user_data_dir())
 │   └── run_dev.py               (runner manual para pruebas por terminal)
@@ -114,6 +116,7 @@ Backup photos/
 │   │                              + persistido en disco, Preferencias)
 │   ├── i18n.py                  (traducciones ES/EN, cambio de idioma en vivo)
 │   ├── dialogs.py               (diálogos propios oscuros — reemplazan messagebox nativo)
+│   ├── theme.py                 (paletas: oscura en WiFi, «Xerox» en modo cable)
 │   └── autostart.py             (inicio con Windows vía el Run key de HKCU)
 ├── shortcuts/
 │   ├── INSTRUCCIONES_ATAJO.md         (ES — manual principal, instala el .shortcut)
@@ -122,6 +125,7 @@ Backup photos/
 │   ├── MANUAL_BUILD_INSTRUCTIONS.md   (EN — manual alternativo, construcción a mano)
 │   └── PunkBackup.shortcut      (Atajo exportado, listo para importar — placeholders genéricos)
 ├── docs/                        (manuales en PDF, landing page GitHub Pages)
+├── tools/ui_preview.py          (aplicación de prueba: interfaz real, iPhone simulado, datos temporales)
 ├── installer/                   (PunkBackup.iss — Inno Setup, empaqueta dist/ de PyInstaller)
 └── tests/
     ├── test_backup_engine.py
@@ -129,7 +133,11 @@ Backup photos/
     ├── test_profiles.py
     ├── test_runner.py
     ├── test_video_metadata.py
-    └── test_mirror.py
+    ├── test_mirror.py
+    ├── test_cable_import.py
+    ├── test_shared_dedup.py
+    ├── test_abrupt_stop.py
+    └── test_gui_cable.py
 ```
 
 ## 4.1 Perfiles (multi-usuario / multi-dispositivo)
@@ -1262,6 +1270,10 @@ Tabla `runs` (una corrida de backup, para `/status`):
       Pendiente real: completar una sincronización 100% con una USB de
       mayor capacidad, y los escenarios de prueba manual 4/6/7 (rama
       `feature/second-usb-mirror`, todavía sin mezclar a `main`).
+
+- [ ] Backup por cable y convivencia con WiFi (v1.8.0): arquitectura, diseño y regla de
+      duplicados aprobados por el usuario, desarrollado e instalado en la PC del usuario.
+      Pendiente: terminar sus pruebas, commit y release. Ver secciones 25 y 26.
 
 ## 13. Segunda copia de respaldo (USB secundaria) — diseño (2026-09-21)
 
@@ -2616,3 +2628,119 @@ algo para un README público. Los otros dos hilos de la conversación
 original (canales de lanzamiento — awesome-lists, r/selfhosted, Show
 HN — y la decisión de alcance de plataforma, hoy solo Windows) quedaron
 sin desarrollar, a la espera de que el usuario quiera continuar.
+
+## 25. Roadmap
+
+Lista viva de mejoras deseables en el tiempo. El orden indica prioridad, no
+una fecha comprometida. Estados: 🔵 en curso · ⚪ pendiente · ✅ hecho.
+
+| # | Mejora | Estado |
+|---|---|---|
+| 1 | **Backup inicial o de gran volumen por cable.** Una opción para respaldar por USB cuando el volumen hace impráctico el WiFi; el WiFi sigue siendo el camino del día a día. | 🔵 Desarrollado, sin commit ni release; en pruebas del usuario. Secciones 26 y 26.2 |
+| 2 | **Convivencia de cable y WiFi sin duplicados.** Ambos caminos reconocen por contenido los archivos del otro. | 🔵 Desarrollado con el punto 1; en pruebas del usuario. Sección 26.2 |
+| 3 | **Reparar en WiFi los archivos sin registro.** Tras un corte, un archivo puede quedar completo en disco sin su fila en el índice: el Atajo lo da por respaldado y la segunda copia nunca lo copia. El cable ya lo repara. Sección 26.1 | ⚪ Pendiente, para considerar |
+| 4 | **Forzar la escritura a disco en WiFi antes de registrar cada archivo.** Tras un corte de luz o una USB desconectada de golpe, una fila podría quedar sobre datos que seguían en la caché de Windows. El cable ya lo hace. Analizar primero cuánto frena cada subida. | ⚪ Pendiente, para analizar |
+| 5 | **Videos que llegan por WiFi con extensión de foto.** `IMG_2105.jpeg` (169 MB) era en realidad un video QuickTime: la extensión la pone el Atajo y el servidor solo la corrige si falta. Algunos visores no lo abrirían bien y no recibe el parche de fecha. Investigar la causa en el Atajo. | ⚪ Pendiente |
+| 6 | **Reportes de backups.** Qué se ha copiado, qué falta, dónde hay más información, líneas de tiempo y cantidades, y cualquier dato relevante para el usuario; por ejemplo, que pueda borrar a mano fotos y videos ya respaldados con tranquilidad. | ⚪ Pendiente |
+| 7 | **Averiguar por qué un archivo no aparece por cable.** `IMG_2106.mov` (grabado el 2026-10-31) no se vio por USB y sí llegó por WiFi. Causa sin confirmar; hay que resolverla antes del punto 6, que no puede basarse solo en lo que muestra el cable. | 🔵 Abierto, a la espera de datos del iPhone |
+| 8 | **Revisar `VIDEO0044` y detectar copias dañadas.** `VIDEO0044.mp4` y `VIDEO0044__dup_407800d6.mp4` (2015/03) tienen 1.112 fotogramas distintos; uno parece dañado. Considerar una verificación periódica del destino. | ⚪ Propuesto, a la espera de revisar el video |
+| 9 | **Limpiar duplicados que ya existen en el destino.** La regla nueva evita duplicados nuevos, pero no limpia los antiguos: los logs muestran copias previas con nombres distintos. | ⚪ Propuesto |
+
+## 26. Backup por cable — decisiones (2026-10-30)
+
+**Evidencia** (prueba de solo lectura contra el iPhone real, API WPD): 6.328
+archivos y 15,2 GB visibles; 40/40 archivos idénticos a lo recibido por WiFi
+(32 por sha256, 8 videos por `mdat`); 17–18 MB/s de lectura; ~46 ms por archivo
+al escanear. El Explorador no sirve como origen (tamaño 0, fecha inválida). Si
+no se libera cada stream, WPD puede entregar bytes del archivo anterior: se
+libera siempre, se compara el tamaño y se reabre la sesión ante un desfase.
+
+**Aprobado por el usuario**:
+- **Arquitectura**: `server/device_source.py` (WPD con `comtypes`, solo
+  `GENERIC_READ`) y `server/cable_import.py`, sin depender de FastAPI, sobre
+  el mismo `BackupEngine` y `ManifestDB`. Sin autoarranque; nunca toca el
+  teléfono; funciona sin servidor ni WiFi.
+- **Duplicados**: `finalize_upload`, `/check`, `/upload` y el Atajo no cambian.
+  Solo el cable agrega un filtro previo: si el contenido ya está en el índice
+  con cualquier nombre (sha256, o `mdat` en video), no se copia.
+- **Archivos**: `IMG_E*` y originales pasan por las reglas actuales; los
+  `.AAE` no se copian.
+
+**Dirigido por el usuario, propuesta de detalle pendiente de aprobación**:
+- Botón gris claro «Backup por cable» a la derecha de la barra de
+  Detener/Estado. Detiene el servicio, incluso a mitad de una copia, y cambia
+  la app a un tema gris claro que siga siendo punk. En modo cable el botón dice
+  «Backup por WiFi», en rojo.
+- Mismos perfiles y mismos datos; cada perfil tiene su botón de backup por
+  cable. La dirección del servidor no aplica en ese modo.
+- La interfaz se prueba en una aplicación de prueba cuando llegue el momento.
+
+**Aprobado por el usuario sobre el comportamiento del modo**:
+- Al cambiar de modo con una transferencia activa: una sola confirmación; sin
+  transferencia, cambia al instante.
+- Un perfil pausado puede hacer backup por cable; pausar bloquea solo el WiFi.
+- Al volver a WiFi se restaura el estado anterior: si el servidor escuchaba,
+  vuelve a escuchar. Es una acción del usuario, no un arranque con Windows.
+
+**Paleta aprobada: propuesta B, «Xerox»** (fotocopias en blanco y negro de
+fanzines). Fondo `#F2F2EE`, tarjetas `#FFFFFF`, tinta `#000000`, bordes grises `#8A8A86` de 2 px (suavizados tras la prueba real),
+texto secundario `#454545`, bandas de título y de control negras, acción
+principal `#D90000` con texto blanco y éxito `#0B6B35`. El botón «Backup por
+WiFi» conserva el rojo `#FF3B30` con letra `#1A0308`. El log sigue negro con
+letras verdes. El usuario rechazó antes una primera propuesta gris.
+
+**Diseño aprobado el 2026-10-30.** Sigue el desarrollo; las reglas de calidad
+son las de `AGENTS.md` y la sección 10 de este plan.
+
+### 26.0 Resultado con el iPhone real (2026-10-30)
+
+| Prueba | Resultado |
+|---|---|
+| Copia completa a carpeta nueva | 6.180 archivos revisados, 5.999 guardados, 181 de contenido idéntico a otro, 0 fallidos; 19 MB/s hacia el disco C: |
+| Destino real con 50.208 archivos | 62 nuevos, 2.999 reconocidos tras leerlos, 0 duplicados, 0 filas previas modificadas; ~5 MB/s |
+| Repetir la corrida | 0 copiados, 2 s |
+| Corte por falta de memoria a mitad de escritura real | Base íntegra; reanudó y cerró sola |
+| Memoria del proceso | ~60 MB |
+
+Encontrado solo con el dispositivo real: el iPhone listaba 0 archivos, y la reanudación
+registraba el hash del teléfono en videos ya parcheados en disco. Ambos corregidos.
+
+### 26.2 Convivencia cable y WiFi (aprobada e implementada, 2026-10-31)
+
+Ambos caminos reconocen el contenido existente con cualquier nombre, en
+`finalize_upload`. Mismo nombre con contenido distinto sigue conservando ambos. La
+tabla `name_aliases` (nombre y `taken_at`, porque los nombres de cámara se reutilizan)
+evita que `/check` vuelva a pedir lo ya descartado. Fotos por sha256. Videos en dos
+pasos: `video_fingerprint` (tamaños de fotograma) filtra entre fechas cercanas y
+`same_video` compara los fotogramas reales y al menos 98 % de las muestras de audio
+(en 9 pares reales coincidió entre 99,1 % y 100 %, con 0-2 muestras menos).
+
+Validación con 6.964 videos reales: 470 grupos comparten huella. En 462 los fotogramas
+son idénticos. En 7 difieren 1-2 bytes del primer fotograma: mismo video. **`VIDEO0044`
+y `VIDEO0044__dup_407800d6` (2015/03) tienen 1.112 fotogramas distintos (92 MB) desde
+el 5.336: uno parece dañado**, y la huella sola los habría igualado; por eso decide
+`same_video`. Un grupo tiene los mismos fotogramas con audio distinto (161 KB y
+178 KB): se conservan ambos.
+
+Limitación: `/check` no ve bytes, así que el primer barrido WiFi tras un cable reenvía
+una vez los archivos que no son de cámara, con su `Encode Media` en los videos.
+Con aprobación del usuario se borraron del destino los 28 duplicados de la prueba
+real (19 fotos y 9 videos del WiFi), conservando la copia del cable.
+
+### 26.1 Cortes abruptos: qué queda después (2026-10-30)
+
+Preguntado por el usuario. Medido matando un proceso real mientras escribía
+(`tests/test_abrupt_stop.py`, WiFi y cable), sin simular corte de luz.
+
+| Riesgo | Resultado |
+|---|---|
+| Base corrupta | `integrity_check` ok tras cada `kill`: SQLite revierte lo no confirmado |
+| Fila sin archivo o con archivo incompleto | No ocurrió: el archivo llega a su ruta final con un `rename`, y la fila se escribe después |
+| `.part` huérfano | Sí quedaba para siempre. Ahora `BackupEngine.clear_staging()` lo borra al abrir el destino |
+| Archivo completo sin fila | Sí ocurre: hasta 24 en cable y una ventana mínima por archivo en WiFi. `/check` lo da por respaldado y la segunda copia no lo ve. El cable lo detecta y escribe la fila; el WiFi no lo repara |
+| Corrida abierta | Se cierra al cambiar de modo o al reabrir |
+| Corte de luz o USB arrancada | No probado. En cable, `fsync` antes de dar fila al archivo. **En WiFi no hay `fsync`**: una fila podría quedar sobre datos que aún estaban en la caché de Windows. Decisión pendiente del usuario |
+
+`stop(force=True)` necesitó cortar las conexiones a mano: desde Python 3.12,
+`wait_closed()` espera a cada conexión abierta, y el servidor seguía vivo 8 s
+después de pedirle salir con `force_exit`.

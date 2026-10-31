@@ -350,3 +350,9 @@ same way, regardless of how the Shortcut was built.
 - Exact action names can vary slightly between iOS versions; if you can't
   find an action with the exact name above, search by a keyword instead
   (e.g. "dictionary", "URL", "repeat").
+
+## If you also use backup by cable
+
+You don't need to change anything in the Shortcut. The first pass after a cable backup sends
+non-camera files again and takes longer, but they aren't stored twice. From the second pass on,
+they aren't asked for.

@@ -5,9 +5,7 @@ throughout the GUI. `messagebox` renders as a plain light/white native OS
 dialog no matter what CustomTkinter's appearance mode is set to — it broke
 the dark theme jarringly every time a profile was created, renamed, etc.
 These are built from plain CTkToplevel + CTk widgets instead, so they
-inherit the same palette as the rest of the app (see BG/CARD_BG/ACCENT in
-gui/main_window.py — duplicated here rather than imported, to avoid a
-circular import between the two modules).
+inherit the same palette as the rest of the app (see gui/theme.py).
 
 Every function here is modal (blocks until the user responds) and centers
 itself over its parent window, matching how messagebox/CTkInputDialog used
@@ -22,18 +20,15 @@ import customtkinter as ctk
 
 from server.paths import app_root
 
-BG = "#0c0c0e"
-CARD_BG = "#19191d"
-CARD_BG_ALT = "#221418"
-BORDER = "#2c2c32"
-TEXT_MAIN = "#f2f2f5"
-TEXT_MUTED = "#9a9aa3"
-ACCENT = "#ff2d55"
-ACCENT_HOVER = "#c81d4a"
-ACCENT_INK = "#1a0308"
-AMBER = "#ffb020"
-RED = "#ff3b30"
-RED_HOVER = "#c62828"
+from .theme import DARK
+
+
+def use_palette(palette: dict) -> None:
+    """Module globals, so a dialog opened in cable mode gets cable mode's colors."""
+    globals().update(palette)
+
+
+use_palette(DARK)
 
 ICON_PATH = app_root() / "assets" / "punkbackup.ico"
 

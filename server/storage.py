@@ -5,6 +5,9 @@ Rules (see PLAN.md section 5.1):
   1. Same filename + same content (sha256)  -> no-op, already backed up.
   2. Same filename + different content       -> keep BOTH, never overwrite.
   3. New filename                            -> copy normally.
+  4. Other filename, same content             -> no-op, and the name is remembered.
+     The cable and the Shortcut name non-camera files differently, so without
+     this each path would store the other's files again (PLAN.md section 26.2).
 Files are organized as ``<dest>/<YYYY>/<MM>/<filename>`` using the photo's
 "taken at" date supplied by the iPhone Shortcut (falls back to the server's
 current date if missing/unparseable).
@@ -18,16 +21,19 @@ from __future__ import annotations
 import hashlib
 import logging
 import shutil
+import time
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import BinaryIO, Optional
 
 from PIL import Image
 import pillow_heif
 
-from .manifest_db import ManifestDB
-from .video_metadata import VIDEO_EXTENSIONS, content_signature, fix_creation_time
+from .manifest_db import ManifestDB, path_key
+from .video_metadata import (
+    MAX_SIZE_RATIO_SAME_VIDEO, VIDEO_EXTENSIONS, content_signature, fix_creation_time, same_video, video_fingerprint,
+)
 
 pillow_heif.register_heif_opener()  # lets PIL.Image.open() read .heic/.heif too
 
@@ -96,10 +102,20 @@ def _read_exif_taken_at(staging_path: Path) -> Optional[str]:
         return None
 
 
+def existing_path(dest_root: Path, stored: str) -> Optional[Path]:
+    """A recorded location only counts if the file is really there in THIS
+    destination, the source of truth. Always resolved against dest_root: the drive
+    may have another letter than when the row was written, and the old location
+    may even still exist on another drive, which proves nothing about this one."""
+    path = dest_root / Path(*Path(stored).parts[-3:])
+    return path if path.exists() else None
+
+
 class BackupEngine:
     def __init__(self, dest_root: Path, db: ManifestDB):
         self.dest_root = Path(dest_root)
         self.db = db
+        self._fingerprints: dict[str, Optional[str]] = {}  # path -> video_fingerprint, reading moov once
         # Reuses the same profile label the DB was opened with (single
         # source of truth) so every log line from this engine is tagged
         # with which profile/device it belongs to — see
@@ -107,6 +123,19 @@ class BackupEngine:
         self.logger = logging.LoggerAdapter(logger, {"profile": db.profile_label})
         self.staging_dir = self.db.index_dir / "staging"
         self.staging_dir.mkdir(parents=True, exist_ok=True)
+
+    def clear_staging(self, older_than_seconds: float = 3600) -> None:
+        """Removes partial files left by a crash or power cut: nothing ever
+        retries one (each attempt gets a new name), so they'd stay forever. The age
+        limit protects an upload in progress, whose finished .part sits closed
+        while finalize_upload runs; pass 0 when nothing else can be writing."""
+        limit = time.time() - older_than_seconds
+        for leftover in self.staging_dir.glob("*.part"):
+            try:
+                if leftover.stat().st_mtime <= limit:
+                    leftover.unlink()
+            except OSError:
+                pass
 
     def _year_month_dir(self, taken_at: Optional[str]) -> Path:
         dt = None
@@ -147,8 +176,64 @@ class BackupEngine:
             # original name this item resolved to last time it was really
             # uploaded — see manifest_db.find_by_original_filename's
             # docstring and PLAN.md section 5.4.2.
-            return self.db.find_by_original_filename(safe_name) is not None
-        return False
+            if self.db.find_by_original_filename(safe_name) is not None:
+                return True
+        # This exact name and date already turned out to be a file stored under
+        # another name, so /upload would only discard it again.
+        alias = self.db.find_name_alias(safe_name, taken_at) if taken_at else None
+        return alias is not None and existing_path(self.dest_root, alias) is not None
+
+    def _find_same_content(self, staging_path: Path, sha256: str, taken_at: Optional[str]) -> Optional[str]:
+        """Where this content already lives, under any name. Photos by hash. Videos
+        change bytes through Encode Media, so among those from nearby days: same
+        fingerprint, then same_video reading the real frames. A day either side
+        because older rows store taken_at in UTC, and the cable and the Shortcut
+        report dates minutes apart for the same item."""
+        for row in self.db.find_by_sha256(sha256):
+            path = existing_path(self.dest_root, row["dest_path"])
+            # Read it, don't trust the row: if that copy got damaged, this upload
+            # may be the only good one left.
+            if path is not None and self._hash_existing(path) == sha256:
+                return str(path)
+        if not taken_at:
+            return None
+        try:
+            day = datetime.fromisoformat(taken_at.replace("Z", "+00:00")).date()
+        except ValueError:
+            return None
+        fingerprint = video_fingerprint(staging_path)
+        if fingerprint is None:
+            return None
+        days = [(day + timedelta(days=offset)).isoformat() for offset in (-1, 0, 1)]
+        size = staging_path.stat().st_size
+        for row in self.db.find_near_date(days):
+            # By size and not extension: a video can arrive mislabeled as a photo.
+            if max(size, row["size_bytes"]) > min(size, row["size_bytes"]) * MAX_SIZE_RATIO_SAME_VIDEO:
+                continue
+            path = existing_path(self.dest_root, row["dest_path"])
+            if path is None:
+                continue
+            key = str(path)
+            if key not in self._fingerprints:
+                known = video_fingerprint(path)
+                if known is None:
+                    continue  # not cached: this may have been a passing read error
+                self._fingerprints[key] = known
+            if self._fingerprints[key] == fingerprint and same_video(staging_path, path):
+                return str(path)
+        return None
+
+    def _skip_as_already_backed_up(
+        self, run_id: Optional[str], safe_name: str, original_name: str, sent_taken_at: Optional[str],
+        dest_path: str, commit: bool,
+    ) -> dict:
+        # Never without a date: the name alone isn't safe, see find_name_alias.
+        if sent_taken_at and path_key(dest_path) != path_key(self._year_month_dir(sent_taken_at) / safe_name):
+            self.db.record_name_alias(original_name, sent_taken_at, dest_path, commit=commit)
+        self._resolve_error_both(run_id, safe_name, original_name)
+        self.db.bump_run(run_id, "files_skipped", commit=commit)
+        self.logger.info("= %s already backed up as %s, skipped", safe_name, Path(dest_path).name)
+        return {"status": "skipped_duplicate", "dest_path": dest_path}
 
     def stage_bytes(self, src_file: BinaryIO) -> tuple[Path, str, int]:
         """Phase 1 of receiving an upload: stream `src_file` (anything with
@@ -211,9 +296,14 @@ class BackupEngine:
         size: int,
         taken_at: Optional[str],
         run_id: Optional[str],
+        commit: bool = True,
     ) -> dict:
         """Phase 2: staging_path already holds the full, hashed content —
-        decide where it lands (new / duplicate-skip / keep-both-conflict)."""
+        decide where it lands (new / duplicate-skip / keep-both-conflict).
+
+        `commit=False` only defers the SQLite commits, for a caller importing
+        many files in a row (server/cable_import.py) — see AGENTS.md lesson 23
+        on what a per-file fsync costs on USB. The rules are identical."""
         if size == 0:
             # A genuinely empty upload — seen in practice when Shortcuts runs
             # in the background and can't fetch a large video's full bytes
@@ -235,20 +325,27 @@ class BackupEngine:
             if detected_ext:
                 self.logger.warning("%s: no extension from the Shortcut, detected %s from content", safe_name, detected_ext)
                 safe_name = f"{safe_name}{detected_ext}"
+        sent_taken_at = taken_at
         if not taken_at:
             taken_at = _read_exif_taken_at(staging_path)
 
         target_dir = self._year_month_dir(taken_at)
-        target_dir.mkdir(parents=True, exist_ok=True)
         candidate_path = target_dir / safe_name
 
         try:
+            same_content = self._find_same_content(staging_path, sha256, taken_at)
+            if same_content is not None and path_key(same_content) != path_key(candidate_path):
+                return self._skip_as_already_backed_up(
+                    run_id, safe_name, original_name, sent_taken_at, same_content, commit,
+                )
+
+            target_dir.mkdir(parents=True, exist_ok=True)
             if candidate_path.exists():
                 if self._hash_existing(candidate_path) == sha256:
                     if original_name != safe_name:
                         self.db.backfill_original_filename(str(candidate_path), original_name)
                     self._resolve_error_both(run_id, safe_name, original_name)
-                    self.db.bump_run(run_id, "files_skipped")
+                    self.db.bump_run(run_id, "files_skipped", commit=commit)
                     # TEMP DIAGNOSTIC (PLAN.md §17.7) — files_skipped has
                     # essentially never incremented across this project's
                     # whole run history (1 of 153 real runs, ever) despite
@@ -264,6 +361,13 @@ class BackupEngine:
                     self.logger.info("= %s already backed up, skipped", safe_name)
                     return {"status": "skipped_duplicate", "dest_path": str(candidate_path)}
 
+                if same_content is not None:  # the same video, re-encoded under this same name
+                    if original_name != safe_name:
+                        self.db.backfill_original_filename(str(candidate_path), original_name)
+                    return self._skip_as_already_backed_up(
+                        run_id, safe_name, original_name, sent_taken_at, str(candidate_path), commit,
+                    )
+
                 if candidate_path.suffix.lower() in VIDEO_EXTENSIONS:
                     # Raw sha256 differs, but Shortcuts' "Encode Media" 0-byte
                     # retry re-stamps the container's own metadata on every
@@ -278,7 +382,7 @@ class BackupEngine:
                         if original_name != safe_name:
                             self.db.backfill_original_filename(str(candidate_path), original_name)
                         self._resolve_error_both(run_id, safe_name, original_name)
-                        self.db.bump_run(run_id, "files_skipped")
+                        self.db.bump_run(run_id, "files_skipped", commit=commit)
                         # TEMP DIAGNOSTIC — see the other skip branch above.
                         self.logger.info("DIAG skip: run_id received = %r", run_id)
                         self.logger.info("= %s already backed up (re-encoded copy, content unchanged), skipped", safe_name)
@@ -287,17 +391,17 @@ class BackupEngine:
                 final_path = self._next_conflict_name(target_dir, candidate_path)
                 shutil.move(str(staging_path), str(final_path))
                 sha256 = self._sha256_after_video_fix(final_path, taken_at, sha256)
-                self.db.record_file(safe_name, sha256, taken_at, str(final_path), size, original_name)
+                self.db.record_file(safe_name, sha256, taken_at, str(final_path), size, original_name, commit=commit)
                 self._resolve_error_both(run_id, safe_name, original_name)
-                self.db.bump_run(run_id, "files_conflict")
+                self.db.bump_run(run_id, "files_conflict", commit=commit)
                 self.logger.warning("! %s: name conflict, kept both -> %s", safe_name, final_path.name)
                 return {"status": "conflict_kept_both", "dest_path": str(final_path)}
 
             shutil.move(str(staging_path), str(candidate_path))
             sha256 = self._sha256_after_video_fix(candidate_path, taken_at, sha256)
-            self.db.record_file(safe_name, sha256, taken_at, str(candidate_path), size, original_name)
+            self.db.record_file(safe_name, sha256, taken_at, str(candidate_path), size, original_name, commit=commit)
             self._resolve_error_both(run_id, safe_name, original_name)
-            self.db.bump_run(run_id, "files_new")
+            self.db.bump_run(run_id, "files_new", commit=commit)
             self.logger.info("+ %s backed up (%.1f MB)", safe_name, size / (1024 * 1024))
             return {"status": "new", "dest_path": str(candidate_path)}
         finally:

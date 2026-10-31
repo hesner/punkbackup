@@ -362,3 +362,9 @@ iPhone** principal y síguela igual, sin importar cómo construiste el Atajo.
 - Los nombres exactos de las acciones pueden variar levemente entre
   versiones de iOS; si no encuentras una acción con el nombre exacto, busca
   por una palabra clave (ej. "diccionario", "URL", "repetir").
+
+## Si también usas el backup por cable
+
+No tienes que cambiar nada en el Atajo. La primera pasada después de un backup por cable
+vuelve a enviar los archivos que no son de cámara y tarda más, pero no se guardan dos veces. A
+partir de la segunda pasada ya no se piden.

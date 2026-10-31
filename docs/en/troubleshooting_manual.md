@@ -382,3 +382,32 @@ drive to keep up.
 
 Contact whoever helped you install the system, or check the project's
 GitHub repository to report the issue.
+
+## Backup by cable
+
+**"No iPhone found".** Try another cable or USB port and unlock the phone. If Windows
+doesn't recognize it as a device, install **Apple Devices** from the Microsoft Store.
+
+**"Unlock the iPhone and tap Trust".** Tap **Trust** on the phone. If it doesn't
+appear, unplug the cable and plug it in again.
+
+**"The iPhone stopped responding".** It usually locked or the cable moved. What was
+copied stays saved: connect it, unlock it and press **Resume**.
+
+**Photos missing compared to the Photos app.** With iCloud's "Optimize Storage",
+originals that aren't on the phone can't be seen by cable. Run the Shortcut over WiFi.
+
+**JPG where HEIC was expected.** Check Settings → Photos → Transfer to Mac or PC and
+choose **Keep Originals**.
+
+**The Shortcut sends files again after a cable backup.** That's normal on the first pass:
+the server can't compare content until it receives it. The activity log shows `already
+backed up as ..., skipped`: they aren't stored again, and the next pass doesn't ask for
+them. That first pass can take a long time.
+
+**The Shortcut uploaded a video the cable didn't copy.** That's correct: the cable only sees
+what the iPhone shows over USB, while the Shortcut asks the Photos app. That's why it's
+worth running both.
+
+**Two files look like the same video but both were kept.** When in doubt, the app keeps both:
+it compares frames and audio, and prefers a duplicate to losing a video.

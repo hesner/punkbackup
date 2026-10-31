@@ -26,6 +26,153 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "en": "Status: Listening on port {port} 🤘",
     },
 
+    "cable_mode_chip": {"es": "MODO CABLE", "en": "CABLE MODE"},
+    "status_cable": {
+        "es": "WiFi apagado. El Atajo no puede subir fotos ahora.",
+        "en": "WiFi off. The Shortcut can't upload photos right now.",
+    },
+    "btn_mode_to_cable": {"es": "Backup por cable", "en": "Backup by cable"},
+    "btn_mode_to_wifi": {"es": "Backup por WiFi", "en": "Backup by WiFi"},
+    "btn_mode_switching": {"es": "Cambiando…", "en": "Switching…"},
+    "confirm_switch_from_wifi": {
+        "es": "Hay un backup por WiFi en curso y cambiar de modo lo detiene.\n\nLo ya copiado queda guardado y el Atajo retomará lo demás la próxima vez. ¿Cambiar a backup por cable?",
+        "en": "A WiFi backup is in progress and switching stops it.\n\nWhat was copied stays saved and the Shortcut picks up the rest next time. Switch to backup by cable?",
+    },
+    "confirm_switch_from_cable": {
+        "es": "Hay un backup por cable en curso y cambiar de modo lo detiene.\n\nLo ya copiado queda guardado y puedes retomarlo después. ¿Cambiar a backup por WiFi?",
+        "en": "A cable backup is in progress and switching stops it.\n\nWhat was copied stays saved and you can resume later. Switch to backup by WiFi?",
+    },
+    "confirm_close_during_cable": {
+        "es": "Hay un backup por cable en curso. Si cierras, se detiene; lo ya copiado queda guardado. ¿Cerrar?",
+        "en": "A cable backup is in progress. Closing stops it; what was copied stays saved. Close?",
+    },
+    "err_server_did_not_stop": {
+        "es": "El servidor no se detuvo a tiempo, así que sigo en modo WiFi. Intenta de nuevo.",
+        "en": "The server didn't stop in time, so the app stays in WiFi mode. Try again.",
+    },
+    "log_mode_cable": {"es": "Modo cable activo. El servidor WiFi está apagado.", "en": "Cable mode on. The WiFi server is off."},
+    "log_mode_wifi": {"es": "Modo WiFi activo.", "en": "WiFi mode on."},
+    "cable_connection_title": {"es": "Conexión por cable:", "en": "Cable connection:"},
+    "cable_looking": {"es": "Buscando el iPhone…", "en": "Looking for the iPhone…"},
+    "cable_no_device": {
+        "es": "No veo ningún iPhone. Conéctalo con el cable y desbloquéalo.",
+        "en": "No iPhone found. Connect it with the cable and unlock it.",
+    },
+    "cable_no_device_hint": {
+        "es": "Solo se lee del teléfono: nada se borra ni se modifica.",
+        "en": "The phone is only read: nothing is deleted or changed.",
+    },
+    "cable_device_connected": {"es": "✓ {name} conectado", "en": "✓ {name} connected"},
+    "cable_device_not_ready": {
+        "es": "! Desbloquea el iPhone y, si te lo pregunta, toca «Confiar».",
+        "en": "! Unlock the iPhone and, if it asks, tap \"Trust\".",
+    },
+    "cable_device_ready": {
+        "es": "✓ Listo. Solo se lee del teléfono: nada se borra ni se modifica.",
+        "en": "✓ Ready. The phone is only read: nothing is deleted or changed.",
+    },
+    "cable_many_devices": {
+        "es": "! Hay más de un iPhone conectado. Deja solo el de este backup.",
+        "en": "! More than one iPhone is connected. Leave only the one for this backup.",
+    },
+    "btn_start_cable": {"es": "Iniciar backup por cable", "en": "Start backup by cable"},
+    "btn_copy_cable": {"es": "Revisar y copiar {pending} archivos", "en": "Review and copy {pending} files"},
+    "btn_cancel_cable": {"es": "Cancelar", "en": "Cancel"},
+    "btn_stop_cable": {"es": "Detener copia", "en": "Stop copy"},
+    "btn_resume_cable": {"es": "Continuar", "en": "Resume"},
+    "btn_close_cable": {"es": "Cerrar", "en": "Close"},
+    "cable_other_profile_busy": {
+        "es": "Disponible cuando termine la copia del otro perfil.",
+        "en": "Available when the other profile's copy finishes.",
+    },
+    "cable_no_destination": {
+        "es": "Elige una carpeta destino en ⚙ Configuración para usar el cable.",
+        "en": "Choose a destination folder in ⚙ Settings to use the cable.",
+    },
+    "cable_analyzing": {
+        "es": "Analizando el iPhone… {count} archivos vistos. Todavía no se copia nada.",
+        "en": "Analyzing the iPhone… {count} files seen. Nothing is being copied yet.",
+    },
+    "cable_nothing_to_copy": {
+        "es": "Los {total} archivos que el iPhone muestra por USB ya están en este destino. Corre el Atajo por WiFi para cubrir el resto de tu Fototeca.",
+        "en": "The {total} files the iPhone shows over USB are already at this destination. Run the Shortcut over WiFi to cover the rest of your library.",
+    },
+    "cable_summary": {
+        "es": "En el iPhone: {total}  |  Ya respaldados: {already}  |  Por revisar: {pending} ({size}, ~{time})\nSolo se guarda lo que de verdad falte; algunos pueden estar ya respaldados con otro nombre.",
+        "en": "On the iPhone: {total}  |  Already backed up: {already}  |  To review: {pending} ({size}, ~{time})\nOnly what's really missing gets saved; some may already be backed up under another name.",
+    },
+    "cable_low_space": {
+        "es": "! Solo hay {free} libres. Si no alcanza, la copia se detiene sin perder lo copiado.",
+        "en": "! Only {free} free. If it isn't enough, the copy stops without losing what was copied.",
+    },
+    "cable_copying": {
+        "es": "{done} de {total} confirmados  |  {failed} fallidos",
+        "en": "{done} of {total} confirmed  |  {failed} failed",
+    },
+    "cable_speed": {"es": "  |  {speed}/s  |  quedan ~{time}", "en": "  |  {speed}/s  |  ~{time} left"},
+    "cable_keep_connected": {
+        "es": "Mantén el iPhone conectado y desbloqueado.",
+        "en": "Keep the iPhone connected and unlocked.",
+    },
+    "cable_done": {
+        "es": "Listo: {copied} nuevos, {already} ya estaban, {conflicts} con mismo nombre y contenido distinto (se conservan ambos), {failed} fallidos.\nEsto cubre lo que el iPhone muestra por USB; con iCloud pueden faltar originales. Corre el Atajo por WiFi para completar.",
+        "en": "Done: {copied} new, {already} already there, {conflicts} with the same name and different content (both kept), {failed} failed.\nThis covers what the iPhone shows over USB; with iCloud, originals may be missing. Run the Shortcut over WiFi to complete it.",
+    },
+    "cable_analyze_failed": {
+        "es": "No pude leer el iPhone. Revisa que siga conectado y desbloqueado, e intenta de nuevo.",
+        "en": "Couldn't read the iPhone. Check it's still connected and unlocked, and try again.",
+    },
+    "cable_stopped_device": {
+        "es": "El iPhone dejó de responder ({copied} nuevos guardados). Conéctalo, desbloquéalo y continúa.",
+        "en": "The iPhone stopped responding ({copied} new saved). Connect it, unlock it and resume.",
+    },
+    "cable_stopped_destination": {
+        "es": "No pude escribir en el destino ({copied} nuevos guardados). ¿Se llenó o se desconectó? Detalle: {error}",
+        "en": "Couldn't write to the destination ({copied} new saved). Is it full or disconnected? Details: {error}",
+    },
+    "cable_stopped_verification": {
+        "es": "El disco destino sigue fallando al verificar lo copiado ({copied} nuevos guardados). Revisa el disco antes de continuar.",
+        "en": "The destination drive keeps failing to verify what's copied ({copied} new saved). Check the drive before resuming.",
+    },
+    "err_profile_name_empty": {
+        "es": "El nombre del perfil no puede estar vacío.",
+        "en": "The profile name can't be empty.",
+    },
+    "cable_stopped_user": {
+        "es": "Copia detenida ({copied} nuevos guardados). Lo copiado queda a salvo.",
+        "en": "Copy stopped ({copied} new saved). What was copied is safe.",
+    },
+    "cable_unreadable": {
+        "es": "! El iPhone no dejó leer {count} elementos, así que este análisis está incompleto. Desbloquéalo y analiza de nuevo antes de darlo por respaldado.",
+        "en": "! The iPhone wouldn't let {count} items be read, so this analysis is incomplete. Unlock it and analyze again before treating it as backed up.",
+    },
+    "cable_minutes": {"es": "{minutes} min", "en": "{minutes} min"},
+    "cable_hours": {"es": "{hours} h", "en": "{hours} h"},
+    "log_cable_analyzed": {
+        "es": "iPhone analizado: {total} archivos, {already} ya respaldados, {pending} por revisar.",
+        "en": "iPhone analyzed: {total} files, {already} already backed up, {pending} to review.",
+    },
+    "log_cable_result": {
+        "es": "Backup por cable: {copied} nuevos, {already} ya estaban, {conflicts} conflictos, {failed} fallidos.",
+        "en": "Cable backup: {copied} new, {already} already there, {conflicts} conflicts, {failed} failed.",
+    },
+    "confirm_cable_first_time": {
+        "es": "¿Este {device} es de «{name}»?\n\nSus fotos se guardarán en la carpeta de ese perfil, y la app recordará el teléfono para avisarte si luego conectas otro.",
+        "en": "Is this {device} \"{name}\"'s?\n\nIts photos go to that profile's folder, and the app remembers the phone to warn you if you connect a different one.",
+    },
+    "confirm_cable_different_device": {
+        "es": "Este no es el iPhone que «{name}» usó antes. Si es de otra persona, sus fotos se mezclarían en esta carpeta. ¿Continuar de todos modos?",
+        "en": "This isn't the iPhone \"{name}\" used before. If it's someone else's, their photos would mix into this folder. Continue anyway?",
+    },
+    "confirm_cable_other_owner": {
+        "es": "Este iPhone pertenece a «{owner}». Si continúas, sus fotos se guardarán en la carpeta de «{name}». ¿Continuar?",
+        "en": "This iPhone belongs to \"{owner}\". If you continue, its photos go to \"{name}\"'s folder. Continue?",
+    },
+    "warn_cable_busy_profile": {
+        "es": "Este perfil tiene un backup por cable abierto. Ciérralo antes de cambiar su carpeta o eliminarlo.",
+        "en": "This profile has a cable backup open. Close it before changing its folder or deleting it.",
+    },
+
     "server_address_title": {
         "es": "Dirección del servidor (igual para todos los perfiles):",
         "en": "Server address (same for every profile):",

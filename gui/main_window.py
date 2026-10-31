@@ -31,6 +31,7 @@ import queue
 import shutil
 import socket
 import threading
+import time
 from datetime import datetime, timezone
 from pathlib import Path
 from tkinter import filedialog, messagebox
@@ -43,6 +44,8 @@ from server import app as app_module
 from server.config import AppConfig
 from server.diskinfo import format_bytes
 from server.manifest_db import ManifestDB
+from server import device_source
+from server.cable_import import CableImportResult, CablePlan, analyze_device, run_cable_import
 from server.mirror import MirrorSyncResult, get_mirror_status, sync_mirror
 from server.paths import app_root, user_data_dir
 from server.profiles import Profile, ProfileStore
@@ -50,8 +53,12 @@ from server.runner import ServerController
 from server.version import APP_VERSION
 
 from .autostart import set_start_with_windows
+from . import dialogs
 from .dialogs import ask_input, ask_yes_no, show_error, show_info, show_warning
 from .i18n import LANGUAGES, LANGUAGE_NAMES, t as _t
+from .theme import (
+    DARK, LOG_BG, MODE_CHIP_BG, MODE_CHIP_INK, NAV_SELECTED, NAV_SELECTED_HOVER, NAV_SELECTED_INK, TERMINAL_GREEN, XEROX,
+)
 
 # PunkBackup: dark, industrial, deliberately rebellious. "Tus recuerdos. Tu
 # USB. Cero dependencia de la nube." No cloud, no subscription, no light
@@ -61,20 +68,17 @@ ctk.set_default_color_theme("blue")
 
 APP_TITLE = "PunkBackup"  # brand name — stays the same in every language
 
-BG = "#0c0c0e"            # near-black window background
-CARD_BG = "#19191d"        # card/panel background
-CARD_BG_ALT = "#221418"    # subtle warm-dark variant for the log panel
-BORDER = "#2c2c32"
-TEXT_MAIN = "#f2f2f5"
-TEXT_MUTED = "#9a9aa3"
-ACCENT = "#ff2d55"         # punk pink/red — headers, selected nav, highlights
-ACCENT_HOVER = "#c81d4a"
-ACCENT_INK = "#1a0308"      # text color used ON TOP of the accent color
-GREEN = "#2ecc71"
-GREEN_HOVER = "#1e9e58"
-RED = "#ff3b30"
-RED_HOVER = "#c62828"
-TERMINAL_GREEN = "#39d353"  # log text — CRT/hacker-terminal touch
+# BG, CARD_BG, TEXT_MAIN, ACCENT, ... are module globals set from gui/theme.py,
+# so that switching mode changes every color built after it.
+def _use_palette(palette: dict) -> None:
+    globals().update(palette)
+    dialogs.use_palette(palette)
+
+
+_use_palette(DARK)
+
+CABLE_READ_BYTES_PER_SEC = 17_000_000  # measured reading a real iPhone, PLAN.md section 26
+CABLE_DEVICE_POLL_MS = 3000
 
 ICON_PATH = app_root() / "assets" / "punkbackup.ico"
 
@@ -144,7 +148,9 @@ def _destination_is_valid(destination_dir: str) -> bool:
         return False
 
 
-def _compute_status_snapshot(profiles: list[Profile]) -> dict:
+def _compute_status_snapshot(
+    profiles: list[Profile], include_paused: bool = False, skip_ids: frozenset = frozenset(),
+) -> dict:
     """Every blocking disk/SQLite call the GUI's periodic refresh needs is
     isolated here, deliberately kept as a plain module-level function (not
     a MainWindow method) so it's obvious by construction that it never
@@ -154,13 +160,20 @@ def _compute_status_snapshot(profiles: list[Profile]) -> dict:
     fetched on the main thread — see _poll_tick) but never touches
     `self.profile_store` directly, since ProfileStore's own dict isn't
     locked against concurrent mutation from the GUI thread (e.g. adding or
-    deleting a profile) — see AGENTS.md lesson 22."""
+    deleting a profile) — see AGENTS.md lesson 22.
+
+    `include_paused`: in cable mode a paused profile can still back up, so its
+    card needs its real numbers. `skip_ids`: a cable copy is writing to these
+    destinations right now; polling them would only compete for their database
+    on a slow USB (AGENTS.md lesson 10). Their cards keep the last values."""
     per_profile: dict[str, dict] = {}
     for profile in profiles:
+        if profile.id in skip_ids:
+            continue
         entry: dict = {
             "status": None, "status_error": None, "mirror_status": None, "destination_unreachable": False,
         }
-        if profile.enabled and profile.destination_dir:
+        if (profile.enabled or include_paused) and profile.destination_dir:
             try:
                 entry["status"] = app_module.get_status_for_profile(profile)
             except HTTPException as exc:
@@ -185,10 +198,11 @@ def _compute_status_snapshot(profiles: list[Profile]) -> dict:
         per_profile[profile.id] = entry
 
     aggregate = None
-    try:
-        aggregate = app_module.get_aggregate_status()
-    except Exception:
-        pass
+    if not skip_ids:  # it would read those same databases
+        try:
+            aggregate = app_module.get_aggregate_status()
+        except Exception:
+            pass
     return {"per_profile": per_profile, "aggregate": aggregate}
 
 
@@ -242,14 +256,94 @@ def _profile_stats_text(
     return "\n".join(result_lines + lines)
 
 
+def _cable_time_text(seconds: float, lang: str) -> str:
+    minutes = max(1, round(seconds / 60))
+    if minutes < 60:
+        return _t("cable_minutes", lang, minutes=minutes)
+    return _t("cable_hours", lang, hours=round(minutes / 60, 1))
+
+
+def _cable_view_for(profile: Profile, flow: Optional[dict], device: Optional[device_source.DeviceInfo], lang: str) -> dict:
+    """What a profile's card shows in cable mode, as plain data: pure, so the
+    whole state machine is testable without a window. `tone` is muted/ok/warn;
+    `actions` are (label, action name) pairs handled by _on_cable_action."""
+    view = {"text": "", "tone": "muted", "progress": None, "actions": [], "start_enabled": False, "show_start": True}
+    mine = flow is not None and flow["profile_id"] == profile.id
+
+    if not mine:
+        if flow is not None and flow["state"] in ("analyzing", "summary", "copying"):
+            view["text"] = _t("cable_other_profile_busy", lang)
+        elif not profile.destination_dir:
+            view["text"] = _t("cable_no_destination", lang)
+        else:
+            view["start_enabled"] = device is not None and device.ready
+        return view
+
+    view["show_start"] = False
+    state = flow["state"]
+    if state == "analyzing":
+        view["text"] = _t("cable_analyzing", lang, count=flow["scanned"])
+        view["actions"] = [(_t("btn_cancel_cable", lang), "cancel")]
+    elif state == "summary":
+        plan: CablePlan = flow["plan"]
+        if plan.unreadable:
+            view.update(text=_t("cable_unreadable", lang, count=plan.unreadable), tone="warn")
+            view["actions"] = [(_t("btn_resume_cable", lang), "start"), (_t("btn_close_cable", lang), "close")]
+            if plan.pending:
+                view["actions"].insert(1, (_t("btn_copy_cable", lang, pending=len(plan.pending)), "copy"))
+        elif not plan.pending:
+            view.update(text=_t("cable_nothing_to_copy", lang, total=plan.total_on_device), tone="ok")
+            view["actions"] = [(_t("btn_close_cable", lang), "close")]
+        else:
+            view["text"] = _t(
+                "cable_summary", lang, total=plan.total_on_device, already=plan.already, pending=len(plan.pending),
+                size=format_bytes(plan.pending_bytes),
+                time=_cable_time_text(plan.pending_bytes / CABLE_READ_BYTES_PER_SEC, lang),
+            )
+            if plan.insufficient_space:
+                view["text"] += "\n" + _t("cable_low_space", lang, free=format_bytes(plan.free_bytes))
+                view["tone"] = "warn"
+            view["actions"] = [
+                (_t("btn_copy_cable", lang, pending=len(plan.pending)), "copy"),
+                (_t("btn_cancel_cable", lang), "close"),
+            ]
+    elif state == "copying":
+        total = max(flow["total"], 1)
+        view["progress"] = flow["done"] / total
+        view["text"] = _t("cable_copying", lang, done=flow["done"], total=flow["total"], failed=flow["failed"])
+        elapsed = flow.get("elapsed") or 0
+        if flow["bytes"] and elapsed > 0:
+            speed = flow["bytes"] / elapsed
+            remaining = max(flow["plan"].pending_bytes - flow["bytes"], 0) / speed
+            view["text"] += _t(
+                "cable_speed", lang, speed=format_bytes(speed), time=_cable_time_text(remaining, lang),
+            )
+        view["text"] += "\n" + _t("cable_keep_connected", lang)
+        view["actions"] = [(_t("btn_stop_cable", lang), "cancel")]
+    elif state == "done":
+        result: CableImportResult = flow["result"]
+        view["text"] = _t(
+            "cable_done", lang, copied=result.copied, already=result.already_had,
+            conflicts=result.conflicts, failed=result.failed,
+        )
+        view["tone"] = "warn" if result.failed else "ok"
+        view["actions"] = [(_t("btn_close_cable", lang), "close")]
+    else:  # stopped
+        view.update(text=flow["message"], tone="warn")
+        view["actions"] = [(_t("btn_resume_cable", lang), "start"), (_t("btn_close_cable", lang), "close")]
+    return view
+
+
 class ProfileStatusRow(ctk.CTkFrame):
-    """Used on the "Principal" screen: name, stats, and the enable/pause switch."""
+    """Used on the "Principal" screen: name, stats, and either the enable/pause
+    switch (WiFi mode) or a start-by-cable button plus its progress (cable mode).
+    Pausing only blocks a profile's WiFi token, so it has no place in cable mode."""
 
     def __init__(
         self, master, profile: Profile, lang: str, on_toggle, status: Optional[dict] = None,
-        destination_unreachable: bool = False,
+        destination_unreachable: bool = False, cable_mode: bool = False, on_cable_action=None,
     ):
-        super().__init__(master, fg_color=CARD_BG, border_width=1, border_color=BORDER, corner_radius=8)
+        super().__init__(master, fg_color=CARD_BG, border_width=BORDER_WIDTH, border_color=BORDER, corner_radius=8)
         self.grid_columnconfigure(0, weight=1)
         self.profile = profile
         self.lang = lang
@@ -265,6 +359,12 @@ class ProfileStatusRow(ctk.CTkFrame):
         )
         self.stats_label.grid(row=1, column=0, sticky="w", padx=12, pady=(0, 10))
 
+        self._on_cable_action = on_cable_action
+        self._cable_mode = cable_mode
+        if cable_mode:
+            self._build_cable_controls()
+            return
+
         switch_frame = ctk.CTkFrame(self, fg_color="transparent")
         switch_frame.grid(row=0, column=1, rowspan=2, padx=12, pady=8, sticky="e")
         self.state_label = ctk.CTkLabel(
@@ -277,6 +377,68 @@ class ProfileStatusRow(ctk.CTkFrame):
             command=lambda: self._on_toggle(self.profile, self.switch_var.get()),
         )
         self.switch.pack(side="left")
+
+    def _build_cable_controls(self) -> None:
+        self.cable_start_btn = ctk.CTkButton(
+            self, text=_t("btn_start_cable", self.lang), width=230, fg_color=ACTION, hover_color=ACTION_HOVER,
+            text_color=ACTION_INK, font=ctk.CTkFont(weight="bold"),
+            command=lambda: self._on_cable_action(self.profile, "start"),
+        )
+        self.cable_start_btn.grid(row=0, column=1, rowspan=2, padx=12, pady=8, sticky="e")
+
+        self.cable_frame = ctk.CTkFrame(self, fg_color="transparent")
+        self.cable_frame.grid(row=2, column=0, columnspan=2, sticky="ew", padx=12, pady=(0, 10))
+        self.cable_frame.grid_columnconfigure(0, weight=1)
+        self.cable_text = ctk.CTkLabel(self.cable_frame, text="", justify="left", wraplength=900)
+        self.cable_text.grid(row=0, column=0, sticky="w")
+        self.cable_progress = ctk.CTkProgressBar(self.cable_frame, fg_color=PROGRESS_TRACK, progress_color=ACTION)
+        self.cable_buttons = ctk.CTkFrame(self.cable_frame, fg_color="transparent")
+        self.cable_buttons.grid(row=2, column=0, sticky="w", pady=(4, 0))
+        self.cable_buttons.grid_remove()  # empty, a frame still takes its default 200px of height
+        self._cable_actions: list = []
+
+    def set_cable_view(self, view: dict) -> None:
+        """Refreshed in place on every status tick, so unchanged parts are left
+        alone: rebuilding the buttons would swallow a click landing on them."""
+        if view["show_start"]:
+            self.cable_start_btn.grid()
+            enabled = view["start_enabled"]
+            self.cable_start_btn.configure(
+                state="normal" if enabled else "disabled",
+                fg_color=ACTION if enabled else PROGRESS_TRACK,  # CustomTkinter keeps the color when disabled
+                text_color_disabled=TEXT_MUTED,
+            )
+        else:
+            self.cable_start_btn.grid_remove()
+        tone = {"muted": TEXT_MUTED, "ok": GREEN, "warn": AMBER}[view["tone"]]
+        self.cable_text.configure(text=view["text"], text_color=tone)
+        if view["text"] or view["actions"]:
+            self.cable_frame.grid()
+        else:
+            self.cable_frame.grid_remove()
+        if view["progress"] is None:
+            self.cable_progress.grid_remove()
+        else:
+            self.cable_progress.grid(row=1, column=0, sticky="ew", pady=(4, 2))
+            self.cable_progress.set(view["progress"])
+        if view["actions"] != self._cable_actions:
+            self._cable_actions = view["actions"]
+            for child in self.cable_buttons.winfo_children():
+                child.destroy()
+            if view["actions"]:
+                self.cable_buttons.grid()
+            else:
+                self.cable_buttons.grid_remove()
+            for i, (label, action) in enumerate(view["actions"]):
+                primary = i == 0 and action in ("copy", "start")
+                ctk.CTkButton(
+                    self.cable_buttons, text=label, width=110,
+                    fg_color=ACTION if primary else "transparent",
+                    hover_color=ACTION_HOVER if primary else CARD_BG_ALT,
+                    text_color=ACTION_INK if primary else TEXT_MAIN,
+                    border_width=0 if primary else 2, border_color=BORDER,
+                    command=lambda a=action: self._on_cable_action(self.profile, a),
+                ).pack(side="left", padx=(0, 8))
 
     def _state_text(self) -> str:
         return _t("profile_active", self.lang) if self.profile.enabled else _t("profile_paused", self.lang)
@@ -293,6 +455,9 @@ class ProfileStatusRow(ctk.CTkFrame):
         self._destination_unreachable = destination_unreachable
         self.name_label.configure(text=profile.name)
         self.stats_label.configure(text=_profile_stats_text(profile, lang, status, destination_unreachable))
+        if self._cable_mode:
+            self.cable_start_btn.configure(text=_t("btn_start_cable", lang))
+            return
         self.state_label.configure(text=self._state_text())
         if self.switch_var.get() != profile.enabled:
             self.switch_var.set(profile.enabled)
@@ -309,7 +474,7 @@ class ProfileManageRow(ctk.CTkFrame):
         status: Optional[dict] = None, mirror_status: Optional[dict] = None,
         destination_unreachable: bool = False,
     ):
-        super().__init__(master, fg_color=CARD_BG, border_width=1, border_color=BORDER, corner_radius=8)
+        super().__init__(master, fg_color=CARD_BG, border_width=BORDER_WIDTH, border_color=BORDER, corner_radius=8)
         self.grid_columnconfigure(0, weight=1)
         self.profile = profile
         self.lang = lang
@@ -354,7 +519,7 @@ class ProfileManageRow(ctk.CTkFrame):
         )
         self.btn_regenerate.pack(side="left", padx=2)
         self.btn_delete = ctk.CTkButton(
-            btns, width=80, fg_color=RED, hover_color=RED_HOVER, text_color=TEXT_MAIN,
+            btns, width=80, fg_color=RED, hover_color=RED_HOVER, text_color=RED_INK,
             command=lambda: callbacks["delete"](self.profile),
         )
         self.btn_delete.pack(side="left", padx=2)
@@ -456,7 +621,7 @@ class ProfileManageRow(ctk.CTkFrame):
         self.lang = lang
         if syncing:
             self.btn_sync_mirror.configure(
-                text=_t("btn_stop_mirror_sync", lang), fg_color=RED, hover_color=RED_HOVER, text_color=TEXT_MAIN,
+                text=_t("btn_stop_mirror_sync", lang), fg_color=RED, hover_color=RED_HOVER, text_color=RED_INK,
             )
         else:
             self.btn_sync_mirror.configure(
@@ -510,7 +675,7 @@ class SettingSwitchRow(ctk.CTkFrame):
     setting — same card + switch visual language as ProfileStatusRow."""
 
     def __init__(self, master, label_key: str, lang: str, initial: bool, on_toggle):
-        super().__init__(master, fg_color=CARD_BG, border_width=1, border_color=BORDER, corner_radius=8)
+        super().__init__(master, fg_color=CARD_BG, border_width=BORDER_WIDTH, border_color=BORDER, corner_radius=8)
         self.grid_columnconfigure(0, weight=1)
         self.label_key = label_key
         self.lang = lang
@@ -560,7 +725,7 @@ class SettingNumberRow(ctk.CTkFrame):
         self, master, label_key: str, lang: str, initial: int, on_change,
         minimum: int = 1, maximum: int | None = None,
     ):
-        super().__init__(master, fg_color=CARD_BG, border_width=1, border_color=BORDER, corner_radius=8)
+        super().__init__(master, fg_color=CARD_BG, border_width=BORDER_WIDTH, border_color=BORDER, corner_radius=8)
         self.grid_columnconfigure(0, weight=1)
         self.label_key = label_key
         self.lang = lang
@@ -622,7 +787,10 @@ class SettingNumberRow(ctk.CTkFrame):
             self._value = value
             self._on_change(value)
         self.save_btn.configure(state="disabled", text=_t("btn_saved", self.lang), fg_color=GREEN, hover_color=GREEN)
-        self.after(1200, lambda: self.save_btn.configure(text=_t("btn_save", self.lang), fg_color=ACCENT, hover_color=ACCENT_HOVER))
+        # winfo_exists: switching mode rebuilds the screen and could destroy this button first.
+        self.after(1200, lambda: self.save_btn.winfo_exists() and self.save_btn.configure(
+            text=_t("btn_save", self.lang), fg_color=ACCENT, hover_color=ACCENT_HOVER,
+        ))
 
     def set_lang(self, lang: str) -> None:
         self.lang = lang
@@ -633,11 +801,30 @@ class SettingNumberRow(ctk.CTkFrame):
 
 
 class MainWindow(ctk.CTk):
-    def __init__(self):
+    def __init__(self, cable_backend=device_source):
+        """`cable_backend` provides com_thread/find_devices/open_source; the
+        real one talks to the phone, tools/ui_preview.py passes a simulated one."""
         super().__init__()
+        self.cable_backend = cable_backend
+        self.cable_mode = False
+        self._switching_mode = False
+        self._restart_server_on_wifi = False
+        self._cable_devices: list[device_source.DeviceInfo] = []
+        self._cable_devices_known = False  # False until the first scan answers
+        self._cable_tick_generation = 0  # a tick from an earlier cable-mode session stops itself
+        # Held by whoever is talking to the phone: a second WPD session during
+        # a copy has returned "resource in use" and even wrong bytes.
+        self._cable_device_lock = threading.Lock()
+        self._closing = False
+        self._cable_last_error: Optional[str] = None
+        self._cable_flow: Optional[dict] = None
+        self._cable_cancel: Optional[threading.Event] = None
+        self._cable_thread: Optional[threading.Thread] = None
+        self._switch_after_cable_stops = False
         self.cfg = AppConfig.load()
         self.lang = self.cfg.language if self.cfg.language in LANGUAGES else "es"
 
+        _use_palette(DARK)  # the app always opens in WiFi mode
         self.configure(fg_color=BG)
         self.title(f"{APP_TITLE} — v{APP_VERSION}")
         if ICON_PATH.exists():
@@ -676,16 +863,7 @@ class MainWindow(ctk.CTk):
         self._latest_snapshot: dict = {"per_profile": {}, "aggregate": None}
         self._poll_in_flight = False
 
-        self._build_header()
-        self._build_nav()
-
-        self.content_area = ctk.CTkFrame(self, fg_color=BG)
-        self.content_area.pack(fill="both", expand=True, padx=12, pady=(0, 12))
-        self.tab_principal = ctk.CTkFrame(self.content_area, fg_color=BG)
-        self.tab_settings = ctk.CTkFrame(self.content_area, fg_color=BG)
-
-        self._build_principal_tab()
-        self._build_settings_tab()
+        self._build_screens()
         self._show_screen("main")
 
         self._setup_log_handler()
@@ -737,22 +915,35 @@ class MainWindow(ctk.CTk):
     def t(self, key: str, **kwargs) -> str:
         return _t(key, self.lang, **kwargs)
 
+    def _build_screens(self) -> None:
+        self._build_header()
+        self._build_nav()
+
+        self.content_area = ctk.CTkFrame(self, fg_color=BG)
+        self.content_area.pack(fill="both", expand=True, padx=12, pady=(0, 12))
+        self.tab_principal = ctk.CTkFrame(self.content_area, fg_color=BG)
+        self.tab_settings = ctk.CTkFrame(self.content_area, fg_color=BG)
+
+        self._build_principal_tab()
+        self._build_settings_tab()
+
     # ------------------------------------------------------------------
     # Header / nav
     # ------------------------------------------------------------------
     def _build_header(self) -> None:
-        header = ctk.CTkFrame(self, fg_color="transparent")
-        header.pack(fill="x", padx=16, pady=(14, 0))
+        self.header_frame = ctk.CTkFrame(self, fg_color=HEADER_BG, corner_radius=0)
+        self.header_frame.pack(fill="x")
         ctk.CTkLabel(
-            header, text="PUNKBACKUP", font=ctk.CTkFont(size=20, weight="bold"), text_color=ACCENT,
-        ).pack(anchor="w")
+            self.header_frame, text="PUNKBACKUP", font=ctk.CTkFont(size=20, weight="bold"), text_color=HEADER_TITLE,
+        ).pack(anchor="w", padx=16, pady=(14, 0))
         self.tagline_label = ctk.CTkLabel(
-            header, text=self.t("tagline"), font=ctk.CTkFont(size=11, slant="italic"), text_color=TEXT_MUTED,
+            self.header_frame, text=self.t("tagline"), font=ctk.CTkFont(size=11, slant="italic"), text_color=HEADER_TEXT,
         )
-        self.tagline_label.pack(anchor="w", pady=(0, 4))
+        self.tagline_label.pack(anchor="w", padx=16, pady=(0, 4))
 
     def _build_nav(self) -> None:
-        nav = ctk.CTkFrame(self, fg_color=CARD_BG, corner_radius=10)
+        self.nav_frame = ctk.CTkFrame(self, fg_color=NAV_BG, corner_radius=10)
+        nav = self.nav_frame
         nav.pack(padx=16, pady=(8, 4), anchor="w")
         self.nav_main_btn = ctk.CTkButton(
             nav, text=self.t("nav_main"), corner_radius=8, command=lambda: self._show_screen("main"),
@@ -769,12 +960,12 @@ class MainWindow(ctk.CTk):
         self.tab_settings.pack_forget()
         if screen == "main":
             self.tab_principal.pack(fill="both", expand=True)
-            self.nav_main_btn.configure(fg_color=ACCENT, text_color=ACCENT_INK, hover_color=ACCENT_HOVER)
-            self.nav_settings_btn.configure(fg_color="transparent", text_color=TEXT_MAIN, hover_color=CARD_BG_ALT)
+            self.nav_main_btn.configure(fg_color=NAV_SELECTED, text_color=NAV_SELECTED_INK, hover_color=NAV_SELECTED_HOVER)
+            self.nav_settings_btn.configure(fg_color="transparent", text_color=NAV_TEXT, hover_color=NAV_HOVER)
         else:
             self.tab_settings.pack(fill="both", expand=True)
-            self.nav_settings_btn.configure(fg_color=ACCENT, text_color=ACCENT_INK, hover_color=ACCENT_HOVER)
-            self.nav_main_btn.configure(fg_color="transparent", text_color=TEXT_MAIN, hover_color=CARD_BG_ALT)
+            self.nav_settings_btn.configure(fg_color=NAV_SELECTED, text_color=NAV_SELECTED_INK, hover_color=NAV_SELECTED_HOVER)
+            self.nav_main_btn.configure(fg_color="transparent", text_color=NAV_TEXT, hover_color=NAV_HOVER)
 
     # ------------------------------------------------------------------
     # "Principal" screen
@@ -783,17 +974,36 @@ class MainWindow(ctk.CTk):
         pad = {"padx": 12, "pady": 8}
         parent = self.tab_principal
 
-        ctrl_frame = ctk.CTkFrame(parent, fg_color=CARD_BG, border_width=1, border_color=BORDER)
+        ctrl_frame = ctk.CTkFrame(parent, fg_color=CONTROL_BG, border_width=BORDER_WIDTH, border_color=BORDER)
         ctrl_frame.pack(fill="x", **pad)
         self.start_btn = ctk.CTkButton(
             ctrl_frame, text=self.t("btn_start"), command=self._toggle_server, fg_color=GREEN,
             hover_color=GREEN_HOVER, text_color="#08120b", font=ctk.CTkFont(weight="bold"),
         )
-        self.start_btn.pack(side="left", padx=10, pady=10)
-        self.status_label = ctk.CTkLabel(ctrl_frame, text=self.t("status_stopped"), text_color=TEXT_MUTED)
+        # A frame holding the text: a label with its own background and square
+        # corners rendered with a notch out of its corner on the real screen.
+        chip_frame = ctk.CTkFrame(ctrl_frame, fg_color=MODE_CHIP_BG, corner_radius=4)
+        self.mode_chip = ctk.CTkLabel(
+            chip_frame, text=self.t("cable_mode_chip"), fg_color="transparent", text_color=MODE_CHIP_INK,
+            font=ctk.CTkFont(weight="bold"), height=26,
+        )
+        self.mode_chip.pack(padx=10, pady=2)
+        if self.cable_mode:
+            # Each profile starts its own copy, so "start backup" has no job here.
+            chip_frame.pack(side="left", padx=10, pady=10)
+        else:
+            self.start_btn.pack(side="left", padx=10, pady=10)
+        self.status_label = ctk.CTkLabel(ctrl_frame, text=self.t("status_stopped"), text_color=CONTROL_TEXT)
         self.status_label.pack(side="left", padx=12)
+        self.mode_btn = ctk.CTkButton(
+            ctrl_frame, text=self.t("btn_mode_to_wifi" if self.cable_mode else "btn_mode_to_cable"),
+            command=self._on_mode_button, fg_color=MODE_BUTTON, hover_color=MODE_BUTTON_HOVER,
+            text_color=MODE_BUTTON_INK, text_color_disabled=MODE_BUTTON_INK, font=ctk.CTkFont(weight="bold"),
+            border_width=MODE_BUTTON_BORDER, border_color="#000000",
+        )
+        self.mode_btn.pack(side="right", padx=10, pady=10)
 
-        info_frame = ctk.CTkFrame(parent, fg_color=CARD_BG, border_width=1, border_color=BORDER)
+        info_frame = ctk.CTkFrame(parent, fg_color=CARD_BG, border_width=BORDER_WIDTH, border_color=BORDER)
         info_frame.pack(fill="x", **pad)
         self.server_address_title_label = ctk.CTkLabel(
             info_frame, text=self.t("server_address_title"), font=ctk.CTkFont(weight="bold"), text_color=TEXT_MAIN,
@@ -804,7 +1014,7 @@ class MainWindow(ctk.CTk):
         self.ip_label = ctk.CTkLabel(info_frame, text=self.t("ip_placeholder"), text_color=TEXT_MUTED)
         self.ip_label.pack(anchor="w", padx=10, pady=(2, 10))
 
-        profiles_frame = ctk.CTkFrame(parent, fg_color=CARD_BG, border_width=1, border_color=BORDER)
+        profiles_frame = ctk.CTkFrame(parent, fg_color=CARD_BG, border_width=BORDER_WIDTH, border_color=BORDER)
         profiles_frame.pack(fill="both", expand=True, **pad)
         self.profiles_connected_title_label = ctk.CTkLabel(
             profiles_frame, text=self.t("profiles_connected_title"),
@@ -815,7 +1025,7 @@ class MainWindow(ctk.CTk):
         self.principal_profiles_container.pack(fill="both", expand=True, padx=8, pady=(0, 10))
         self.principal_profiles_container.grid_columnconfigure(0, weight=1)
 
-        stats_frame = ctk.CTkFrame(parent, fg_color=CARD_BG, border_width=1, border_color=BORDER)
+        stats_frame = ctk.CTkFrame(parent, fg_color=CARD_BG, border_width=BORDER_WIDTH, border_color=BORDER)
         stats_frame.pack(fill="x", **pad)
         self.stats_label = ctk.CTkLabel(
             stats_frame, text=self.t("aggregate_stats", last=self.t("never"), total=0), text_color=TEXT_MAIN
@@ -840,10 +1050,10 @@ class MainWindow(ctk.CTk):
         )
         self.log_expand_btn.grid(row=0, column=1, padx=(8, 0))
 
-        self.log_frame = ctk.CTkFrame(parent, fg_color=CARD_BG_ALT, border_width=1, border_color=BORDER)
+        self.log_frame = ctk.CTkFrame(parent, fg_color=CARD_BG_ALT, border_width=BORDER_WIDTH, border_color=BORDER)
         self.log_box = ctk.CTkTextbox(
             self.log_frame, wrap="word", font=ctk.CTkFont(family="Consolas", size=12),
-            fg_color="#050505", text_color=TERMINAL_GREEN,
+            fg_color=LOG_BG, text_color=TERMINAL_GREEN,
         )
         self.log_box.pack(fill="both", expand=True, padx=8, pady=8)
         self.log_box.configure(state="disabled")
@@ -856,7 +1066,7 @@ class MainWindow(ctk.CTk):
     def _build_settings_tab(self) -> None:
         parent = self.tab_settings
 
-        lang_frame = ctk.CTkFrame(parent, fg_color=CARD_BG, border_width=1, border_color=BORDER)
+        lang_frame = ctk.CTkFrame(parent, fg_color=CARD_BG, border_width=BORDER_WIDTH, border_color=BORDER)
         lang_frame.pack(fill="x", padx=12, pady=(12, 8))
         title_row = ctk.CTkFrame(lang_frame, fg_color="transparent")
         title_row.pack(fill="x", padx=10, pady=(10, 4))
@@ -969,14 +1179,17 @@ class MainWindow(ctk.CTk):
 
         running = bool(self.controller and self.controller.running)
         self.start_btn.configure(text=self.t("btn_stop") if running else self.t("btn_start"))
-        if self._server_starting:
+        self.mode_btn.configure(text=self.t("btn_mode_to_wifi" if self.cable_mode else "btn_mode_to_cable"))
+        self.mode_chip.configure(text=self.t("cable_mode_chip"))
+        if self.cable_mode:
+            self.status_label.configure(text=self.t("status_cable"))
+        elif self._server_starting:
             self.status_label.configure(text=self.t("status_starting"))
         else:
             self.status_label.configure(
                 text=self.t("status_listening", port=self.cfg.port) if running else self.t("status_stopped")
             )
 
-        self.server_address_title_label.configure(text=self.t("server_address_title"))
         self._update_connection_info()
         self.profiles_connected_title_label.configure(text=self.t("profiles_connected_title"))
 
@@ -1029,6 +1242,10 @@ class MainWindow(ctk.CTk):
     # Destination / server control
     # ------------------------------------------------------------------
     def _update_connection_info(self) -> None:
+        if self.cable_mode:
+            self._update_cable_connection_info()
+            return
+        self.server_address_title_label.configure(text=self.t("server_address_title"))
         hostname = socket.gethostname()
         self.address_label.configure(
             text=self.t("address_value", url=f"http://{hostname}.local:{self.cfg.port}")
@@ -1159,8 +1376,369 @@ class MainWindow(ctk.CTk):
         self.start_btn.configure(
             text=self.t("btn_start"), fg_color=GREEN, hover_color=GREEN_HOVER, text_color="#08120b"
         )
-        self.status_label.configure(text=self.t("status_stopped"), text_color=TEXT_MUTED)
+        self.status_label.configure(text=self.t("status_stopped"), text_color=CONTROL_TEXT)
         self._log_local(self.t("log_server_stopped"))
+
+    # ------------------------------------------------------------------
+    # WiFi / cable mode. Exactly one path can write at a time, by design:
+    # the server is off for as long as cable mode lasts.
+    # ------------------------------------------------------------------
+    def _transfer_in_progress(self) -> bool:
+        if self.cable_mode:
+            return self._cable_flow is not None and self._cable_flow["state"] in ("analyzing", "copying")
+        if not (self.controller and self.controller.running):
+            return False
+        per_profile = self._latest_snapshot.get("per_profile", {})
+        return any((entry.get("status") or {}).get("state") == "running" for entry in per_profile.values())
+
+    def _on_mode_button(self) -> None:
+        if self._switching_mode or self._server_starting:
+            return
+        if self._transfer_in_progress() and not ask_yes_no(
+            self, self.lang, self.t("dlg_title_confirm"),
+            self.t("confirm_switch_from_cable" if self.cable_mode else "confirm_switch_from_wifi"),
+        ):
+            return
+        self._switching_mode = True
+        self.mode_btn.configure(text=self.t("btn_mode_switching"), state="disabled")
+        if self.cable_mode:
+            if self._cable_thread is not None and self._cable_thread.is_alive():
+                # Stops between files; _on_cable_finished resumes the switch.
+                self._switch_after_cable_stops = True
+                self._cable_cancel.set()
+                return
+            self._finish_mode_switch()
+            return
+
+        controller = self.controller
+        self._restart_server_on_wifi = bool(controller and controller.running)
+
+        def worker() -> None:
+            error = None
+            try:
+                if controller and controller.running:
+                    controller.stop(timeout=60.0, force=True)
+                    if controller.running:
+                        error = self.t("err_server_did_not_stop")
+                if error is None:
+                    app_module.close_open_runs()
+            except Exception as exc:
+                error = str(exc)
+            self.after(0, lambda: self._on_server_stopped_for_cable(error))
+            if error and controller:
+                # It was told to exit and still will, once its last file lands.
+                while controller.running:
+                    time.sleep(1)
+                self.after(0, self._stop_server)
+
+        threading.Thread(target=worker, daemon=True).start()
+
+    def _on_server_stopped_for_cable(self, error: Optional[str]) -> None:
+        if error:
+            self._switching_mode = False
+            self.mode_btn.configure(text=self.t("btn_mode_to_cable"), state="normal")
+            self._log_local(f"ERROR: {error}")
+            show_error(self, self.lang, self.t("dlg_title_error"), error)
+            return
+        if self._restart_server_on_wifi:
+            self._log_local(self.t("log_server_stopped"))
+        self._finish_mode_switch()
+
+    def _finish_mode_switch(self) -> None:
+        to_cable = not self.cable_mode
+        self.cable_mode = to_cable
+        self._cable_flow = None
+        self._cable_devices = []
+        self._cable_devices_known = False
+        self._cable_tick_generation += 1
+        self._rebuild_for_mode()
+        self._switching_mode = False
+        self._log_local(self.t("log_mode_cable" if to_cable else "log_mode_wifi"))
+        if to_cable:
+            if not app_module.is_configured():
+                # Only needed for the cards' numbers; this doesn't listen on anything.
+                app_module.configure(self.profile_store)
+            self._cable_device_tick(self._cable_tick_generation)
+        elif self._restart_server_on_wifi:
+            self._restart_server_on_wifi = False
+            self._toggle_server()
+
+    def _rebuild_for_mode(self) -> None:
+        """Rebuilds every widget in the other palette. Reconfiguring them in
+        place would mean tracking each color of each widget; this reuses the
+        normal build code, so the two modes can't drift apart."""
+        log_text = self.log_box.get("1.0", "end-1c")
+        screen = self.current_screen
+        was_zoomed = dialogs._capture_zoom(self)
+
+        self.header_frame.destroy()
+        self.nav_frame.destroy()
+        self.content_area.destroy()
+        self._principal_rows.clear()
+        self._settings_rows.clear()
+        self._principal_empty_label = None
+        self._settings_empty_label = None
+
+        palette = XEROX if self.cable_mode else DARK
+        _use_palette(palette)
+        ctk.set_appearance_mode(palette["APPEARANCE"])
+        self.configure(fg_color=BG)
+        self._build_screens()
+        self._show_screen(screen)
+
+        self.log_box.configure(state="normal")
+        self.log_box.insert("end", log_text)
+        self.log_box.see("end")
+        self.log_box.configure(state="disabled")
+
+        self._update_connection_info()
+        if self.cable_mode:
+            self.status_label.configure(text=self.t("status_cable"), text_color=CONTROL_TEXT)
+        self._refresh_aggregate_stats()
+        self._refresh_principal_profiles()
+        self._refresh_settings_profiles()
+        for profile_id in self._mirror_cancel_events:  # a mirror sync keeps running across modes
+            row = self._settings_rows.get(profile_id)
+            if row is not None:
+                row.set_syncing(True, self.lang)
+        dialogs._restore_zoom(self, was_zoomed)
+
+    # ------------------------------------------------------------------
+    # Backup by cable. See PLAN.md section 26 and server/cable_import.py.
+    # ------------------------------------------------------------------
+    def _cable_device(self) -> Optional[device_source.DeviceInfo]:
+        return self._cable_devices[0] if self._cable_devices else None
+
+    def _update_cable_connection_info(self) -> None:
+        self.server_address_title_label.configure(text=self.t("cable_connection_title"))
+        device = self._cable_device()
+        if not self._cable_devices_known:
+            lines = [(self.t("cable_looking"), TEXT_MUTED), ("", TEXT_MUTED)]
+        elif device is None:
+            lines = [(self.t("cable_no_device"), AMBER), (self.t("cable_no_device_hint"), TEXT_MUTED)]
+        elif not device.ready:
+            lines = [(self.t("cable_device_connected", name=device.name), GREEN), (self.t("cable_device_not_ready"), AMBER)]
+        else:
+            lines = [(self.t("cable_device_connected", name=device.name), GREEN), (self.t("cable_device_ready"), GREEN)]
+        if len(self._cable_devices) > 1:
+            lines[1] = (self.t("cable_many_devices"), AMBER)
+        self.address_label.configure(text=lines[0][0], text_color=lines[0][1])
+        self.ip_label.configure(text=lines[1][0], text_color=lines[1][1])
+
+    def _cable_device_tick(self, generation: int) -> None:
+        """Runs only in cable mode, and never while a transfer has the phone."""
+        if generation != self._cable_tick_generation:
+            return
+
+        def worker() -> None:
+            if not self._cable_device_lock.acquire(blocking=False):
+                self.after(CABLE_DEVICE_POLL_MS, lambda: self._cable_device_tick(generation))
+                return
+            error = None
+            devices = []
+            try:
+                with self.cable_backend.com_thread():
+                    devices = self.cable_backend.find_devices()
+            except Exception as exc:
+                error = str(exc)
+            finally:
+                self._cable_device_lock.release()
+            self.after(0, lambda: self._on_cable_devices(devices, error, generation))
+
+        threading.Thread(target=worker, daemon=True).start()
+
+    def _on_cable_devices(self, devices: list, error: Optional[str], generation: int) -> None:
+        if generation != self._cable_tick_generation:
+            return
+        if error and error != self._cable_last_error:
+            self._log_local(f"ERROR: {error}")  # once per different error, not every 3 seconds
+        self._cable_last_error = error
+        self._cable_devices = devices
+        self._cable_devices_known = True
+        self._update_cable_connection_info()
+        self._refresh_cable_views()
+        self.after(CABLE_DEVICE_POLL_MS, lambda: self._cable_device_tick(generation))
+
+    def _refresh_cable_views(self) -> None:
+        if not self.cable_mode:
+            return
+        device = self._cable_device() if len(self._cable_devices) == 1 else None
+        for profile_id, row in self._principal_rows.items():
+            profile = self.profile_store.get(profile_id)
+            if profile is not None:
+                row.set_cable_view(_cable_view_for(profile, self._cable_flow, device, self.lang))
+
+    def _on_cable_action(self, profile: Profile, action: str) -> None:
+        if action == "start":
+            self._cable_start(profile)
+        elif action == "copy":
+            self._cable_copy(profile)
+        elif action == "cancel":
+            if self._cable_cancel is not None:
+                self._cable_cancel.set()
+        elif action == "close":
+            self._cable_flow = None
+            self._refresh_cable_views()
+
+    def _cable_device_accepted(self, profile: Profile, device: device_source.DeviceInfo) -> bool:
+        """One cable, several people: makes sure this is the right phone before
+        anything lands in this profile's folder. A device reporting no serial
+        can't be told apart, so it isn't blocked."""
+        if not device.serial or profile.cable_device_serial == device.serial:
+            return True
+        owner = next(
+            (p for p in self.profile_store.list() if p.cable_device_serial == device.serial and p.id != profile.id), None,
+        )
+        if owner is not None:
+            question = self.t("confirm_cable_other_owner", name=profile.name, owner=owner.name)
+        elif profile.cable_device_serial:
+            question = self.t("confirm_cable_different_device", name=profile.name)
+        else:
+            question = self.t("confirm_cable_first_time", name=profile.name, device=device.name)
+        if not ask_yes_no(self, self.lang, self.t("dlg_title_confirm"), question, danger=profile.cable_device_serial is not None or owner is not None):
+            return False
+        self.profile_store.set_cable_device(profile.id, device.serial)
+        return True
+
+    def _cable_start(self, profile: Profile) -> None:
+        profile = self.profile_store.get(profile.id) or profile
+        device = self._cable_device()
+        if device is None or not device.ready or not profile.destination_dir:
+            self._refresh_cable_views()
+            return
+        if not self._cable_device_accepted(profile, device):
+            return
+        self._cable_cancel = threading.Event()
+        cancel = self._cable_cancel
+        self._cable_flow = {
+            "profile_id": profile.id, "state": "analyzing", "scanned": 0, "plan": None, "device": device,
+            "done": 0, "total": 0, "failed": 0, "bytes": 0, "elapsed": 0, "result": None, "message": "",
+        }
+        self._refresh_cable_views()
+        dest = Path(profile.destination_dir)
+
+        def on_scanned(count: int) -> None:
+            if count % 25 == 0:
+                self.after(0, lambda: self._on_cable_scanned(count))
+
+        def worker() -> None:
+            # analyze_device never raises; opening the phone still can.
+            try:
+                with self._cable_device_lock, self.cable_backend.com_thread():
+                    source = self.cable_backend.open_source(device)
+                    try:
+                        plan = analyze_device(source, dest, profile.name, on_scanned, cancel)
+                    finally:
+                        source.close()
+            except Exception as exc:
+                plan = CablePlan(fatal_error=str(exc))
+            self.after(0, lambda: self._on_cable_analyzed(profile, plan))
+
+        self._cable_thread = threading.Thread(target=worker, daemon=True)
+        self._cable_thread.start()
+
+    def _on_cable_scanned(self, count: int) -> None:
+        if self._cable_flow and self._cable_flow["state"] == "analyzing":
+            self._cable_flow["scanned"] = count
+            self._refresh_cable_views()
+
+    def _on_cable_analyzed(self, profile: Profile, plan: CablePlan) -> None:
+        self._cable_thread = None
+        if self._closing:
+            self._close_now()
+            return
+        if self._switch_after_cable_stops:
+            self._switch_after_cable_stops = False
+            self._finish_mode_switch()
+            return
+        if self._cable_flow is None:
+            return
+        if plan.cancelled:
+            self._cable_flow = None
+        elif plan.fatal_error:
+            self._log_local(f"ERROR: {plan.fatal_error}", profile=profile.name)
+            self._cable_flow.update(state="stopped", message=self.t("cable_analyze_failed"))
+        else:
+            self._cable_flow.update(state="summary", plan=plan)
+            self._log_local(
+                self.t("log_cable_analyzed", total=plan.total_on_device, already=plan.already, pending=len(plan.pending)),
+                profile=profile.name,
+            )
+        self._refresh_cable_views()
+
+    def _cable_copy(self, profile: Profile) -> None:
+        profile = self.profile_store.get(profile.id) or profile
+        flow = self._cable_flow
+        if flow is None or flow["state"] != "summary":
+            return
+        plan: CablePlan = flow["plan"]
+        device = flow["device"]
+        self._cable_cancel = threading.Event()
+        cancel = self._cable_cancel
+        started = datetime.now(timezone.utc)
+        flow.update(state="copying", done=plan.already, total=plan.already + len(plan.pending))
+        self._refresh_cable_views()
+        dest = Path(profile.destination_dir)
+
+        def on_progress(done: int, total: int, failed: int, read: int) -> None:
+            elapsed = (datetime.now(timezone.utc) - started).total_seconds()
+            self.after(0, lambda: self._on_cable_progress(done, total, failed, read, elapsed))
+
+        def worker() -> None:
+            try:
+                with self._cable_device_lock, self.cable_backend.com_thread():
+                    source = self.cable_backend.open_source(device)
+                    try:
+                        result = run_cable_import(source, plan, dest, profile.name, on_progress, cancel)
+                    finally:
+                        source.close()
+            except Exception as exc:
+                result = CableImportResult(fatal_error=str(exc))
+            self.after(0, lambda: self._on_cable_finished(profile, result))
+
+        self._cable_thread = threading.Thread(target=worker, daemon=True)
+        self._cable_thread.start()
+
+    def _on_cable_progress(self, done: int, total: int, failed: int, read: int, elapsed: float) -> None:
+        if self._cable_flow and self._cable_flow["state"] == "copying":
+            self._cable_flow.update(done=done, total=total, failed=failed, bytes=read, elapsed=elapsed)
+            self._refresh_cable_views()
+
+    def _on_cable_finished(self, profile: Profile, result: CableImportResult) -> None:
+        self._cable_thread = None
+        if self._closing:
+            self._close_now()
+            return
+        self._log_local(
+            self.t(
+                "log_cable_result", copied=result.copied, already=result.already_had,
+                conflicts=result.conflicts, failed=result.failed,
+            ),
+            profile=profile.name,
+        )
+        if self._switch_after_cable_stops:
+            self._switch_after_cable_stops = False
+            self._finish_mode_switch()
+            return
+        flow = self._cable_flow
+        if flow is None:
+            return
+        flow["result"] = result
+        if result.fatal_error or result.stopped_with_error:
+            detail = result.fatal_error or result.stopped_with_error
+            if detail == "device":
+                message = self.t("cable_stopped_device", copied=result.copied)
+            elif detail == "verification":
+                message = self.t("cable_stopped_verification", copied=result.copied)
+            else:
+                self._log_local(f"  -> {detail}", profile=profile.name)
+                message = self.t("cable_stopped_destination", copied=result.copied, error=detail)
+            flow.update(state="stopped", message=message)
+        elif result.cancelled:
+            flow.update(state="stopped", message=self.t("cable_stopped_user", copied=result.copied))
+        else:
+            flow["state"] = "done"
+        self._refresh_cable_views()
 
     # ------------------------------------------------------------------
     # Profiles — "Principal" screen (status + enable/pause only)
@@ -1205,6 +1783,7 @@ class MainWindow(ctk.CTk):
                 row = ProfileStatusRow(
                     self.principal_profiles_container, profile, self.lang, self._on_toggle_profile,
                     status=entry.get("status"), destination_unreachable=entry.get("destination_unreachable", False),
+                    cable_mode=self.cable_mode, on_cable_action=self._on_cable_action,
                 )
                 self._principal_rows[profile.id] = row
             else:
@@ -1213,6 +1792,7 @@ class MainWindow(ctk.CTk):
                     destination_unreachable=entry.get("destination_unreachable", False),
                 )
             row.grid(row=i, column=0, sticky="ew", padx=4, pady=4)
+        self._refresh_cable_views()
 
     def _on_toggle_profile(self, profile: Profile, enabled: bool) -> None:
         self.profile_store.set_enabled(profile.id, enabled)
@@ -1289,8 +1869,8 @@ class MainWindow(ctk.CTk):
             return
         try:
             profile = self.profile_store.add(name)
-        except ValueError as exc:
-            show_error(self, self.lang, self.t("dlg_title_error"), str(exc))
+        except ValueError:
+            show_error(self, self.lang, self.t("dlg_title_error"), self.t("err_profile_name_empty"))
             return
         self.clipboard_clear()
         self.clipboard_append(profile.token)
@@ -1303,6 +1883,9 @@ class MainWindow(ctk.CTk):
         self._refresh_principal_profiles()
 
     def _choose_profile_destination(self, profile: Profile) -> None:
+        if self._cable_flow is not None and self._cable_flow["profile_id"] == profile.id:
+            show_warning(self, self.lang, self.t("dlg_title_warning"), self.t("warn_cable_busy_profile"))
+            return
         current = self.profile_store.get(profile.id) or profile
         chosen = filedialog.askdirectory(
             title=self.t("dlg_choose_dest_title", name=current.name),
@@ -1357,8 +1940,8 @@ class MainWindow(ctk.CTk):
             return
         try:
             self.profile_store.rename(profile.id, new_name)
-        except ValueError as exc:
-            show_error(self, self.lang, self.t("dlg_title_error"), str(exc))
+        except ValueError:
+            show_error(self, self.lang, self.t("dlg_title_error"), self.t("err_profile_name_empty"))
             return
         self._refresh_settings_profiles()
         self._refresh_principal_profiles()
@@ -1376,6 +1959,9 @@ class MainWindow(ctk.CTk):
         self._refresh_settings_profiles()
 
     def _delete_profile(self, profile: Profile) -> None:
+        if self._cable_flow is not None and self._cable_flow["profile_id"] == profile.id:
+            show_warning(self, self.lang, self.t("dlg_title_warning"), self.t("warn_cable_busy_profile"))
+            return
         if not ask_yes_no(
             self, self.lang, self.t("dlg_title_confirm"), self.t("confirm_delete", name=profile.name), danger=True
         ):
@@ -1592,7 +2178,7 @@ class MainWindow(ctk.CTk):
 
         box = ctk.CTkTextbox(
             popup, wrap="word", font=ctk.CTkFont(family="Consolas", size=13),
-            fg_color="#050505", text_color=TERMINAL_GREEN,
+            fg_color=LOG_BG, text_color=TERMINAL_GREEN,
         )
         box.pack(fill="both", expand=True, padx=10, pady=10)
         box.configure(state="normal")
@@ -1692,10 +2278,13 @@ class MainWindow(ctk.CTk):
         if not self._poll_in_flight and app_module.is_configured():
             self._poll_in_flight = True
             profiles = self.profile_store.list()  # cheap, in-memory -- stays on the main thread
+            include_paused = self.cable_mode
+            flow = self._cable_flow
+            skip_ids = frozenset({flow["profile_id"]}) if flow and flow["state"] == "copying" else frozenset()
 
             def worker() -> None:
                 try:
-                    snapshot = _compute_status_snapshot(profiles)
+                    snapshot = _compute_status_snapshot(profiles, include_paused, skip_ids)
                 except Exception:
                     import traceback
 
@@ -1717,6 +2306,11 @@ class MainWindow(ctk.CTk):
         self._poll_in_flight = False
         if snapshot is None:
             return  # the worker already logged its own error
+        previous = self._latest_snapshot.get("per_profile", {})
+        for profile_id, entry in previous.items():  # profiles this poll deliberately skipped
+            snapshot["per_profile"].setdefault(profile_id, entry)
+        if snapshot["aggregate"] is None:  # skipped too, see _compute_status_snapshot
+            snapshot["aggregate"] = self._latest_snapshot.get("aggregate")
         self._latest_snapshot = snapshot
         try:
             self._refresh_aggregate_stats(snapshot["aggregate"])
@@ -1727,7 +2321,10 @@ class MainWindow(ctk.CTk):
 
             self._log_local(f"ERROR applying status snapshot:\n{traceback.format_exc()}")
         try:
-            self._check_idle_backups(snapshot["per_profile"])
+            # A cable copy isn't waiting on the phone to call back; it reports
+            # its own progress and its own failures.
+            if not self.cable_mode:
+                self._check_idle_backups(snapshot["per_profile"])
         except Exception:
             import traceback
 
@@ -1816,6 +2413,23 @@ class MainWindow(ctk.CTk):
             messagebox.showerror(APP_TITLE, message)
 
     def _on_close(self) -> None:
+        if self._closing:
+            return
+        if self._cable_thread is not None and self._cable_thread.is_alive():
+            if not ask_yes_no(self, self.lang, self.t("dlg_title_confirm"), self.t("confirm_close_during_cable")):
+                return
+        # Checked again: the copy may have finished while the dialog was open.
+        if self._cable_thread is not None and self._cable_thread.is_alive():
+            # Waits without blocking this thread: the worker reports through it,
+            # so a join() here would stall the worker before its final commit.
+            self._closing = True
+            self.mode_btn.configure(text=self.t("btn_mode_switching"), state="disabled")
+            self._cable_cancel.set()
+            self.after(30000, self._close_now)  # never held open by a phone that stopped answering
+            return
+        self._close_now()
+
+    def _close_now(self) -> None:
         if self.controller and self.controller.running:
             self.controller.stop()
         self.destroy()

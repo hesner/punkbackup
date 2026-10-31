@@ -28,6 +28,55 @@ def _free_port() -> int:
         return s.getsockname()[1]
 
 
+def test_force_stop_cuts_an_upload_in_progress_and_records_nothing(tmp_path):
+    from server import app as app_module
+    from server.manifest_db import ManifestDB
+
+    class Store:
+        def __init__(self, profile):
+            self.profile = profile
+
+        def list(self):
+            return [self.profile]
+
+        def find_by_token(self, _token):
+            return self.profile
+
+    class P:
+        id, name, enabled, destination_dir = "p1", "p", True, str(tmp_path)
+
+    app_module.configure(Store(P))
+    port = _free_port()
+    controller = ServerController(app_module.app, host="127.0.0.1", port=port)
+    controller.start()
+    assert controller.wait_until_listening(timeout=5.0)
+
+    client = socket.create_connection(("127.0.0.1", port), timeout=5)
+    client.sendall(
+        b"POST /upload?filename=BIG.MOV&taken_at=2026-01-01T00:00:00 HTTP/1.1\r\nHost: x\r\n"
+        b"X-Backup-Token: t\r\nContent-Length: 100000000\r\n\r\n" + b"x" * 200000
+    )
+    staging = tmp_path / ".iphone_backup_index" / "staging"
+    deadline = time.monotonic() + 5
+    while time.monotonic() < deadline and not (staging.exists() and list(staging.iterdir())):
+        time.sleep(0.02)
+    assert list(staging.iterdir()), "the upload never started"
+
+    started = time.monotonic()
+    controller.stop(timeout=8.0, force=True)
+    client.close()
+    assert not controller.running
+    assert time.monotonic() - started < 8.0
+
+    app_module.close_open_runs()
+    app_module.forget_profile("p1")
+    assert list(staging.iterdir()) == []
+    db = ManifestDB(tmp_path, reap_dangling_runs=False)
+    assert db.get_status()["total_files_backed_up"] == 0
+    db.close()
+    assert not (tmp_path / "2026").exists()
+
+
 def test_successful_start_is_confirmed_listening():
     app = FastAPI()
     port = _free_port()

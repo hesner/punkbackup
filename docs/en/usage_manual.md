@@ -4,6 +4,13 @@
 > "English"** if it isn't already switched. For first-time setup, see the
 > **Installation Manual**; for problems, see the **Troubleshooting Manual**.
 
+## Two paths: WiFi and cable
+
+PunkBackup backs up over WiFi with the Shortcut, or by cable with the **Backup by
+cable** button. Profiles, folders and rules are the same. The background tells you
+which one you're in: dark for WiFi, light for cable. The app always opens in WiFi
+mode. See the "Backup by cable" section.
+
 ## The window has 2 screens
 
 - **"Main"**: turn the backup server on/off, see the address your devices
@@ -236,6 +243,45 @@ more than one physical drive.
   what it already has — nothing needs to be re-uploaded from the phone.
 
 ---
+
+## Backup by cable
+
+For a first backup or a large volume of photos, the cable is much faster than
+WiFi. WiFi remains the everyday path.
+
+1. Connect the iPhone with the cable, unlock it and, if it asks, tap **Trust**.
+2. On the Main screen, press **Backup by cable**, top right. The app switches to a
+   light background so you always know which mode you're in. This turns the WiFi
+   server off, even mid-copy: what was copied stays saved and the Shortcut picks up
+   the rest next time. If a copy is in progress, the app asks you to confirm.
+3. On the profile's card, press **Start backup by cable**. The first time it asks
+   you to confirm that iPhone belongs to that profile, and later warns you if you
+   connect a different one.
+4. Check the summary and press **Review and copy**. Keep the iPhone connected and
+   unlocked. You can stop whenever you like and resume later without repeating what
+   was already copied.
+5. When it finishes, press **Backup by WiFi** to go back. If the server was on
+   before switching, it comes back on.
+
+**Good to know:**
+
+- The phone is only read: nothing is deleted or changed.
+- The destination and the rules are the same as WiFi. Nothing is overwritten, and
+  what's already backed up under another name isn't stored twice.
+- Only one profile copies at a time. A paused profile can still use the cable,
+  since pausing only blocks WiFi.
+- **"All backed up" by cable means everything the iPhone shows over USB, not
+  necessarily your whole Photos library.** With iCloud and "Optimize Storage", originals
+  that aren't on the phone can't be copied by cable, and we've also seen a recent video
+  that didn't appear over USB. Always run the Shortcut over WiFi afterward, especially
+  before deleting photos from the phone.
+- Every copied file is listed in the activity log, with its name and time.
+- The cable and WiFi recognize each other's files by content, even under a different
+  name, so you can use both without creating duplicates. The Shortcut's first pass
+  after a cable backup sends non-camera files (for example, from WhatsApp) once more:
+  the server discards them and doesn't ask for them again. That first pass takes
+  longer and uses more battery, especially with videos.
+- Keep the PC plugged in during a long copy.
 
 ## Typical daily use
 

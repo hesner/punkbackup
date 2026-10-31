@@ -3,7 +3,7 @@
 ## Qué es este sistema
 
 Respalda automáticamente las fotos y videos de uno o varios iPhone/iPad hacia
-tu PC Windows, por WiFi local, sin cable y sin depender de iCloud. Cada
+tu PC Windows, por WiFi local o por cable, sin depender de iCloud. Cada
 persona/dispositivo tiene su propio perfil con su propia carpeta destino.
 
 ## ⚠ Importante: esta app no tiene firma digital de pago
@@ -145,3 +145,9 @@ crear el Atajo de Shortcuts y, opcionalmente, la automatización por WiFi.
   con tus fotos.
 
 Si algo no funciona, consulta el **Manual de solución de problemas**.
+
+## Para usar el backup por cable (opcional)
+
+Solo necesitas el cable del iPhone. Si Windows no reconoce el teléfono, instala **Apple
+Devices** desde la Microsoft Store. La primera vez, desbloquea el iPhone y toca **Confiar**.
+El backup por cable no usa la red ni la regla de Firewall. Ver el **Manual de uso**.

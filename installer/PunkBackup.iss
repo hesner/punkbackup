@@ -3,7 +3,7 @@
 ; Packages the PyInstaller --onedir build (dist\PunkBackup\) produced by:
 ;   pyinstaller --noconfirm --onedir --windowed --name PunkBackup \
 ;     --icon assets\punkbackup.ico --collect-data customtkinter \
-;     --add-data "assets;assets" main.py
+;     --add-data "assets;assets" --collect-submodules comtypes main.py
 ;
 ; Build the PyInstaller output FIRST, then compile this script with:
 ;   iscc installer\PunkBackup.iss
@@ -19,7 +19,7 @@
 ; Keep in sync with APP_VERSION in server/version.py (shown in the app's
 ; own window title + Settings screen) -- Inno Setup's preprocessor can't
 ; read that Python file directly, so this has to be bumped by hand too.
-#define MyAppVersion "1.7.19"
+#define MyAppVersion "1.8.0"
 #define MyAppPublisher "PunkBackup"
 #define MyAppURL "https://github.com/hesner/punkbackup"
 #define MyAppExeName "PunkBackup.exe"

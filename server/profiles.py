@@ -49,6 +49,9 @@ class Profile:
     # profiles.json files without them still load fine via Profile(**item).
     mirror_dir: Optional[str] = None
     mirror_history: list = field(default_factory=list)  # snapshots — see set_mirror_destination()
+    # Which physical iPhone this profile backs up by cable, so plugging in
+    # someone else's phone gets a warning instead of mixing two people's photos.
+    cable_device_serial: Optional[str] = None
 
     def to_dict(self) -> dict:
         return asdict(self)
@@ -162,6 +165,10 @@ class ProfileStore:
         folder can be re-selected later and its own on-disk index (see
         server/mirror.py) picks up exactly where it left off."""
         self._profiles[profile_id].mirror_dir = None
+        self.save()
+
+    def set_cable_device(self, profile_id: str, serial: Optional[str]) -> None:
+        self._profiles[profile_id].cable_device_serial = serial
         self.save()
 
     def set_enabled(self, profile_id: str, enabled: bool) -> None:

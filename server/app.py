@@ -23,6 +23,7 @@ new identity or redirect where files get written.
 """
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import logging
 import uuid
@@ -131,6 +132,7 @@ def _engine_for(profile: Profile) -> BackupEngine:
             raise HTTPException(503, f"Destination folder is not reachable (is the drive connected?): {exc}")
         _state["unreachable_warned"].discard(profile.id)
         engines[profile.id] = BackupEngine(dest_path, ManifestDB(dest_path, profile_label=profile.name))
+        engines[profile.id].clear_staging()
     return engines[profile.id]
 
 
@@ -139,6 +141,16 @@ def forget_profile(profile_id: str) -> None:
     profile's destination_dir changes, or it was just deleted, so a stale
     reference to the old folder isn't kept around. Files on disk untouched."""
     _state["engines"].pop(profile_id, None)
+
+
+def close_open_runs() -> None:
+    """See ManifestDB.finish_open_runs. Best-effort per profile: one
+    unreachable drive must not stop the others from closing."""
+    for engine in list(_state["engines"].values()):
+        try:
+            engine.db.finish_open_runs()
+        except Exception as exc:
+            engine.logger.warning("Could not close the open run: %s", exc)
 
 
 def get_status_for_profile(profile: Profile) -> dict:
@@ -270,6 +282,12 @@ async def upload(
         engine.db.bump_run(run_id, "files_error")
         engine.logger.error("x %s: could not write to disk (%s), requesting the file again", filename, exc)
         return {"detail": f'"{filename}" could not be saved (disk write failed: {exc}) — will retry on the next run.'}
+    except asyncio.CancelledError:
+        # The server is being force-stopped mid-upload (switching to cable
+        # mode). CancelledError isn't an Exception, so without this the
+        # partial file would stay in the staging folder forever.
+        staging_path.unlink(missing_ok=True)
+        raise
     except Exception:
         staging_path.unlink(missing_ok=True)
         engine.db.bump_run(run_id, "files_error")

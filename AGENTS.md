@@ -12,7 +12,8 @@ file is about **how to build it correctly and in the right order**.
 ## 1. What this system is
 
 A one-directional (iPhone/iPad → PC) photo/video backup system:
-- No USB cable, no iCloud. Transfer happens over the local WiFi network.
+- No iCloud. Transfer happens over the local WiFi network, with an optional USB
+  cable mode for a first or very large backup (PLAN.md section 26).
 - Multiple people/devices ("profiles"), each with its own secret token and
   its own destination folder (possibly a different USB drive per person).
 - Incremental: never re-uploads what's already at the destination, never
@@ -74,6 +75,10 @@ A one-directional (iPhone/iPad → PC) photo/video backup system:
 5. **iOS Shortcut** — build and test on a real device. Do not assume any
    Shortcuts UI behavior without verifying on-device; see section 5.
 6. **Desktop shortcut, Firewall rule, docs, tests, packaging** — last.
+7. **Backup by cable** (`server/device_source.py`, `server/cable_import.py`,
+   `gui/theme.py`), an optional second path over the same engine: test it against a
+   real iPhone. `tools/ui_preview.py` opens the real interface with a simulated phone
+   and throwaway data; it isn't packaged.
 
 ## 3. Non-negotiable design invariants
 
@@ -86,9 +91,12 @@ A one-directional (iPhone/iPad → PC) photo/video backup system:
   entirely after the user caught this exact bug. The lightweight `/check`
   endpoint (section 4) exists specifically to let the *server* answer "do
   you already have this" against the *current* destination, every time.
+- **Cable and WiFi must keep recognizing each other's files.** `finalize_upload` looks
+  for content under any name, and a false match means a file that looks backed up and
+  isn't, so anything unclear keeps both copies (lesson 29).
 - **`/upload`'s hash check is the final authority**, even though `/check`
-  is a cheaper, looser pre-filter (filename+date path existence only, no
-  content comparison — see section 5 for why). This two-tier design trades
+  is a cheaper, looser pre-filter (filename+date only, no content comparison —
+  see section 5 for why). This two-tier design trades
   a little precision in the cheap check for something Shortcuts can
   actually send, while `/upload` still guarantees no silent overwrite.
 - **Never autostart.** The server is 100% off when Windows boots. A Desktop
@@ -138,7 +146,9 @@ sometimes can't report these attributes for — see `server/storage.py`'s
 Separately, every successfully-received video (`.mov`/`.mp4`/`.m4v`) with
 a known `taken_at` gets its own embedded container metadata
 (`creation_time` in `mvhd`/every `mdhd`) patched to match — see
-`server/video_metadata.py` and PLAN.md §5.11.
+`server/video_metadata.py` and PLAN.md §5.11. `/upload` also returns
+`skipped_duplicate` when the content already exists under another name, with `dest_path`
+pointing at that file; `/check` then stops asking for that name and date (PLAN.md §26.2).
 
 `server/app.py`'s `configure(profile_store)` / `is_configured()` /
 `_engine_for(profile)` / `forget_profile(id)` pattern: engines are built
@@ -1120,6 +1130,36 @@ reintroduces these problems.
     on inspecting a result that, for that failure shape, will never
     exist.**
 
+29. **The cable and the Shortcut name the same file differently, so name-based dedup
+    would have duplicated half a library.** Measured against a real iPhone
+    (2026-10-30): camera files share a name (`IMG_9277.HEIC`), but everything else
+    doesn't (`DFTN0869.JPG` by cable, `ced9b322….jpeg` by Shortcut, identical bytes).
+    2.942 of 6.186 files looked missing by name. `finalize_upload` therefore looks for
+    the content under ANY name, for both paths, and `name_aliases` lets `/check` stop
+    asking for a name that turned out to be a duplicate (name + date: camera names get
+    reused). `/check` still can't see bytes, so the Shortcut's first pass after a cable
+    backup sends those files once. Same name + different content still keeps both.
+    Consequences and gotchas:
+    - Videos can't use a hash, and `mdat` isn't stable either: Encode Media changed it
+      in 9 of 9 real pairs (this qualifies lesson 18, where it compared the Shortcut's
+      own copies with each other). `video_fingerprint` (frame sizes) is only a filter:
+      a real damaged copy, `VIDEO0044`, had the same fingerprint and file size with
+      1,112 different frames. `same_video` reads the real frames and is what decides;
+      it tolerates a few bytes in the first frame (7 real pairs) and rejects a size gap
+      over 2% (a real pair with the same frames and different audio).
+    - A WPD stream must be released before the next read. Left open, the iPhone
+      answered "resource in use" and then returned the PREVIOUS file's bytes. Always
+      compare the size received with the size listed.
+    - Force-stopping uvicorn needs its connections aborted by hand: since Python 3.12,
+      `wait_closed()` waits for each one, so `force_exit` alone kept the server alive
+      with an upload in progress.
+    - "All backed up" by cable means "everything the iPhone shows over USB," not "the whole
+      library": `IMG_2106.mov`, recorded that morning, never appeared by cable and arrived
+      by WiFi. Cause not found yet (PLAN.md roadmap item 7).
+    - A real kill mid-write (`tests/test_abrupt_stop.py`) never corrupted SQLite or
+      left a row without a whole file, but can leave a whole file with no row. The
+      cable heals those; WiFi doesn't (roadmap item 3).
+
 - Unit tests against `BackupEngine`/`ManifestDB` directly (no HTTP) for the
   dedup/conflict/incremental rules — fast, exhaustive.
 - `fastapi.testclient.TestClient` end-to-end tests for the real ASGI app,
@@ -1147,9 +1187,14 @@ reintroduces these problems.
   and read-only instead: `sqlite3.connect(f"file:{db_path}?mode=ro",
   uri=True)`.
 
+- **A simulated source can't prove a device works.** Cable mode's fake phone passed
+  every test while the real iPhone listed 0 files (the storage object has no file
+  name, and it was discarded before being opened). Run anything touching WPD against
+  a real device before calling it working. `tools/ui_preview.py` is for the interface.
+
 ## 7. What "done" looks like
 
-- `pytest tests -q` passes (91 tests as of this writing, covering engine
+- `pytest tests -q` passes (182 tests as of this writing, covering engine
   rules, profile isolation/pause/delete, destination-switch correctness,
   concurrent uploads, the `/check` contract, the 0-byte-upload rejection,
   its self-healing retry error-count behavior, a stale-run reap on

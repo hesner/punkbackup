@@ -81,7 +81,10 @@ a { color: #c81d4a; }
 .pdf-logo { width: 56pt; height: 56pt; float: left; margin: 0 12pt 4pt 0; }
 """
 
-FOOTER = """<div id="footerContent" class="brand">PunkBackup — Tus recuerdos. Tu USB. Cero dependencia de la nube.</div>"""
+FOOTERS = {
+    "ES": "PunkBackup — Tus recuerdos. Tu USB. Cero dependencia de la nube.",
+    "EN": "PunkBackup — Your memories. Your USB. Zero cloud dependency.",
+}
 
 # (markdown source, output pdf filename)
 MANUALS = [
@@ -105,7 +108,9 @@ def build_pdf(md_path: Path, out_name: str, logo_uri: str) -> None:
     md_text = _strip_unsupported_symbols(md_text)
     body_html = markdown.markdown(md_text, extensions=["tables", "fenced_code", "sane_lists"])
     logo_tag = f'<img class="pdf-logo" src="{logo_uri}"/>'
-    html = f"<html><head><style>{CSS}</style></head><body>{FOOTER}{logo_tag}{body_html}</body></html>"
+    footer = FOOTERS["EN" if "(EN)" in out_name else "ES"]
+    footer_tag = f'<div id="footerContent" class="brand">{footer}</div>'
+    html = f"<html><head><style>{CSS}</style></head><body>{footer_tag}{logo_tag}{body_html}</body></html>"
 
     PDF_DIR.mkdir(parents=True, exist_ok=True)
     out_path = PDF_DIR / out_name

@@ -11,8 +11,9 @@
 **[🌐 punkbackup.com](https://punkbackup.com)**
 
 A one-directional (iPhone/iPad → PC) photo and video backup system over
-local WiFi. No cable, no iCloud, no subscription, no Docker, no NAS —
-just a Windows PC, a USB drive, and your iPhone's built-in Shortcuts app.
+local WiFi, with an optional USB cable mode for a first or very large backup.
+No iCloud, no subscription, no Docker, no NAS — just a Windows PC, a USB drive,
+and your iPhone's built-in Shortcuts app.
 Multiple people/devices, each with their own profile and their own
 destination drive.
 
@@ -60,6 +61,12 @@ want the boring backup part, with nothing else to configure or maintain.
    different drive — a manual, verified, one-way sync, so your photos
    don't live on only one piece of hardware.
 
+6. For a first backup or a large volume, **backup by cable** reads the iPhone
+   over USB with no network and no server, using the same destination and rules.
+   Cable and WiFi recognize each other's files by content, even under different
+   names, so you can use both. Run the Shortcut afterward: the cable only sees what
+   the iPhone shows over USB.
+
 See [`PLAN.md`](PLAN.md) for the full architecture and design decisions, and
 [`AGENTS.md`](AGENTS.md) if you're an AI agent (or a human) rebuilding or
 extending this from scratch — it documents several non-obvious iOS
@@ -92,6 +99,9 @@ py -m venv .venv
 .venv\Scripts\python.exe -m pytest tests -q
 .venv\Scripts\python.exe main.py
 ```
+
+To try the interface with a simulated iPhone and throwaway data, without touching
+real profiles or drives: `.venv\Scripts\python.exe tools\ui_preview.py`
 
 ## License
 

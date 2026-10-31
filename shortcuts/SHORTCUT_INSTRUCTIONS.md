@@ -159,3 +159,9 @@ If either step doesn't work as described, see the Troubleshooting Manual.
 - Updating later: if this guide's Shortcut file changes in a future
   PunkBackup release, download it again and repeat Steps 1-2 — your
   Server address and Token carry over the same way.
+
+## If you also use backup by cable
+
+You don't need to change anything in the Shortcut. The first pass after a cable backup sends
+non-camera files again and takes longer, but they aren't stored twice. From the second pass on,
+they aren't asked for.

@@ -162,3 +162,9 @@ solución de problemas.
 - Si más adelante actualiza el archivo de Atajo de esta guía en un futuro
   release de PunkBackup, descárgalo de nuevo y repite los Pasos 1-2 — tu
   Dirección del servidor y Token se mantienen igual.
+
+## Si también usas el backup por cable
+
+No tienes que cambiar nada en el Atajo. La primera pasada después de un backup por cable
+vuelve a enviar los archivos que no son de cámara y tarda más, pero no se guardan dos veces. A
+partir de la segunda pasada ya no se piden.

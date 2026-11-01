@@ -2631,6 +2631,9 @@ sin desarrollar, a la espera de que el usuario quiera continuar.
 
 ## 25. Roadmap
 
+Última versión: **v1.8.0**, la del release de GitHub. La regla de versiones (un número,
+una sola compilación) está en `AGENTS.md`, sección 3.
+
 Lista viva de mejoras deseables en el tiempo. El orden indica prioridad, no
 una fecha comprometida. Estados: 🔵 en curso · ⚪ pendiente · ✅ hecho.
 

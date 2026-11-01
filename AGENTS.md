@@ -91,6 +91,16 @@ A one-directional (iPhone/iPad → PC) photo/video backup system:
   entirely after the user caught this exact bug. The lightweight `/check`
   endpoint (section 4) exists specifically to let the *server* answer "do
   you already have this" against the *current* destination, every time.
+- **One version number, one build. No exceptions.** Two builds that behave differently
+  must never carry the same number, under any condition: the title is the only way a
+  user can tell what they're running. Any change to `server/`, `gui/` or `main.py`,
+  however small, gets a new number in `server/version.py` and
+  `installer/PunkBackup.iss` BEFORE it's compiled, installed or handed to anyone for
+  testing. Documentation-only changes don't need one. A published version is never
+  rebuilt or replaced. The latest version is the latest GitHub release, and the user's
+  PC must run exactly that build: confirm by comparing hashes, not the title. v1.8.0
+  broke this rule on 2026-10-31 (the PC had an older build under the same number) and
+  was corrected by installing the release's own installer.
 - **Cable and WiFi must keep recognizing each other's files.** `finalize_upload` looks
   for content under any name, and a false match means a file that looks backed up and
   isn't, so anything unclear keeps both copies (lesson 29).

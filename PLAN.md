@@ -1,10 +1,11 @@
-# Plan: Backup de Fotos/Videos iPhone → PC (vía WiFi local)
+# Plan: Backup de Fotos/Videos iPhone → PC (por WiFi local o por cable)
 
 ## 1. Objetivo
 
 Respaldar automáticamente (o manualmente) las fotos y videos del iPhone/iPad
-de varias personas hacia un disco en tu PC Windows, sin cable USB y sin
-depender de iCloud, usando la red WiFi local de la casa.
+de varias personas hacia un disco en tu PC Windows, sin depender de iCloud,
+usando la red WiFi local de la casa. Para un primer backup o un gran volumen,
+también se puede respaldar por cable USB (ver sección 26).
 
 ## 2. Arquitectura
 

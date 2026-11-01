@@ -46,8 +46,9 @@ want the boring backup part, with nothing else to configure or maintain.
 
 ## How it works
 
-1. A small server runs on your Windows PC (off by default — you turn it on
-   when you want it).
+1. A small program runs on your Windows PC. Its WiFi server only listens when you
+   start it, or when you open the app if you turn that option on. Backup by cable
+   doesn't use it.
 2. Each person/device gets a **profile**: its own secret token, its own
    destination folder (can be a different USB drive per person).
 3. A native iOS **Shortcut** (no App Store install) checks your Photos

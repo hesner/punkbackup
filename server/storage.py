@@ -297,13 +297,17 @@ class BackupEngine:
         taken_at: Optional[str],
         run_id: Optional[str],
         commit: bool = True,
+        fix_video_date: bool = True,
     ) -> dict:
         """Phase 2: staging_path already holds the full, hashed content —
         decide where it lands (new / duplicate-skip / keep-both-conflict).
 
         `commit=False` only defers the SQLite commits, for a caller importing
         many files in a row (server/cable_import.py) — see AGENTS.md lesson 23
-        on what a per-file fsync costs on USB. The rules are identical."""
+        on what a per-file fsync costs on USB. The rules are identical.
+
+        `fix_video_date=False` keeps the file exactly as received. The date only
+        needs fixing because Encode Media overwrites it, which the cable never does."""
         if size == 0:
             # A genuinely empty upload — seen in practice when Shortcuts runs
             # in the background and can't fetch a large video's full bytes
@@ -390,7 +394,8 @@ class BackupEngine:
 
                 final_path = self._next_conflict_name(target_dir, candidate_path)
                 shutil.move(str(staging_path), str(final_path))
-                sha256 = self._sha256_after_video_fix(final_path, taken_at, sha256)
+                if fix_video_date:
+                    sha256 = self._sha256_after_video_fix(final_path, taken_at, sha256)
                 self.db.record_file(safe_name, sha256, taken_at, str(final_path), size, original_name, commit=commit)
                 self._resolve_error_both(run_id, safe_name, original_name)
                 self.db.bump_run(run_id, "files_conflict", commit=commit)
@@ -398,7 +403,8 @@ class BackupEngine:
                 return {"status": "conflict_kept_both", "dest_path": str(final_path)}
 
             shutil.move(str(staging_path), str(candidate_path))
-            sha256 = self._sha256_after_video_fix(candidate_path, taken_at, sha256)
+            if fix_video_date:
+                sha256 = self._sha256_after_video_fix(candidate_path, taken_at, sha256)
             self.db.record_file(safe_name, sha256, taken_at, str(candidate_path), size, original_name, commit=commit)
             self._resolve_error_both(run_id, safe_name, original_name)
             self.db.bump_run(run_id, "files_new", commit=commit)

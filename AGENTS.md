@@ -153,10 +153,13 @@ straight from the file (JPEG/HEIC only) before falling back to "now".
 Both cover the same real, narrow class of Photos items that Shortcuts
 sometimes can't report these attributes for — see `server/storage.py`'s
 `_detect_extension()`/`_read_exif_taken_at()` and PLAN.md §5.4.
-Separately, every successfully-received video (`.mov`/`.mp4`/`.m4v`) with
+Separately, every video received over WiFi (`.mov`/`.mp4`/`.m4v`) with
 a known `taken_at` gets its own embedded container metadata
 (`creation_time` in `mvhd`/every `mdhd`) patched to match — see
-`server/video_metadata.py` and PLAN.md §5.11. `/upload` also returns
+`server/video_metadata.py` and PLAN.md §5.11. Those fields are UTC, and a
+`taken_at` with no zone is local time, so it's converted first: storing it as is
+left 2,005 real videos 5 hours early (PLAN.md W1). Videos by cable aren't patched:
+Encode Media never touched them. `/upload` also returns
 `skipped_duplicate` when the content already exists under another name, with `dest_path`
 pointing at that file; `/check` then stops asking for that name and date (PLAN.md §26.2).
 

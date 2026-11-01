@@ -3,6 +3,9 @@ and for reading frames back, with the layout options Encode Media changes."""
 import struct
 
 
+MAC_TIME = 3_000_000_000  # the creation time a video comes with, before anything patches it
+
+
 def _box(name: bytes, payload: bytes) -> bytes:
     return struct.pack(">I", 8 + len(payload)) + name + payload
 
@@ -29,7 +32,8 @@ def make_video(frames: list[bytes], audio=b"\x07" * 40, moov_first: bool = False
     def moov(data_start: int) -> bytes:
         video_track = _track(b"vide", sizes, data_start + padding)
         audio_track = _track(b"soun", [len(s) for s in audio_samples], data_start + padding + len(video))
-        return _box(b"moov", video_track + audio_track)
+        mvhd = _box(b"mvhd", b"\x00" * 4 + struct.pack(">II", MAC_TIME, MAC_TIME) + b"\x00" * 88)
+        return _box(b"moov", mvhd + video_track + audio_track)
 
     mdat = _box(b"mdat", payload)
     if moov_first:

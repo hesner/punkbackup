@@ -56,8 +56,12 @@ MIN_AUDIO_SAMPLES_SHARED = 0.98  # the lowest real pair was 0.991
 
 
 def _to_mac_time(dt: datetime) -> int:
+    """A date with no zone is local time: that's what the Shortcut sends. These
+    fields are UTC, so storing it unconverted showed every video 5 hours early in
+    other apps from Colombia (found 2026-10-31, PLAN.md W1). A video recorded in
+    another time zone comes out off by the difference, since the date doesn't say."""
     if dt.tzinfo is None:
-        dt = dt.replace(tzinfo=timezone.utc)
+        dt = dt.astimezone()
     return int((dt - MAC_EPOCH).total_seconds())
 
 

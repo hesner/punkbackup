@@ -378,6 +378,14 @@ def test_a_drive_failing_every_verification_stops_the_copy(tmp_path, monkeypatch
     assert seen == [1, 2, 3, 4]
 
 
+def test_a_video_copied_by_cable_stays_identical_to_the_original(tmp_path):
+    original = make_video([bytes([i]) * (100 + i) for i in range(30)])
+    phone = FakePhone({"IMG_1.MOV": (original, "2026-10-31T09:50:57")})
+    _plan, result = _cable_backup(phone, tmp_path)
+    assert result.copied == 1
+    assert (tmp_path / "2026" / "10" / "IMG_1.MOV").read_bytes() == original
+
+
 def test_objects_the_phone_wont_describe_are_reported(tmp_path):
     phone = FakePhone({"OK.HEIC": (b"fine", "2026-03-05T10:00:00")})
     phone.unreadable = 3

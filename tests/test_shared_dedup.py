@@ -4,14 +4,16 @@ under any name. See PLAN.md section 26.2.
 Run with: .venv\\Scripts\\python.exe -m pytest tests -v
 """
 import io
+import struct
 import sys
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from server.manifest_db import ManifestDB
 from server.storage import BackupEngine
-from server.video_metadata import same_video, video_fingerprint
+from server.video_metadata import MAC_EPOCH, _box, same_video, video_fingerprint
 from tests.video_fixture import make_video
 
 FRAMES = [bytes([i]) * (200 + i) for i in range(40)]
@@ -217,3 +219,25 @@ def test_recent_staged_files_survive_and_old_ones_are_cleared(tmp_path):
 def test_a_malformed_container_gets_no_fingerprint_instead_of_an_error(tmp_path):
     huge = (1).to_bytes(4, "big") + b"moov" + (2**62).to_bytes(8, "big") + b"x" * 40
     assert video_fingerprint(_write(tmp_path, "a.mp4", huge)) is None
+
+
+def _creation_time(path: Path) -> datetime:
+    with open(path, "rb") as f:
+        size = f.seek(0, 2)
+        mvhd = _box(f, *_box(f, 0, size, "moov"), "mvhd")
+        f.seek(mvhd[0] + 4)
+        return MAC_EPOCH + timedelta(seconds=struct.unpack(">I", f.read(4))[0])
+
+
+def test_a_local_date_from_the_shortcut_is_stored_as_real_utc(tmp_path):
+    """Real bug: 09:50 in Colombia was stored as 09:50 UTC, 5 hours early in other apps."""
+    engine = _engine(tmp_path)
+    outcome = engine.process_upload("IMG_1.MOV", io.BytesIO(make_video(FRAMES)), "2026-10-31T09:50:57", None)
+    expected = datetime(2026, 10, 31, 9, 50, 57).astimezone(timezone.utc)
+    assert _creation_time(Path(outcome["dest_path"])) == expected
+
+
+def test_a_date_that_already_has_a_zone_is_kept_as_it_is(tmp_path):
+    engine = _engine(tmp_path)
+    outcome = engine.process_upload("IMG_1.MOV", io.BytesIO(make_video(FRAMES)), "2026-10-31T14:50:57+00:00", None)
+    assert _creation_time(Path(outcome["dest_path"])) == datetime(2026, 10, 31, 14, 50, 57, tzinfo=timezone.utc)

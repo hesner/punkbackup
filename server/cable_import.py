@@ -256,7 +256,9 @@ def run_cable_import(
                     continue
                 consecutive_failures = 0
 
-                outcome = engine.finalize_upload(item.name, staged, sha256, size, item.taken_at, run_id, commit=False)
+                outcome = engine.finalize_upload(
+                    item.name, staged, sha256, size, item.taken_at, run_id, commit=False, fix_video_date=False,
+                )
                 if outcome["status"] == "new":
                     result.copied += 1
                 elif outcome["status"] == "conflict_kept_both":

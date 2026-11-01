@@ -26,7 +26,7 @@ but trade it for a different chore — Docker, a reverse proxy, a NAS or a
 server that has to stay on 24/7. PunkBackup skips both: it copies your
 files to a drive you own, over a network you control or a USB cable, using
 nothing but your iPhone's built-in Shortcuts app and a small Python server on your own
-PC that's off by default and only runs while you're actually backing up.
+PC that only listens when you tell it to.
 
 **PunkBackup isn't trying to replace your photo gallery app** — it doesn't
 do face recognition, albums, or sharing. It does one thing: get every

@@ -2650,6 +2650,26 @@ una fecha comprometida. Estados: 🔵 en curso · ⚪ pendiente · ✅ hecho.
 | 8 | **Detectar copias dañadas.** Caso real: en 2015/03, `VIDEO0044.mp4` (copiado el 2026-10-29) se congela al final y `VIDEO0044__dup_407800d6.mp4` se reproduce bien, confirmado por el usuario el 2026-10-31. Falta decidir si se borra la copia dañada. Considerar una verificación periódica del destino. | 🔵 Caso identificado; a la espera de esa decisión |
 | 9 | **Limpiar duplicados que ya existen en el destino.** La regla nueva evita duplicados nuevos, pero no limpia los antiguos: los logs muestran copias previas con nombres distintos. | ⚪ Propuesto |
 
+### Mejoras del WiFi (análisis del 2026-10-31)
+
+Se implementan en este orden. Cada una se analiza y se aprueba por separado antes de
+empezarla, y cada cambio de código recibe una versión nueva. Solo W7 requiere cambiar el Atajo.
+
+| Orden | Mejora | Evidencia | ¿Cambia el Atajo? | Estado |
+|---|---|---|---|---|
+| W1 | **Hora interna de los videos corrida 5 horas.** `fix_creation_time` guarda la hora local como si fuera UTC, y además modifica los videos del cable, que ya traen la fecha correcta. Incluye decidir qué hacer con los videos ya guardados. | Medida | No | 🔵 En análisis |
+| W2 | **Fecha poco confiable enviada por el Atajo.** En 150 fotos, 39 difieren más de 1 hora del EXIF (máximo 13 h). Preferir el EXIF en fotos. | Medida | No | ⚪ Pendiente |
+| W3 | **Videos con extensión de foto** (punto 5). Corregir la extensión según el contenido. | 1 confirmado, 15 candidatos | No | ⚪ Pendiente |
+| W4 | **Archivos dañados dados por respaldados** (punto 8). Verificación contra el hash guardado. | Caso `VIDEO0044` | No | ⚪ Pendiente |
+| W5 | **Forzar la escritura a disco antes de registrar** (punto 4). | Código | No | ⚪ Pendiente |
+| W6 | **Reparar archivos sin registro** (punto 3). | Pruebas de corte | No | ⚪ Pendiente |
+| W7 | **Consulta por lotes y modo rápido.** Una petición por cada 50 archivos, y revisar solo lo reciente en el día a día. La mejora de velocidad más visible. | Medida | **Sí** | ⚪ Pendiente |
+| W8 | **Unir las dos escrituras confirmadas por archivo.** | Código y lección 23 | No | ⚪ Pendiente |
+| W9 | **Escritura a disco que bloquea el servidor.** Moverla a otro hilo. | Código | No | ⚪ Pendiente |
+| W10 | **Corridas que no se cierran.** Cerrar la anterior al iniciar una nueva. | 101 avisos en el log | No | ⚪ Pendiente |
+| W11 | **Limpieza:** quitar las líneas `DIAG` y resumir los errores por corrida. | Código y log | No | ⚪ Pendiente |
+| W12 | **Seguridad:** comparación segura del token y límite de intentos. | Código | No | ⚪ Pendiente |
+
 ## 26. Backup por cable — decisiones (2026-10-30)
 
 **Evidencia** (prueba de solo lectura contra el iPhone real, API WPD): 6.328

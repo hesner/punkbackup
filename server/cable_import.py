@@ -78,7 +78,9 @@ def _open_engine(dest_root: Path, profile_label: str) -> BackupEngine:
 
 def _is_recognized(engine: BackupEngine, aliases: dict, indexed: set[str], item: DeviceItem) -> bool:
     alias = aliases.get((item.name.lower(), item.size))
-    if alias and existing_path(engine.dest_root, alias):
+    # The date matters: a reused camera name with the same size is another photo,
+    # and reading it costs little compared to never backing it up.
+    if alias and alias[1] in (None, item.taken_at) and existing_path(engine.dest_root, alias[0]):
         return True
     if not item.taken_at:
         return False  # the folder would be a guess
@@ -259,6 +261,11 @@ def run_cable_import(
                 outcome = engine.finalize_upload(
                     item.name, staged, sha256, size, item.taken_at, run_id, commit=False, fix_video_date=False,
                 )
+                # Filed by the photo's own date, which can be another month than the
+                # one the phone lists, so the scan needs to be told where it went.
+                listed_path = engine._year_month_dir(item.taken_at) / Path(item.name).name
+                if outcome["status"] != "skipped_duplicate" and path_key(outcome["dest_path"]) != path_key(listed_path):
+                    db.record_cable_alias(item.name, item.size, outcome["dest_path"], item.taken_at, commit=False)
                 if outcome["status"] == "new":
                     result.copied += 1
                 elif outcome["status"] == "conflict_kept_both":
@@ -267,13 +274,16 @@ def run_cable_import(
                     result.already_had += 1
                     # Another name, or a video re-encoded by the Shortcut: the scan
                     # can't recognize either without reading it, so remember it.
-                    db.record_cable_alias(item.name, item.size, outcome["dest_path"], commit=False)
+                    db.record_cable_alias(item.name, item.size, outcome["dest_path"], item.taken_at, commit=False)
                     if path_key(outcome["dest_path"]) not in indexed:
                         # The hash of what's on disk, not of what was just read: a
                         # video that landed before a crash already had its container
                         # patched, and the two differ (AGENTS.md lesson 24).
                         on_disk = engine._hash_existing(Path(outcome["dest_path"]))
-                        db.record_file(item.name, on_disk, item.taken_at, outcome["dest_path"], size, commit=False)
+                        db.record_file(
+                            item.name, on_disk, outcome.get("taken_at", item.taken_at), outcome["dest_path"], size,
+                            commit=False,
+                        )
                         indexed.add(path_key(outcome["dest_path"]))
             except ValueError:
                 # An empty file, which the engine refuses and has already counted

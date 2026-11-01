@@ -52,6 +52,7 @@ CREATE TABLE IF NOT EXISTS cable_aliases (
     name TEXT NOT NULL,
     size_bytes INTEGER NOT NULL,
     dest_path TEXT NOT NULL,
+    listed_at TEXT,
     PRIMARY KEY (name, size_bytes)
 );
 
@@ -108,6 +109,8 @@ class ManifestDB:
             existing_cols = {row[1] for row in self._conn.execute("PRAGMA table_info(backed_up_files)")}
             if "original_filename" not in existing_cols:
                 self._conn.execute("ALTER TABLE backed_up_files ADD COLUMN original_filename TEXT")
+            if "listed_at" not in {row[1] for row in self._conn.execute("PRAGMA table_info(cable_aliases)")}:
+                self._conn.execute("ALTER TABLE cable_aliases ADD COLUMN listed_at TEXT")
             if "source" not in {row[1] for row in self._conn.execute("PRAGMA table_info(runs)")}:
                 self._conn.execute("ALTER TABLE runs ADD COLUMN source TEXT NOT NULL DEFAULT 'wifi'")
             self._conn.execute(
@@ -231,19 +234,22 @@ class ManifestDB:
             if commit:
                 self._conn.commit()
 
-    def cable_aliases(self) -> dict[tuple[str, int], str]:
-        """(lowercase cable name, size) -> where that content already lives.
-        Remembers what a cable import had to read in full to recognize, so the
-        next scan of the same phone doesn't have to read it again."""
+    def cable_aliases(self) -> dict[tuple[str, int], tuple[str, Optional[str]]]:
+        """(lowercase cable name, size) -> (where that content lives, date the phone
+        listed for it). Remembers what a cable import had to read in full to
+        recognize, so the next scan of the same phone doesn't have to read it again.
+        Rows from before listed_at existed hold None."""
         with self._lock:
-            rows = self._conn.execute("SELECT name, size_bytes, dest_path FROM cable_aliases").fetchall()
-        return {(row["name"], row["size_bytes"]): row["dest_path"] for row in rows}
+            rows = self._conn.execute("SELECT name, size_bytes, dest_path, listed_at FROM cable_aliases").fetchall()
+        return {(row["name"], row["size_bytes"]): (row["dest_path"], row["listed_at"]) for row in rows}
 
-    def record_cable_alias(self, name: str, size_bytes: int, dest_path: str, commit: bool = True) -> None:
+    def record_cable_alias(
+        self, name: str, size_bytes: int, dest_path: str, listed_at: Optional[str] = None, commit: bool = True,
+    ) -> None:
         with self._lock:
             self._conn.execute(
-                "INSERT OR REPLACE INTO cable_aliases (name, size_bytes, dest_path) VALUES (?, ?, ?)",
-                (name.lower(), size_bytes, dest_path),
+                "INSERT OR REPLACE INTO cable_aliases (name, size_bytes, dest_path, listed_at) VALUES (?, ?, ?, ?)",
+                (name.lower(), size_bytes, dest_path, listed_at),
             )
             if commit:
                 self._conn.commit()

@@ -3,6 +3,7 @@ under any name. See PLAN.md section 26.2.
 
 Run with: .venv\\Scripts\\python.exe -m pytest tests -v
 """
+import hashlib
 import io
 import struct
 import sys
@@ -10,6 +11,8 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+
+from PIL import Image
 
 from server.manifest_db import ManifestDB
 from server.storage import BackupEngine
@@ -241,3 +244,86 @@ def test_a_date_that_already_has_a_zone_is_kept_as_it_is(tmp_path):
     engine = _engine(tmp_path)
     outcome = engine.process_upload("IMG_1.MOV", io.BytesIO(make_video(FRAMES)), "2026-10-31T14:50:57+00:00", None)
     assert _creation_time(Path(outcome["dest_path"])) == datetime(2026, 10, 31, 14, 50, 57, tzinfo=timezone.utc)
+
+
+def _photo(capture_date=None, modified=None, seed=1) -> bytes:
+    image = Image.new("RGB", (8, 8), (seed, 0, 0))
+    exif = Image.Exif()
+    if modified:
+        exif[306] = modified
+    if capture_date:
+        exif.get_ifd(0x8769)[36867] = capture_date
+    out = io.BytesIO()
+    image.save(out, "JPEG", exif=exif)
+    return out.getvalue()
+
+
+def test_the_photos_own_date_beats_the_one_the_shortcut_sends(tmp_path):
+    """Real case: IMG_5158, 20:39 in the photo, sent as 08:39."""
+    engine = _engine(tmp_path)
+    outcome = engine.process_upload("IMG_1.JPG", io.BytesIO(_photo("2026:02:08 20:39:05")), "2026-03-01T08:39:00", None)
+    assert Path(outcome["dest_path"]).parent == tmp_path / "2026" / "02"
+    row = engine.db.find_by_dest_path(outcome["dest_path"])
+    assert row["taken_at"] == "2026-02-08T20:39:05"
+
+
+def test_a_photo_filed_by_its_own_date_isnt_asked_for_again(tmp_path):
+    engine = _engine(tmp_path)
+    engine.process_upload("IMG_1.JPG", io.BytesIO(_photo("2026:02:08 20:39:05")), "2026-03-01T08:39:00", None)
+    assert engine.check_exists("IMG_1.JPG", "2026-03-01T08:39:00") is True
+
+
+def test_a_photo_without_exif_keeps_the_date_sent(tmp_path):
+    engine = _engine(tmp_path)
+    outcome = engine.process_upload("WA.JPG", io.BytesIO(_photo()), "2026-03-01T08:39:00", None)
+    assert Path(outcome["dest_path"]).parent == tmp_path / "2026" / "03"
+
+
+def test_an_implausible_exif_date_is_ignored(tmp_path):
+    engine = _engine(tmp_path)
+    for i, bad in enumerate(("1999:12:31 10:00:00", "2099:01:01 10:00:00", "0000:00:00 00:00:00", "not a date")):
+        outcome = engine.process_upload(f"B{i}.JPG", io.BytesIO(_photo(bad, seed=i + 2)), "2026-03-01T08:39:00", None)
+        assert Path(outcome["dest_path"]).parent == tmp_path / "2026" / "03", bad
+
+
+def test_the_modified_date_doesnt_override_a_date_that_was_sent(tmp_path):
+    engine = _engine(tmp_path)
+    outcome = engine.process_upload("E.JPG", io.BytesIO(_photo(modified="2026:09:09 10:00:00")), "2026-03-01T08:39:00", None)
+    assert Path(outcome["dest_path"]).parent == tmp_path / "2026" / "03"
+
+
+def test_the_modified_date_is_still_used_when_nothing_else_exists(tmp_path):
+    engine = _engine(tmp_path)
+    outcome = engine.process_upload("E.JPG", io.BytesIO(_photo(modified="2026:09:09 10:00:00")), None, None)
+    assert Path(outcome["dest_path"]).parent == tmp_path / "2026" / "09"
+
+
+def test_a_photo_already_filed_under_the_wrong_month_isnt_stored_again(tmp_path):
+    engine = _engine(tmp_path)
+    (tmp_path / "2026" / "03").mkdir(parents=True)
+    data = _photo("2026:02:08 20:39:05")
+    old = tmp_path / "2026" / "03" / "IMG_1.JPG"
+    old.write_bytes(data)
+    engine.db.record_file("IMG_1.JPG", hashlib.sha256(data).hexdigest(), "2026-03-01T08:39:00", str(old), len(data))
+    outcome = engine.process_upload("IMG_1.JPG", io.BytesIO(data), "2026-03-01T08:39:00", None)
+    assert outcome["status"] == "skipped_duplicate" and len(_files(tmp_path)) == 1
+
+
+def test_a_sent_value_that_isnt_a_date_doesnt_block_the_modified_date(tmp_path):
+    engine = _engine(tmp_path)
+    outcome = engine.process_upload("E.JPG", io.BytesIO(_photo(modified="2026:09:09 10:00:00")), "IMG_1234", None)
+    assert Path(outcome["dest_path"]).parent == tmp_path / "2026" / "09"
+    assert engine.db.find_by_dest_path(outcome["dest_path"])["taken_at"] == "2026-09-09T10:00:00"
+
+
+def test_a_disagreement_about_the_month_is_logged(tmp_path, caplog):
+    engine = _engine(tmp_path)
+    engine.process_upload("IMG_1.JPG", io.BytesIO(_photo("2026:02:08 20:39:05")), "2026-03-01T08:39:00", None)
+    assert "Filed by the photo's date" in caplog.text
+
+
+def test_a_duplicate_with_no_date_and_no_extension_isnt_asked_for_again(tmp_path):
+    engine = _engine(tmp_path)
+    engine.process_upload("A.PNG", io.BytesIO(b"photo"), "2026-03-05T10:00:00", None)
+    engine.process_upload("ScreenRecording", io.BytesIO(b"photo"), None, None)
+    assert engine.check_exists("ScreenRecording", None) is True

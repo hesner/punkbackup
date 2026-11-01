@@ -386,6 +386,30 @@ def test_a_video_copied_by_cable_stays_identical_to_the_original(tmp_path):
     assert (tmp_path / "2026" / "10" / "IMG_1.MOV").read_bytes() == original
 
 
+def test_a_photo_filed_by_its_own_date_is_recognized_on_the_next_scan(tmp_path):
+    from PIL import Image
+
+    image, exif, out = Image.new("RGB", (8, 8)), Image.Exif(), io.BytesIO()
+    exif.get_ifd(0x8769)[36867] = "2026:02:08 20:39:05"
+    image.save(out, "JPEG", exif=exif)
+    phone = FakePhone({"IMG_1.JPG": (out.getvalue(), "2026-03-01T08:39:00")})
+    _plan, result = _cable_backup(phone, tmp_path)
+    assert result.copied == 1 and (tmp_path / "2026" / "02" / "IMG_1.JPG").exists()
+
+    phone.reads.clear()
+    assert analyze_device(phone, tmp_path).pending == [] and phone.reads == []
+
+
+def test_a_reused_name_of_the_same_size_on_another_date_is_read_not_assumed(tmp_path):
+    _wifi_upload(tmp_path, "abc.jpeg", b"old photo!", "2020-01-01T10:00:00")
+    phone = FakePhone({"IMG_1.JPG": (b"old photo!", "2020-01-01T10:00:00")})
+    _cable_backup(phone, tmp_path)
+    phone.files = {"IMG_1.JPG": (b"new photo!", "2026-03-05T10:00:00")}
+    plan, result = _cable_backup(phone, tmp_path)
+    assert len(plan.pending) == 1 and result.copied == 1
+    assert (tmp_path / "2026" / "03" / "IMG_1.JPG").read_bytes() == b"new photo!"
+
+
 def test_objects_the_phone_wont_describe_are_reported(tmp_path):
     phone = FakePhone({"OK.HEIC": (b"fine", "2026-03-05T10:00:00")})
     phone.unreadable = 3

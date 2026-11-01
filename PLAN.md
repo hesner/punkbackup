@@ -2632,7 +2632,7 @@ sin desarrollar, a la espera de que el usuario quiera continuar.
 
 ## 25. Roadmap
 
-Última versión: **v1.8.1**, la del release de GitHub. La regla de versiones (un número,
+Última versión: **v1.8.2**, la del release de GitHub. La regla de versiones (un número,
 una sola compilación) está en `AGENTS.md`, sección 3.
 
 Lista viva de mejoras deseables en el tiempo. El orden indica prioridad, no
@@ -2658,7 +2658,7 @@ empezarla, y cada cambio de código recibe una versión nueva. Solo W7 requiere 
 | Orden | Mejora | Evidencia | ¿Cambia el Atajo? | Estado |
 |---|---|---|---|---|
 | W1 | **Hora interna de los videos corrida 5 horas.** `fix_creation_time` guarda la hora local como si fuera UTC, y además modifica los videos del cable, que ya traen la fecha correcta. Incluye decidir qué hacer con los videos ya guardados. | Medida | No | ✅ Código corregido en v1.8.1 y 2.005 videos reparados (2026-10-31). Sin cambios: 705 sin fecha interna y 144 sin datos legibles |
-| W2 | **Fecha poco confiable enviada por el Atajo.** En 150 fotos, 39 difieren más de 1 hora del EXIF (máximo 13 h). Preferir el EXIF en fotos. | Medida | No | ⚪ Pendiente |
+| W2 | **Fecha poco confiable enviada por el Atajo.** En 150 fotos, 39 difieren más de 1 hora del EXIF (máximo 13 h). Preferir el EXIF en fotos. | Medida | No | ✅ Corregido en v1.8.2 para fotos nuevas. Sin resolver: los videos siguen usando la fecha del Atajo (552 con ese formato, causa desconocida). Las ~183 fotos en otro mes no se movieron, por decisión del usuario |
 | W3 | **Videos con extensión de foto** (punto 5). Corregir la extensión según el contenido. | 1 confirmado, 15 candidatos | No | ⚪ Pendiente |
 | W4 | **Archivos dañados dados por respaldados** (punto 8). Verificación contra el hash guardado. | Caso `VIDEO0044` | No | ⚪ Pendiente |
 | W5 | **Forzar la escritura a disco antes de registrar** (punto 4). | Código | No | ⚪ Pendiente |

@@ -145,14 +145,16 @@ a `Profile` server-side. Unknown token → 401. Valid token but
 | GET | `/status` | — | Per-profile: `state`, `last_backup_at`, `total_files_backed_up`, `last_run`. |
 
 `/upload`'s `filename` and `taken_at` are treated as best-effort hints,
-not guarantees: if `filename` has no extension at all, the server sniffs
+not guarantees: a photo's own EXIF capture date beats `taken_at`, because in 1,799
+real photos only 45% of the Shortcut's dates matched it and 22% were exactly 12 hours
+off, cause unknown (PLAN.md W2). If `filename` has no extension at all, the server sniffs
 the real format from the file's own byte signature (JPEG/PNG/GIF/MOV/MP4/
 HEIC) and appends it — never overriding an extension that IS present. If
-`taken_at` is empty, the server tries reading EXIF `DateTimeOriginal`
-straight from the file (JPEG/HEIC only) before falling back to "now".
+`taken_at` is empty and there's no capture date, it uses the EXIF modified
+date (JPEG/HEIC only) before falling back to "now".
 Both cover the same real, narrow class of Photos items that Shortcuts
 sometimes can't report these attributes for — see `server/storage.py`'s
-`_detect_extension()`/`_read_exif_taken_at()` and PLAN.md §5.4.
+`_detect_extension()`/`_read_exif_dates()` and PLAN.md §5.4.
 Separately, every video received over WiFi (`.mov`/`.mp4`/`.m4v`) with
 a known `taken_at` gets its own embedded container metadata
 (`creation_time` in `mvhd`/every `mdhd`) patched to match — see

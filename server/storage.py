@@ -8,9 +8,9 @@ Rules (see PLAN.md section 5.1):
   4. Other filename, same content             -> no-op, and the name is remembered.
      The cable and the Shortcut name non-camera files differently, so without
      this each path would store the other's files again (PLAN.md section 26.2).
-Files are organized as ``<dest>/<YYYY>/<MM>/<filename>`` using the photo's
-"taken at" date supplied by the iPhone Shortcut (falls back to the server's
-current date if missing/unparseable).
+Files are organized as ``<dest>/<YYYY>/<MM>/<filename>``: by the photo's own
+EXIF capture date when it has one, otherwise the date the sender supplies
+(falls back to the server's current date if missing/unparseable).
 
 This is one-directional: the iPhone is only ever read from by the Shortcut
 that calls this API; nothing here ever talks back to delete or modify
@@ -38,6 +38,7 @@ from .video_metadata import (
 pillow_heif.register_heif_opener()  # lets PIL.Image.open() read .heic/.heif too
 
 CHUNK_SIZE = 1024 * 1024  # 1 MiB — keeps memory use flat regardless of file size
+MIN_EXIF_YEAR = 2000  # earlier than this is a camera clock that was never set
 
 # The GUI attaches a queue-backed handler to this logger to show live
 # activity to the user; it is equally usable headless (just prints/logs
@@ -84,22 +85,46 @@ def _detect_extension(staging_path: Path) -> Optional[str]:
     return None
 
 
-def _read_exif_taken_at(staging_path: Path) -> Optional[str]:
-    """Best-effort fallback for when the Shortcut sends no `taken_at` at
-    all — reads the real capture date straight from the file's own EXIF
-    (DateTimeOriginal), independent of whatever Shortcuts reported. Only
-    works for formats that carry EXIF (JPEG/HEIC); returns None for
-    anything else (e.g. video) rather than guessing — same items this
-    tends to affect are documented in PLAN.md §5.4."""
+def _plausible_date(raw: object) -> Optional[str]:
+    """ISO date from an EXIF value, or None if it can't be a real capture date:
+    camera clocks reset to odd years, and the field can hold anything."""
+    try:
+        date = datetime.strptime(str(raw).strip().rstrip("\x00"), "%Y:%m:%d %H:%M:%S")
+    except ValueError:
+        return None
+    if date.year < MIN_EXIF_YEAR or date > datetime.now() + timedelta(days=1):
+        return None
+    return date.isoformat()
+
+
+def _read_exif_dates(staging_path: Path) -> tuple[Optional[str], Optional[str]]:
+    """(capture date, modified date) from the file's own EXIF. Only formats that
+    carry EXIF (JPEG/HEIC) have them; anything else, such as video, gets neither.
+    The capture date beats what the Shortcut sends: in 1,799 real photos only 45% of
+    the Shortcut's dates matched it, and 22% were exactly 12 hours off (PLAN.md W2).
+    The modified date is only a last resort, for when nothing else exists."""
+    if _detect_extension(staging_path) in VIDEO_EXTENSIONS:
+        return None, None  # by content, since a video can arrive named as a photo
     try:
         with Image.open(staging_path) as img:
             exif = img.getexif()
-        raw = exif.get(36867) or exif.get(306)  # DateTimeOriginal, else DateTime
-        if not raw:
-            return None
-        return datetime.strptime(raw, "%Y:%m:%d %H:%M:%S").isoformat()
+            modified = _plausible_date(exif.get(306))
+            try:
+                # Normally in the Exif sub-block, but some files keep it at the top level.
+                capture = exif.get_ifd(0x8769).get(36867) or exif.get(36867)
+            except Exception:
+                capture = None
+            return _plausible_date(capture), modified
     except Exception:
-        return None
+        return None, None
+
+
+def _parses_as_date(value: Optional[str]) -> bool:
+    try:
+        datetime.fromisoformat((value or "").replace("Z", "+00:00"))
+        return True
+    except ValueError:
+        return False
 
 
 def existing_path(dest_root: Path, stored: str) -> Optional[Path]:
@@ -223,13 +248,24 @@ class BackupEngine:
                 return str(path)
         return None
 
+    def _remember_name(
+        self, safe_name: str, original_name: str, sent_taken_at: Optional[str], dest_path: str, commit: bool,
+    ) -> None:
+        """/check only knows the name and date it was sent, so if the file lives
+        anywhere else it would keep being asked for. Never without a date: the name
+        alone isn't safe, see find_name_alias."""
+        if sent_taken_at and path_key(dest_path) != path_key(self._year_month_dir(sent_taken_at) / safe_name):
+            self.db.record_name_alias(original_name, sent_taken_at, dest_path, commit=commit)
+
     def _skip_as_already_backed_up(
         self, run_id: Optional[str], safe_name: str, original_name: str, sent_taken_at: Optional[str],
         dest_path: str, commit: bool,
     ) -> dict:
-        # Never without a date: the name alone isn't safe, see find_name_alias.
-        if sent_taken_at and path_key(dest_path) != path_key(self._year_month_dir(sent_taken_at) / safe_name):
-            self.db.record_name_alias(original_name, sent_taken_at, dest_path, commit=commit)
+        self._remember_name(safe_name, original_name, sent_taken_at, dest_path, commit)
+        if not sent_taken_at and not Path(original_name).suffix:
+            # With neither date nor extension, this is the only thing /check can
+            # recognize it by next time (AGENTS.md lesson 20).
+            self.db.backfill_original_filename(dest_path, original_name)
         self._resolve_error_both(run_id, safe_name, original_name)
         self.db.bump_run(run_id, "files_skipped", commit=commit)
         self.logger.info("= %s already backed up as %s, skipped", safe_name, Path(dest_path).name)
@@ -330,8 +366,16 @@ class BackupEngine:
                 self.logger.warning("%s: no extension from the Shortcut, detected %s from content", safe_name, detected_ext)
                 safe_name = f"{safe_name}{detected_ext}"
         sent_taken_at = taken_at
-        if not taken_at:
-            taken_at = _read_exif_taken_at(staging_path)
+        capture_date, modified_date = _read_exif_dates(staging_path)
+        # A value that isn't a date (a rebound Shortcut chip, AGENTS.md lesson 9)
+        # must not outrank a usable one, or be stored as if it were one.
+        usable_sent = taken_at if _parses_as_date(taken_at) else None
+        taken_at = capture_date or usable_sent or modified_date
+        if capture_date and usable_sent and capture_date[:7] != usable_sent[:7]:
+            self.logger.warning(
+                "%s: sent date %s, but the photo says %s. Filed by the photo's date.",
+                safe_name, usable_sent, capture_date,
+            )
 
         target_dir = self._year_month_dir(taken_at)
         candidate_path = target_dir / safe_name
@@ -362,8 +406,9 @@ class BackupEngine:
                     # until the next real occurrence is caught -- remove
                     # once the cause is found.
                     self.logger.info("DIAG skip: run_id received = %r", run_id)
+                    self._remember_name(safe_name, original_name, sent_taken_at, str(candidate_path), commit)
                     self.logger.info("= %s already backed up, skipped", safe_name)
-                    return {"status": "skipped_duplicate", "dest_path": str(candidate_path)}
+                    return {"status": "skipped_duplicate", "dest_path": str(candidate_path), "taken_at": taken_at}
 
                 if same_content is not None:  # the same video, re-encoded under this same name
                     if original_name != safe_name:
@@ -389,6 +434,7 @@ class BackupEngine:
                         self.db.bump_run(run_id, "files_skipped", commit=commit)
                         # TEMP DIAGNOSTIC — see the other skip branch above.
                         self.logger.info("DIAG skip: run_id received = %r", run_id)
+                        self._remember_name(safe_name, original_name, sent_taken_at, str(candidate_path), commit)
                         self.logger.info("= %s already backed up (re-encoded copy, content unchanged), skipped", safe_name)
                         return {"status": "skipped_duplicate", "dest_path": str(candidate_path)}
 
@@ -396,6 +442,7 @@ class BackupEngine:
                 shutil.move(str(staging_path), str(final_path))
                 if fix_video_date:
                     sha256 = self._sha256_after_video_fix(final_path, taken_at, sha256)
+                self._remember_name(safe_name, original_name, sent_taken_at, str(final_path), commit=False)
                 self.db.record_file(safe_name, sha256, taken_at, str(final_path), size, original_name, commit=commit)
                 self._resolve_error_both(run_id, safe_name, original_name)
                 self.db.bump_run(run_id, "files_conflict", commit=commit)
@@ -405,6 +452,7 @@ class BackupEngine:
             shutil.move(str(staging_path), str(candidate_path))
             if fix_video_date:
                 sha256 = self._sha256_after_video_fix(candidate_path, taken_at, sha256)
+            self._remember_name(safe_name, original_name, sent_taken_at, str(candidate_path), commit=False)
             self.db.record_file(safe_name, sha256, taken_at, str(candidate_path), size, original_name, commit=commit)
             self._resolve_error_both(run_id, safe_name, original_name)
             self.db.bump_run(run_id, "files_new", commit=commit)

@@ -229,7 +229,10 @@ reintroduces these problems.
    `Date Taken is before Limite`, `Latest First`, `Limit 50`), updating
    `Limite` to the oldest item's date (minus a 1-minute safety buffer, for
    same-timestamp burst photos at a block boundary) after each block, and
-   stopping (`Stop This Shortcut`) once a block comes back empty. See
+   stopping (`Stop This Shortcut`) once a block comes back empty. That
+   `If` must call `/run/finish` and show the summary before stopping:
+   until 2026-11-03 it didn't, so every full sweep ended with no summary
+   and its run left open. See
    `shortcuts/SHORTCUT_INSTRUCTIONS.md` for the full build and PLAN.md §5.1
    for the design rationale.
 
@@ -273,6 +276,14 @@ reintroduces these problems.
    every block as `Limite` moves further back. See PLAN.md §5.12 for the
    full measurement and the user-facing writeup in the Troubleshooting
    Manual's "How fast is a backup, really?" section.
+
+   **Resolved (2026-11-03, PLAN.md W7)**: the ~20s figure measured the gap
+   between "=" log lines, and "=" is only logged when a full upload turns
+   out to be a duplicate, so it timed uploads, not skips. Timing every
+   request directly on the server: `/check` answers in ~0.5 ms, the
+   Shortcut takes a median 0.33 s between items, and a full sweep of 3,208
+   already-backed-up items took 47.6 min, 30 of them in unexplained pauses
+   on the iPhone (cause unconfirmed).
 6. **A stray filter can silently attach to "Find Photos"** (e.g. filtering
    against an unrelated variable like a `run_id`) if a filter row gets
    added by accident while configuring the action — always visually

@@ -99,7 +99,17 @@ Everything below, through the end of section 4, goes **inside** this outer
 - **Count** action → **Items** in the `Find Photos` result above.
 - **If** action: condition = the `Count` result **is** `0` (this fires once
   the sweep has passed your oldest photo — nothing left to check).
-  - Inside the "If": **Stop This Shortcut** action.
+  - Inside the "If", in this order (a full sweep always ends here, so this
+    is where the run gets closed and you see the summary; section 5 only
+    runs when `Repeticiones` runs out first):
+    1. **Get Contents of URL**: URL = the `ServerURL` variable chip followed
+       by `/run/finish` (without the chip, Shortcuts fails with "couldn't
+       convert from Rich Text to URL"); Method **POST**; Header
+       `X-Backup-Token` = `Token` variable; Request Body **Form**, field
+       `run_id` = `RunID` variable.
+    2. **Get Dictionary Value** → Key `files_new` in `Contents of URL`.
+    3. **Show Notification** → `Backup complete ✅ New: ` + `Dictionary Value`.
+    4. **Stop This Shortcut**.
   - Nothing needed in "Otherwise" — if the count isn't 0, execution just
     continues past the "End If" into section 4 below.
 
@@ -273,14 +283,11 @@ advance the sweep to the next block:
 > **Tuning `Repeticiones`**: confirmed working with `Repeticiones` up to 50
 > (≈2,500 photos checked in one run) in real testing; `Repeticiones = 180`
 > (≈9,000 photos) has also been confirmed not to crash or fail the
-> Shortcut itself. ⚠️ Don't assume a block that's already fully backed up
-> is fast just because it transfers no file — measured directly from real
-> activity logs, an "already backed up" check can still take a real
-> double-digit number of seconds per item, not a near-instant round trip.
-> See the Troubleshooting Manual's "How fast is a backup, really?" section
-> for the measured numbers (including a per-`Repeticiones` time table) and
-> why a run that's mostly re-checking already-backed-up content can take
-> longer than one uploading the same number of brand-new items.
+> Shortcut itself. An item already backed up transfers nothing but isn't
+> free either: a full sweep of 3,208 items already backed up took about 48
+> minutes on a real iPhone (2026-11-03). See the Troubleshooting Manual's
+> "How fast is a backup, really?" section for the measured numbers,
+> including a per-`Repeticiones` time table.
 >
 > ⚠️ **Important, non-obvious limitation**: `Limite` always resets to
 > "tomorrow" at the start of every run — there is no memory of where a

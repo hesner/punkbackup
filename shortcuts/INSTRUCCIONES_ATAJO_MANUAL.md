@@ -98,7 +98,17 @@ Todo lo que sigue, hasta el final de la sección 4, va **dentro** de este
 - Acción **Si** (If): condición = el resultado de `Count` **es** (is) `0`
   (esto se cumple cuando el barrido ya pasó tu foto más vieja — no queda
   nada por revisar).
-  - Dentro del "Si": acción **Stop This Shortcut**.
+  - Dentro del "Si", en este orden (un barrido completo siempre termina
+    aquí, así que aquí se cierra la corrida y ves el resumen; la sección 5
+    solo corre si antes se acaban las `Repeticiones`):
+    1. **Get Contents of URL**: URL = el chip de la variable `ServerURL`
+       seguido de `/run/finish` (sin el chip, Atajos falla con "couldn't
+       convert from Rich Text to URL"); Método **POST**; encabezado
+       `X-Backup-Token` = variable `Token`; Cuerpo **Form**, campo `run_id`
+       = variable `RunID`.
+    2. **Get Dictionary Value** → clave `files_new` en `Contents of URL`.
+    3. **Show Notification** → `Backup completo ✅ Nuevos: ` + `Dictionary Value`.
+    4. **Stop This Shortcut**.
   - No hace falta nada en "Si no" — si el conteo no es 0, la ejecución
     simplemente sigue después del "End If" hacia la sección 4.
 
@@ -283,15 +293,12 @@ sección 3 — estas dos acciones avanzan el barrido al siguiente bloque:
 > **Ajustando `Repeticiones`**: comprobado funcionando con `Repeticiones`
 > hasta 50 (≈2.500 fotos revisadas en una sola corrida) en pruebas reales;
 > `Repeticiones = 180` (≈9.000 fotos) también fue confirmado sin que el
-> Atajo mismo falle ni se cuelgue. ⚠️ No asumas que un bloque ya
-> respaldado es rápido solo porque no transfiere ningún archivo — medido
-> directamente de logs de actividad reales, un chequeo de "ya respaldado"
-> puede tardar igual varios segundos por elemento, no un ida-y-vuelta casi
-> instantáneo. Ver la sección "¿Qué tan rápido es un respaldo, en la
-> práctica?" del Manual de solución de problemas para los números medidos
-> (incluye una tabla de tiempo por `Repeticiones`) y por qué una corrida
-> que está mayormente re-revisando contenido ya respaldado puede tardar
-> más que una que sube la misma cantidad de elementos totalmente nuevos.
+> Atajo mismo falle ni se cuelgue. Un elemento ya respaldado no transfiere
+> nada, pero tampoco es gratis: un barrido completo de 3.208 elementos ya
+> respaldados tardó unos 48 minutos en un iPhone real (2026-11-03). Ver la
+> sección "¿Qué tan rápido es un respaldo, en la práctica?" del Manual de
+> solución de problemas para los números medidos (incluye una tabla de
+> tiempo por `Repeticiones`).
 >
 > ⚠️ **Limitación importante, no obvia**: `Limite` siempre se reinicia a
 > "mañana" al empezar cada corrida — no hay memoria de dónde quedó la

@@ -251,26 +251,18 @@ device by this project's own original testing. **`Repeticiones = 180`
 that haven't been separately confirmed are still shown here for reference,
 but treat them as unverified until tested.
 
-> ⚠️ **Important, found while investigating a real backup that hadn't
-> finished after several sessions**: the table above only models time for
-> **new** files. It assumes every item in the sweep needs a real upload —
-> but once part of your library is already backed up (from an earlier,
-> interrupted run), most of each new block's 50 items are "already backed
-> up, skip" instead. Measured directly from the activity log: a skip
-> (`/check` comes back "already backed up," no file transfer at all) still
-> took a **median of about 20 seconds** in real recent runs — not the
-> near-instant round trip you'd expect for a plain HTTP check with nothing
-> to transfer (sample size is still small, and it's noisy — anywhere from
-> a few seconds to several minutes). **This means a run that's mostly
-> re-checking already-backed-up content can take noticeably longer than
-> the table above suggests**, not shorter — likely explains why a large
-> backup that gets stopped and resumed repeatedly can take much longer in
-> wall-clock time to finish than the "new items only" estimate implies.
-> The exact cause isn't confirmed yet (candidates: per-action overhead in
-> the Shortcuts app itself, or `Find Photos` re-scanning a large library on
-> every block) — treat the skip-heavy case as **slower, not faster**, than
-> a first-time backfill of the same item count until this is narrowed down
-> further.
+> **Items already backed up**: the table above only covers **new** files.
+> Once most of your library is backed up, each run still checks every item
+> from newest to oldest, and an item already backed up costs no transfer.
+> Measured on 2026-11-03 with everything already backed up: a full sweep
+> of 3,208 items took **about 48 minutes**. The PC answers each check in
+> under a millisecond; the iPhone spends about a third of a second per item
+> moving through the Shortcut's actions (17 minutes in total), and the
+> rest were pauses on the iPhone itself (30 minutes) whose cause isn't
+> confirmed yet. Keeping the screen on and the Shortcuts app open during a
+> long run is the safest bet. An earlier version of this manual said each
+> skipped item took about 20 seconds: that measurement was actually of full
+> uploads the PC then discarded as duplicates, not of skips.
 
 Other caveats:
 - Your own photo/video mix shifts these numbers — a video-heavy library
@@ -303,6 +295,20 @@ happens, check the **"Get Contents of URL"** action pointing at
 
 To confirm something was really saved while you check, look at the
 destination folder directly (see next section).
+
+## The Shortcut finished with no notification at all
+
+If the Shortcut reached your oldest photo and ended without any summary,
+you have a version from before 2026-11-03. When it found an empty block
+it stopped right away, before telling the PC the run was over, so the
+summary only appeared when `Repeticiones` ran out first. Nothing was lost:
+every file it uploaded is backed up, and the app closes that run on its
+own the next time it opens.
+
+To fix it, download the Shortcut again (see the iPhone Setup Manual) and
+enter your address and token, or add the 3 missing actions to yours by
+hand: section 3 of the alternate Manual Build guide, inside the "If" whose
+condition is `Count` is `0`.
 
 ## How to check files are really being saved
 

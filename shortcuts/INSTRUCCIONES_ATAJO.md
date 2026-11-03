@@ -107,10 +107,11 @@ Guarda, y ya quedó construido.
    > - Activa **"Permitir compartir grandes cantidades de datos"**.
    > - Vuelve a correr el atajo `PunkBackup`.
    > - También es una configuración de una sola vez por iPhone/iPad.
-2. Deberías ver una notificación al final con los números (Nuevos / Ya
-   existían / Conflictos). Es normal que los números de esta primera
-   corrida muestren varios archivos subidos — es tu primer respaldo
-   corriendo.
+2. Deberías ver una notificación al final. Cuando el Atajo llega a tu foto
+   más antigua dice "Backup completo. Nuevos: N" (cuántos archivos subió);
+   si se detiene antes porque se acabaron las `Repeticiones`, muestra
+   Nuevos / Ya existían / Conflictos. Es normal que esta primera corrida
+   muestre muchos archivos subidos — es tu primer respaldo corriendo.
 3. En tu PC, abre en el Explorador de Windows la carpeta destino que
    elegiste para este perfil — deberías ver subcarpetas de Año/Mes con tus
    fotos y videos cayendo adentro.

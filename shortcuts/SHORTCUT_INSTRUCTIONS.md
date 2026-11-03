@@ -108,9 +108,11 @@ Save, and you're done building it.
    > - Turn on **"Allow Sharing Large Amounts of Data"**.
    > - Run the `PunkBackup` shortcut again.
    > - This is also a one-time setting per iPhone/iPad.
-2. You should see a notification at the end with counts (New / Already had
-   / Conflicts). It's fine if the very first run's numbers show it uploaded
-   several files — that's your first backup running.
+2. You should see a notification at the end. When the Shortcut reaches
+   your oldest photo it says "Backup completo. Nuevos: N" (how many files
+   it uploaded); if it stops earlier because `Repeticiones` ran out, it
+   shows New / Already had / Conflicts. It's fine if the very first run
+   shows it uploaded many files — that's your first backup running.
 3. On your PC, open the destination folder you chose for this profile in
    Windows Explorer — you should see Year/Month subfolders with your
    photos and videos landing inside.

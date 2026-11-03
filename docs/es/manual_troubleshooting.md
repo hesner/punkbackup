@@ -260,29 +260,20 @@ cuelga a ese tamaño. Los valores por encima de 50 que no se han confirmado
 por separado se muestran igual como referencia, pero trátalos como no
 verificados hasta probarlos.
 
-> ⚠️ **Importante, encontrado investigando un respaldo real que no había
-> terminado después de varias sesiones**: la tabla de arriba solo modela
-> el tiempo de archivos **nuevos**. Asume que cada elemento del barrido
-> necesita una subida real — pero una vez que parte de tu biblioteca ya
-> está respaldada (de una corrida anterior interrumpida), la mayoría de
-> los 50 elementos de cada bloque nuevo van a ser "ya respaldado, se
-> salta" en vez de subidas reales. Medido directamente del log de
-> actividad: un salto (el `/check` responde "ya está respaldado", sin
-> transferir ningún archivo) tardó una **mediana de unos 20 segundos** en
-> corridas reales recientes — no el ida-y-vuelta casi instantáneo que
-> esperarías de un chequeo HTTP simple sin nada que transferir (la muestra
-> todavía es chica y tiene ruido — desde unos segundos hasta varios
-> minutos). **Esto significa que una corrida que está mayormente
-> re-revisando contenido ya respaldado puede tardar notablemente más que
-> lo que sugiere la tabla de arriba**, no menos — probablemente explica
-> por qué un respaldo grande que se detiene y se retoma varias veces puede
-> tardar mucho más en tiempo real que lo que estima la proyección de "solo
-> elementos nuevos". La causa exacta todavía no está confirmada
-> (candidatos: costo fijo propio de cada acción dentro de la app Atajos, o
-> que `Find Photos` vuelve a escanear una biblioteca grande en cada
-> bloque) — trata el caso de mayoría-saltos como **más lento, no más
-> rápido**, que un primer respaldo del mismo número de elementos, hasta
-> que esto se investigue más a fondo.
+> **Elementos ya respaldados**: la tabla de arriba solo cubre archivos
+> **nuevos**. Cuando la mayor parte de tu biblioteca ya está respaldada,
+> cada corrida igual revisa todos los elementos del más nuevo al más
+> antiguo, y uno ya respaldado no transfiere nada. Medido el 2026-11-03
+> con todo ya respaldado: un barrido completo de 3.208 elementos tardó
+> **unos 48 minutos**. La PC responde cada consulta en menos de un
+> milisegundo; el iPhone tarda como un tercio de segundo por elemento en
+> recorrer las acciones del Atajo (17 minutos en total), y el resto
+> fueron pausas del propio iPhone (30 minutos) cuya causa todavía no está
+> confirmada. Lo más seguro en una corrida larga es dejar la pantalla
+> encendida y la app Atajos abierta. Una versión anterior de este manual
+> decía que cada elemento ya respaldado tardaba unos 20 segundos: esa
+> medición en realidad era de subidas completas que la PC después
+> descartaba por duplicadas, no de saltos.
 
 Otras salvedades:
 - Tu propia mezcla de fotos/videos cambia estos números — una biblioteca
@@ -317,6 +308,20 @@ Manual):
 
 Para confirmar que sí se guardó algo mientras lo revisas, mira la carpeta
 destino directamente (ver siguiente sección).
+
+## El Atajo terminó sin mostrar ninguna notificación
+
+Si el Atajo llegó a tu foto más antigua y terminó sin resumen, tienes una
+versión anterior al 2026-11-03. Al encontrar un bloque vacío se detenía de
+inmediato, antes de avisarle a la PC que la corrida había terminado, así
+que el resumen solo salía cuando se acababan antes las `Repeticiones`. No
+se perdió nada: todo lo que subió quedó respaldado, y la app cierra esa
+corrida sola la próxima vez que se abre.
+
+Para arreglarlo, descarga el Atajo otra vez (ver el Manual de
+configuración del iPhone) y pon tu dirección y token, o agrega a mano las
+3 acciones que faltan en el tuyo: sección 3 de la guía alternativa de
+Construcción Manual, dentro del "Si" cuya condición es `Count` es `0`.
 
 ## Cómo revisar si de verdad se están guardando archivos
 

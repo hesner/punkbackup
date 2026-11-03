@@ -207,6 +207,21 @@ class ManifestDB:
                 f"SELECT * FROM backed_up_files WHERE {clause}", [f"{day}%" for day in dates]
             ).fetchall()
 
+    def has_file_at(self, path) -> bool:
+        """Whether this file on disk has a row, by path_key: a row written under
+        another drive letter or another name case still counts."""
+        with self._lock:
+            if self._conn.execute(
+                "SELECT 1 FROM backed_up_files WHERE dest_path = ?", (str(path),)
+            ).fetchone():
+                return True
+            rows = self._conn.execute(
+                "SELECT dest_path FROM backed_up_files WHERE instr(lower(dest_path), lower(?)) > 0",
+                (Path(path).name,),
+            ).fetchall()
+        key = path_key(path)
+        return any(path_key(row["dest_path"]) == key for row in rows)
+
     def indexed_paths(self) -> set[str]:
         """path_key() of every recorded file, for telling whether a file on
         disk has a row without depending on name case or the drive letter."""

@@ -1175,8 +1175,11 @@ reintroduces these problems.
       library": `IMG_2106.mov`, recorded that morning, never appeared by cable and arrived
       by WiFi. Cause not found yet (PLAN.md roadmap item 7).
     - A real kill mid-write (`tests/test_abrupt_stop.py`) never corrupted SQLite or
-      left a row without a whole file, but can leave a whole file with no row. The
-      cable heals those; WiFi doesn't (roadmap item 3).
+      left a row without a whole file, but can leave a whole file with no row. Both
+      paths heal those: the cable on its next pass, and WiFi because `/check` only
+      counts a file that also has its row, so `/upload` gets to write it (PLAN.md W6).
+      Anything that changes a file's bytes before it's recorded must happen in
+      staging, before the move, so a cut never leaves a half-finished final file.
 
 - Unit tests against `BackupEngine`/`ManifestDB` directly (no HTTP) for the
   dedup/conflict/incremental rules — fast, exhaustive.

@@ -8,6 +8,7 @@ alive, so this says nothing about bytes that never reached the drive.
 Run with: .venv\\Scripts\\python.exe -m pytest tests -v
 """
 import hashlib
+import io
 import sqlite3
 import subprocess
 import sys
@@ -114,6 +115,32 @@ def test_batched_writes_lose_at_most_one_batch_of_rows_and_the_cable_heals_them(
     assert len(healed["rows"]) == len(state["files"])
     assert len({path_key(p) for p, _s in healed["rows"]}) == len(healed["rows"])  # no double rows
     assert analyze_device(Phone(), tmp_path).pending == []
+
+
+def test_files_left_without_a_row_are_healed_by_the_shortcut_too(tmp_path):
+    """Same real kill, healed over WiFi: /check asks again only for the files
+    without a row, and resending them writes their rows (PLAN.md W6)."""
+    _kill_while_writing(tmp_path, "batch", after_files=60)
+    state = _inspect(tmp_path)
+    indexed = {path_key(path) for path, _sha in state["rows"]}
+    orphans = {p.name for p in state["files"] if path_key(p) not in indexed}
+    assert orphans
+
+    db = ManifestDB(tmp_path)
+    engine = BackupEngine(tmp_path, db)
+    asked = {p.name for p in state["files"] if not engine.check_exists(p.name, "2026-03-05T10:00:00")}
+    assert asked == orphans
+    for name in sorted(asked):
+        data = (tmp_path / "2026" / "03" / name).read_bytes()
+        outcome = engine.process_upload(name, io.BytesIO(data), "2026-03-05T10:00:00", None)
+        assert outcome["status"] == "skipped_duplicate"
+    assert all(engine.check_exists(p.name, "2026-03-05T10:00:00") for p in state["files"])
+    db.close()
+
+    healed = _inspect(tmp_path)
+    assert len(healed["rows"]) == len(state["files"]) == len(healed["files"])
+    for dest_path, sha256 in healed["rows"]:
+        assert hashlib.sha256(Path(dest_path).read_bytes()).hexdigest() == sha256
 
 
 def test_a_healed_video_row_gets_the_hash_of_the_file_on_disk(tmp_path):

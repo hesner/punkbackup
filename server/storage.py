@@ -221,7 +221,10 @@ class BackupEngine:
         is ever silently overwritten even if this cheap check is wrong."""
         safe_name = Path(filename).name
         candidate_path = self._year_month_dir(taken_at) / safe_name
-        if candidate_path.exists():
+        # Only with its row: a cut between the move and the commit leaves the
+        # whole file here without one. Asking for it again lets /upload write
+        # the row, so the mirror copies it too (PLAN.md W6).
+        if candidate_path.exists() and self.db.has_file_at(candidate_path):
             return True
         if not Path(safe_name).suffix:
             # The Shortcut sent no extension — if the server detected one
@@ -428,6 +431,13 @@ class BackupEngine:
 
             target_dir.mkdir(parents=True, exist_ok=True)
             if candidate_path.exists():
+                if not self.db.has_file_at(candidate_path):
+                    restored = self._restore_row(
+                        candidate_path, staging_path, sha256, safe_name, original_name,
+                        taken_at, sent_taken_at, run_id, commit,
+                    )
+                    if restored is not None:
+                        return restored
                 if self._hash_existing(candidate_path) == sha256:
                     if original_name != safe_name:
                         self.db.backfill_original_filename(str(candidate_path), original_name)
@@ -478,9 +488,9 @@ class BackupEngine:
                         return {"status": "skipped_duplicate", "dest_path": str(candidate_path)}
 
                 final_path = self._next_conflict_name(target_dir, candidate_path)
-                shutil.move(str(staging_path), str(final_path))
                 if fix_video_date:
-                    sha256 = self._sha256_after_video_fix(final_path, taken_at, sha256)
+                    sha256 = self._sha256_after_video_fix(staging_path, taken_at, sha256, final_path.suffix)
+                shutil.move(str(staging_path), str(final_path))
                 self._remember_name(safe_name, original_name, sent_taken_at, str(final_path), commit=False)
                 self.db.record_file(safe_name, sha256, taken_at, str(final_path), size, original_name, commit=commit)
                 self._resolve_error_both(run_id, safe_name, original_name)
@@ -488,9 +498,11 @@ class BackupEngine:
                 self.logger.warning("! %s: name conflict, kept both -> %s", safe_name, final_path.name)
                 return {"status": "conflict_kept_both", "dest_path": str(final_path)}
 
-            shutil.move(str(staging_path), str(candidate_path))
+            # Fixed while still in staging, so a cut can never leave a final file
+            # halfway: whatever reaches its folder is already as recorded (PLAN.md W6).
             if fix_video_date:
-                sha256 = self._sha256_after_video_fix(candidate_path, taken_at, sha256)
+                sha256 = self._sha256_after_video_fix(staging_path, taken_at, sha256, candidate_path.suffix)
+            shutil.move(str(staging_path), str(candidate_path))
             self._remember_name(safe_name, original_name, sent_taken_at, str(candidate_path), commit=False)
             self.db.record_file(safe_name, sha256, taken_at, str(candidate_path), size, original_name, commit=commit)
             self._resolve_error_both(run_id, safe_name, original_name)
@@ -500,7 +512,9 @@ class BackupEngine:
         finally:
             staging_path.unlink(missing_ok=True)  # no-op once moved
 
-    def _sha256_after_video_fix(self, path: Path, taken_at: Optional[str], original_sha256: str) -> str:
+    def _sha256_after_video_fix(
+        self, path: Path, taken_at: Optional[str], original_sha256: str, suffix: Optional[str] = None,
+    ) -> str:
         """Applies the video creation_time fix (if applicable) and returns
         the hash that actually matches what ends up on disk — MUST be
         called, and its result recorded, BEFORE record_file(), never
@@ -525,18 +539,47 @@ class BackupEngine:
         untouched videos and all photos pay nothing extra, and no second
         database write is added (the corrected hash goes into the SAME
         record_file() call this always led to)."""
-        if self._maybe_fix_video_creation_time(path, taken_at):
+        if self._maybe_fix_video_creation_time(path, taken_at, suffix):
             return self._hash_existing(path)
         return original_sha256
 
-    def _maybe_fix_video_creation_time(self, path: Path, taken_at: Optional[str]) -> bool:
+    def _restore_row(
+        self, candidate_path: Path, staging_path: Path, sha256: str, safe_name: str, original_name: str,
+        taken_at: Optional[str], sent_taken_at: Optional[str], run_id: Optional[str], commit: bool,
+    ) -> Optional[dict]:
+        """The file at candidate_path landed but its row didn't (a cut between the
+        move and the commit). If this upload is that same content, write the row
+        for the file already there, keeping its bytes as they are. None when the
+        content differs: then the usual rules keep both (PLAN.md W6)."""
+        on_disk = self._hash_existing(candidate_path)
+        if on_disk != sha256:
+            # Encode Media changes a video's bytes on every pass: compare frames.
+            size, existing_size = staging_path.stat().st_size, candidate_path.stat().st_size
+            if max(size, existing_size) > min(size, existing_size) * MAX_SIZE_RATIO_SAME_VIDEO:
+                return None
+            fingerprint = video_fingerprint(candidate_path)
+            if fingerprint is None or fingerprint != video_fingerprint(staging_path):
+                return None
+            if not same_video(staging_path, candidate_path):
+                return None
+        self._remember_name(safe_name, original_name, sent_taken_at, str(candidate_path), commit=False)
+        self.db.record_file(
+            safe_name, on_disk, taken_at, str(candidate_path), candidate_path.stat().st_size, original_name,
+            commit=commit,
+        )
+        self._resolve_error_both(run_id, safe_name, original_name)
+        self.db.bump_run(run_id, "files_skipped", commit=commit)
+        self.logger.warning("= %s was on disk without its record; record restored", safe_name)
+        return {"status": "skipped_duplicate", "dest_path": str(candidate_path)}
+
+    def _maybe_fix_video_creation_time(self, path: Path, taken_at: Optional[str], suffix: Optional[str] = None) -> bool:
         """Best-effort — see video_metadata.py's docstring for why this
         exists. Only worth attempting for video containers, and only when
         a real taken_at is known (writing "now" into the file would just
         recreate the same problem for a different reason). Returns True
         if the file's bytes were actually changed — see
         _sha256_after_video_fix, the only caller, for why that matters."""
-        if not taken_at or path.suffix.lower() not in VIDEO_EXTENSIONS:
+        if not taken_at or (suffix or path.suffix).lower() not in VIDEO_EXTENSIONS:
             return False
         try:
             dt = datetime.fromisoformat(taken_at.replace("Z", "+00:00"))

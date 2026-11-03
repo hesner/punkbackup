@@ -149,7 +149,10 @@ not guarantees: a photo's own EXIF capture date beats `taken_at`, because in 1,7
 real photos only 45% of the Shortcut's dates matched it and 22% were exactly 12 hours
 off, cause unknown (PLAN.md W2). If `filename` has no extension at all, the server sniffs
 the real format from the file's own byte signature (JPEG/PNG/GIF/MOV/MP4/
-HEIC) and appends it — never overriding an extension that IS present. If
+HEIC) and appends it. An extension that clearly contradicts the content is
+replaced, since the Shortcut really sent a video as `IMG_2105.jpeg`; variants of one
+format and unclear signatures are left alone, and the name sent is remembered for
+`/check` (PLAN.md W3). If
 `taken_at` is empty and there's no capture date, it uses the EXIF modified
 date (JPEG/HEIC only) before falling back to "now".
 Both cover the same real, narrow class of Photos items that Shortcuts

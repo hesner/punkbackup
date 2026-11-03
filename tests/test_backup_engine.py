@@ -4,6 +4,7 @@ content, one-directional writes, and index persistence.
 
 Run with: .venv\\Scripts\\python.exe -m pytest tests -v
 """
+import hashlib
 import io
 import sys
 from pathlib import Path
@@ -437,13 +438,58 @@ def test_missing_extension_is_detected_from_video_content(tmp_path):
     assert result["dest_path"].endswith("ScreenRecording_01-01-2026.mov")
 
 
-def test_extension_is_never_overridden_when_already_present(tmp_path):
-    """Content-sniffing only fills in a MISSING extension — it must never
-    second-guess or replace one the client actually sent, even if the
-    real bytes look like a different format."""
+def test_extension_that_contradicts_the_content_is_corrected(tmp_path):
     engine = make_engine(tmp_path)
     result = engine.process_upload("photo.png", io.BytesIO(_fake_jpeg_bytes()), "2026-05-01T00:00:00", None)
-    assert result["dest_path"].endswith("photo.png")
+    assert result["dest_path"].endswith("photo.jpg")
+
+
+def test_video_sent_as_a_photo_is_saved_as_video_and_gets_its_date_fixed(tmp_path):
+    engine = make_engine(tmp_path)
+    video = _synthetic_mov(mvhd_creation=1000, mdhd_creation=2000, mdat=b"payload!" * 4)
+    result = engine.process_upload("IMG_2105.jpeg", io.BytesIO(video), "2026-05-01T10:00:00", None)
+    saved = Path(result["dest_path"])
+    assert saved.name == "IMG_2105.mov"
+    assert saved.read_bytes() != video
+    row = engine.db.find_by_dest_path(str(saved))
+    assert row["original_filename"] == "IMG_2105.jpeg"
+    assert row["sha256"] == hashlib.sha256(saved.read_bytes()).hexdigest()
+
+
+def test_corrected_file_isnt_asked_for_again_under_the_name_sent(tmp_path):
+    """The file lands in the same month's folder with another name, so only the
+    remembered name can tell /check about it."""
+    engine = make_engine(tmp_path)
+    video = _synthetic_mov(mvhd_creation=1000, mdhd_creation=2000, mdat=b"payload!" * 4)
+    taken_at = "2026-05-01T10:00:00"
+    assert not engine.check_exists("IMG_2105.jpeg", taken_at)
+    engine.process_upload("IMG_2105.jpeg", io.BytesIO(video), taken_at, None)
+    assert engine.check_exists("IMG_2105.jpeg", taken_at)
+
+
+def test_correction_never_overwrites_a_different_file_with_that_name(tmp_path):
+    engine = make_engine(tmp_path)
+    date = "2026-05-01T00:00:00"
+    first = engine.process_upload("photo.jpg", io.BytesIO(_fake_jpeg_bytes("2026:05:01 00:00:00")), date, None)
+    second = engine.process_upload("photo.png", io.BytesIO(_fake_jpeg_bytes("2026:05:02 00:00:00")), date, None)
+    assert second["status"] == "conflict_kept_both"
+    assert Path(first["dest_path"]).exists() and Path(second["dest_path"]).exists()
+    assert first["dest_path"] != second["dest_path"]
+
+
+@pytest.mark.parametrize("name, content", [
+    ("photo.jpeg", b"\xff\xd8\xff\xe0" + b"\x00" * 64),  # variants of one format
+    ("clip.mp4", b"\x00\x00\x00\x14ftypqt  " + b"\x00" * 64),
+    ("clip.mov", b"\x00\x00\x00\x14ftypmp42" + b"\x00" * 64),
+    ("photo.heic", b"\x00\x00\x00\x14ftypavif" + b"\x00" * 64),  # brand this doesn't know
+    ("photo.jpg", b"\x00\x00\x00\x14ftypmif1" + b"\x00" * 64),  # may be AVIF
+    ("photo.dng", b"\xff\xd8\xff\xe0" + b"\x00" * 64),  # extension this doesn't know
+    ("photo.jpg", b"not a known signature" + b"\x00" * 64),
+])
+def test_extension_stays_when_the_content_doesnt_clearly_contradict_it(tmp_path, name, content):
+    engine = make_engine(tmp_path)
+    result = engine.process_upload(name, io.BytesIO(content), "2026-05-01T00:00:00", None)
+    assert Path(result["dest_path"]).name == name
 
 
 def test_missing_taken_at_falls_back_to_exif_date_when_present(tmp_path):

@@ -85,6 +85,36 @@ def _detect_extension(staging_path: Path) -> Optional[str]:
     return None
 
 
+_EXTENSION_FAMILIES = {
+    ".jpg": "jpeg", ".jpeg": "jpeg", ".png": "png", ".gif": "gif", ".heic": "heic", ".heif": "heic",
+    ".mov": "video", ".mp4": "video", ".m4v": "video",
+}
+# Only brands that can't be anything else. mif1/msf1 can also be AVIF, and an unlisted
+# brand makes _detect_extension guess MP4, which is fine to fill a gap but not to replace a name.
+_UNAMBIGUOUS_FTYP_BRANDS = {
+    b"qt  ", b"heic", b"heix", b"hevc", b"hevx",
+    b"isom", b"iso2", b"iso4", b"iso5", b"iso6", b"mp41", b"mp42", b"avc1", b"M4V ", b"M4VH", b"M4VP",
+}
+
+
+def _corrected_extension(name: str, staging_path: Path) -> Optional[str]:
+    """The extension to use when the one sent contradicts the content, else None. The
+    Shortcut really sent a 169 MB QuickTime video as IMG_2105.jpeg (PLAN.md W3). Variants
+    of one format (.jpg/.jpeg, .mov/.mp4) and extensions this doesn't know are left alone."""
+    family = _EXTENSION_FAMILIES.get(Path(name).suffix.lower())
+    detected = _detect_extension(staging_path)
+    if family is None or detected is None or _EXTENSION_FAMILIES[detected] == family:
+        return None
+    try:
+        with open(staging_path, "rb") as f:
+            head = f.read(16)
+    except OSError:
+        return None
+    if head[4:8] == b"ftyp" and head[8:12] not in _UNAMBIGUOUS_FTYP_BRANDS:
+        return None
+    return detected
+
+
 def _plausible_date(raw: object) -> Optional[str]:
     """ISO date from an EXIF value, or None if it can't be a real capture date:
     camera clocks reset to odd years, and the field can hold anything."""
@@ -254,7 +284,7 @@ class BackupEngine:
         """/check only knows the name and date it was sent, so if the file lives
         anywhere else it would keep being asked for. Never without a date: the name
         alone isn't safe, see find_name_alias."""
-        if sent_taken_at and path_key(dest_path) != path_key(self._year_month_dir(sent_taken_at) / safe_name):
+        if sent_taken_at and path_key(dest_path) != path_key(self._year_month_dir(sent_taken_at) / original_name):
             self.db.record_name_alias(original_name, sent_taken_at, dest_path, commit=commit)
 
     def _skip_as_already_backed_up(
@@ -365,6 +395,12 @@ class BackupEngine:
             if detected_ext:
                 self.logger.warning("%s: no extension from the Shortcut, detected %s from content", safe_name, detected_ext)
                 safe_name = f"{safe_name}{detected_ext}"
+        else:
+            corrected_ext = _corrected_extension(safe_name, staging_path)
+            if corrected_ext:
+                corrected_name = Path(safe_name).stem + corrected_ext
+                self.logger.warning("%s: the content is %s, saved as %s", safe_name, corrected_ext, corrected_name)
+                safe_name = corrected_name
         sent_taken_at = taken_at
         capture_date, modified_date = _read_exif_dates(staging_path)
         # A value that isn't a date (a rebound Shortcut chip, AGENTS.md lesson 9)

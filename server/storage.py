@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import hashlib
 import logging
+import os
 import shutil
 import time
 import uuid
@@ -320,6 +321,8 @@ class BackupEngine:
                     hasher.update(chunk)
                     out.write(chunk)
                     size += len(chunk)
+                out.flush()
+                os.fsync(out.fileno())  # same as app.py's /upload (PLAN.md W5)
         except Exception:
             # A failure partway through (e.g. disk full) can leave a
             # partial file behind — clean it up rather than leaking it into

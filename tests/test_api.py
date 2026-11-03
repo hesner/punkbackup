@@ -478,3 +478,16 @@ def test_aggregate_status_sums_all_profiles(client, store, tmp_path):
     upload(client, {"X-Backup-Token": hesner.token}, "B.jpg", b"2")
     agg = app_module.get_aggregate_status()
     assert agg["total_files_backed_up"] == 2
+
+
+def test_upload_reaches_the_drive_before_it_gets_a_row(client, store, tmp_path, monkeypatch):
+    """PLAN.md W5: a power cut must not leave a row over data still in Windows' cache."""
+    from server.manifest_db import ManifestDB
+    events = []
+    real_fsync, real_record = app_module.os.fsync, ManifestDB.record_file
+    monkeypatch.setattr(app_module.os, "fsync", lambda fd: (events.append("fsync"), real_fsync(fd))[1])
+    monkeypatch.setattr(ManifestDB, "record_file", lambda self, *a, **k: (events.append("row"), real_record(self, *a, **k))[1])
+    profile = add_profile_with_dest(store, tmp_path, "Ana")
+    r = upload(client, {"X-Backup-Token": profile.token}, "a.jpg", b"some photo bytes")
+    assert r.json()["status"] == "new"
+    assert events == ["fsync", "row"]

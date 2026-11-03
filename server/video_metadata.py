@@ -29,6 +29,7 @@ from __future__ import annotations
 
 import hashlib
 import logging
+import os
 import struct
 from collections import Counter
 from datetime import datetime, timezone
@@ -144,6 +145,11 @@ def fix_creation_time(path: Path, real_taken_at: datetime) -> bool:
                             if m_type == "mdhd":
                                 _patch_time_fields(f, m_start, mac_time)
                                 patched_any = True
+            if patched_any:
+                # The upload records this file's hash right after, so the patch must
+                # be on the drive first, like the bytes it changes (PLAN.md W5).
+                f.flush()
+                os.fsync(f.fileno())
         return patched_any
     except Exception as exc:
         logger.warning("Could not fix video creation_time for %s: %s", path, exc)

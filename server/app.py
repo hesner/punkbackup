@@ -26,6 +26,7 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import logging
+import os
 import uuid
 from pathlib import Path
 from typing import Optional
@@ -269,6 +270,11 @@ async def upload(
                 hasher.update(chunk)
                 out.write(chunk)
                 size += len(chunk)
+            # Onto the drive before the file can get a row: otherwise a power cut or a
+            # yanked USB could leave "backed up" over data still in Windows' cache
+            # (PLAN.md W5). Measured on the real USB: 9-62 ms per file.
+            out.flush()
+            await run_in_threadpool(os.fsync, out.fileno())
     except OSError as exc:
         # Most common real cause: the destination drive filled up mid-write
         # (ENOSPC). Same reasoning as the 0-byte-upload case below: a non-2xx

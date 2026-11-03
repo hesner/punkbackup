@@ -159,3 +159,17 @@ def test_content_signature_never_raises_on_garbage(tmp_path):
     path = tmp_path / "garbage.mov"
     path.write_bytes(b"\x00" * 4)
     assert content_signature(path) is None
+
+
+def test_fix_creation_time_forces_the_patch_onto_the_drive(tmp_path, monkeypatch):
+    import server.video_metadata as vm
+    calls = []
+    monkeypatch.setattr(vm.os, "fsync", lambda fd: calls.append(fd))
+    path = tmp_path / "clip.mov"
+    path.write_bytes(_build_synthetic_mov())
+    assert fix_creation_time(path, datetime(2020, 1, 1, tzinfo=timezone.utc)) is True
+    assert len(calls) == 1
+    other = tmp_path / "not_video.mov"
+    other.write_bytes(b"not an iso-bmff file at all")
+    assert fix_creation_time(other, datetime(2020, 1, 1, tzinfo=timezone.utc)) is False
+    assert len(calls) == 1

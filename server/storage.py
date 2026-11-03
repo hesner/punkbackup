@@ -299,7 +299,7 @@ class BackupEngine:
         if not sent_taken_at and not Path(original_name).suffix:
             # With neither date nor extension, this is the only thing /check can
             # recognize it by next time (AGENTS.md lesson 20).
-            self.db.backfill_original_filename(dest_path, original_name)
+            self.db.backfill_original_filename(dest_path, original_name, commit=commit)
         self._resolve_error_both(run_id, safe_name, original_name)
         self.db.bump_run(run_id, "files_skipped", commit=commit)
         self.logger.info("= %s already backed up as %s, skipped", safe_name, Path(dest_path).name)
@@ -379,7 +379,29 @@ class BackupEngine:
         on what a per-file fsync costs on USB. The rules are identical.
 
         `fix_video_date=False` keeps the file exactly as received. The date only
-        needs fixing because Encode Media overwrites it, which the cable never does."""
+        needs fixing because Encode Media overwrites it, which the cable never does.
+
+        Every write one file needs (its row, its alias, the run's counter) is
+        committed together, once, at the end: each commit is a real wait on a USB
+        drive, and a file used to cost two or three (PLAN.md W8). A cut before that
+        commit leaves the file on disk without its row, which the next upload heals."""
+        try:
+            return self._finalize_upload(filename, staging_path, sha256, size, taken_at, run_id, fix_video_date)
+        finally:
+            if commit:
+                self.db.commit()
+
+    def _finalize_upload(
+        self,
+        filename: str,
+        staging_path: Path,
+        sha256: str,
+        size: int,
+        taken_at: Optional[str],
+        run_id: Optional[str],
+        fix_video_date: bool,
+    ) -> dict:
+        commit = False  # finalize_upload commits once, after every write
         if size == 0:
             # A genuinely empty upload — seen in practice when Shortcuts runs
             # in the background and can't fetch a large video's full bytes
@@ -440,7 +462,7 @@ class BackupEngine:
                         return restored
                 if self._hash_existing(candidate_path) == sha256:
                     if original_name != safe_name:
-                        self.db.backfill_original_filename(str(candidate_path), original_name)
+                        self.db.backfill_original_filename(str(candidate_path), original_name, commit=commit)
                     self._resolve_error_both(run_id, safe_name, original_name)
                     self.db.bump_run(run_id, "files_skipped", commit=commit)
                     # TEMP DIAGNOSTIC (PLAN.md §17.7) — files_skipped has
@@ -461,7 +483,7 @@ class BackupEngine:
 
                 if same_content is not None:  # the same video, re-encoded under this same name
                     if original_name != safe_name:
-                        self.db.backfill_original_filename(str(candidate_path), original_name)
+                        self.db.backfill_original_filename(str(candidate_path), original_name, commit=commit)
                     return self._skip_as_already_backed_up(
                         run_id, safe_name, original_name, sent_taken_at, str(candidate_path), commit,
                     )
@@ -478,7 +500,7 @@ class BackupEngine:
                     existing_sig = content_signature(candidate_path)
                     if existing_sig is not None and existing_sig == content_signature(staging_path):
                         if original_name != safe_name:
-                            self.db.backfill_original_filename(str(candidate_path), original_name)
+                            self.db.backfill_original_filename(str(candidate_path), original_name, commit=commit)
                         self._resolve_error_both(run_id, safe_name, original_name)
                         self.db.bump_run(run_id, "files_skipped", commit=commit)
                         # TEMP DIAGNOSTIC — see the other skip branch above.
@@ -592,9 +614,10 @@ class BackupEngine:
         have used — a 0-byte retry marks the error under the name it was
         UPLOADED with, which may be the pre-extension-detection name (see
         finalize_upload's `original_name`)."""
-        self.db.resolve_error(run_id, safe_name)
+        # Only called while placing an upload, which commits once at the end.
+        self.db.resolve_error(run_id, safe_name, commit=False)
         if original_name != safe_name:
-            self.db.resolve_error(run_id, original_name)
+            self.db.resolve_error(run_id, original_name, commit=False)
 
     @staticmethod
     def _next_conflict_name(target_dir: Path, candidate_path: Path) -> Path:

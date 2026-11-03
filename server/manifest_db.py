@@ -269,7 +269,7 @@ class ManifestDB:
             if commit:
                 self._conn.commit()
 
-    def backfill_original_filename(self, dest_path: str, original_filename: str) -> None:
+    def backfill_original_filename(self, dest_path: str, original_filename: str, commit: bool = True) -> None:
         """Opportunistically fills in original_filename on a row that
         predates this column, or that was first recorded before the
         Shortcut's as-sent name was tracked — called from finalize_upload's
@@ -283,7 +283,8 @@ class ManifestDB:
                 "WHERE dest_path = ? AND (original_filename IS NULL OR original_filename != ?)",
                 (original_filename, dest_path, original_filename),
             )
-            self._conn.commit()
+            if commit:
+                self._conn.commit()
 
     def record_file(
         self,
@@ -427,7 +428,7 @@ class ManifestDB:
             self._conn.commit()
             self._pending_errors.setdefault(run_id, set()).add(filename)
 
-    def resolve_error(self, run_id: Optional[str], filename: str) -> None:
+    def resolve_error(self, run_id: Optional[str], filename: str, commit: bool = True) -> None:
         """Undo a previous mark_error() for this exact filename in this
         run, if there was one — call right after a file finishes
         successfully (new / skipped / conflict), before/after the matching
@@ -441,7 +442,8 @@ class ManifestDB:
                 self._conn.execute(
                     "UPDATE runs SET files_error = files_error - 1 WHERE id = ?", (run_id,)
                 )
-                self._conn.commit()
+                if commit:
+                    self._conn.commit()
 
     def finish_run(self, run_id: str) -> dict:
         with self._lock:

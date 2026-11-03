@@ -804,9 +804,10 @@ reintroduces these problems.
     number of bytes involved. **Fixed** by giving `ManifestDB.record_file()`
     an optional `commit: bool = True` param and a separate explicit
     `commit()` method, so a caller with many inserts in a row (only
-    `server/mirror.py::sync_mirror()` so far — the real iPhone-facing
-    upload path keeps its default per-file commit, unchanged, since batching
-    it wasn't asked for and has different risk/benefit characteristics)
+    `server/mirror.py::sync_mirror()` at first, later the cable import; the
+    iPhone-facing upload path still commits once per file, but since v1.8.6
+    only once: its row, alias and run counter used to be two or three
+    separate commits, now joined at the end of `finalize_upload`, PLAN.md W8)
     can defer the expensive part until `COMMIT_BATCH_SIZE` (25) files have
     accumulated, plus an unconditional flush in a `finally` block so an
     interruption never leaves more than one batch's worth of

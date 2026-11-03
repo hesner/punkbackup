@@ -133,7 +133,10 @@ Una tarjeta por cada perfil que hayas creado, con:
   fecha de la última copia.
 - **Última corrida**: cuántos archivos se guardaron específicamente en la
   corrida más reciente del Atajo (nuevos vs. los que ya existían) — si el
-  Atajo sigue corriendo en ese momento, se marca "(en curso...)".
+  Atajo sigue corriendo en ese momento, se marca "(en curso: N revisados)",
+  donde N es cuántas fotos y videos lleva revisando. Ese número sube aunque
+  no se guarde nada, porque lo ya respaldado se revisa sin enviarse ni
+  dejar línea en el log.
 - **Carpeta**: a dónde está guardando sus archivos.
 - **USB**: si su carpeta está en una unidad extraíble, la etiqueta y el
   espacio libre de ese disco.
@@ -179,13 +182,16 @@ el mensaje. De cualquier forma, un log que abarca varios días (si dejas
 la app abierta) se sigue leyendo con claridad — puedes saber exactamente
 cuándo corrió cada backup, no solo el orden en que aparecen.
 
-Si una corrida se queda "en curso" sin recibir ningún archivo nuevo
-durante un rato (por ejemplo, si el WiFi se cortó o cerraste el Atajo en
+Si una corrida se queda "en curso" sin que el iPhone se comunique con la
+PC durante un rato (por ejemplo, si el WiFi se cortó o cerraste el Atajo en
 el teléfono a medio backup), el log muestra un aviso tipo `⏸ "[perfil]":
 sin actividad hace 5+ minutos — el backup parece haberse detenido` — una
 sola vez por cada corte, no se repite mientras siga inactivo. Cuántos
 minutos de inactividad cuentan como "detenido" es configurable — ver
-"⚙ Configuración" → Preferencias más arriba.
+"⚙ Configuración" → Preferencias más arriba. Desde v1.8.7 cuenta cualquier
+consulta del iPhone, no solo un archivo guardado: antes, un barrido donde
+todo ya estaba respaldado podía mostrar este aviso mientras el Atajo seguía
+trabajando.
 
 Junto a ese botón hay uno más pequeño, **"⤢ Expandir"**, que abre el mismo
 registro en una ventana aparte, más grande y redimensionable — útil cuando

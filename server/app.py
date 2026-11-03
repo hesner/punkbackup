@@ -28,6 +28,7 @@ import hashlib
 import logging
 import os
 import uuid
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
 
@@ -45,7 +46,11 @@ logger = logging.getLogger("backup_engine")
 
 app = FastAPI(title="PunkBackup")
 
-_state: dict = {"profile_store": None, "engines": {}, "unreachable_warned": set(), "not_ready_warned": set()}
+WRITE_BLOCK = 1024 * 1024  # /upload hands the drive 1 MB at a time from a worker thread
+
+_state: dict = {
+    "profile_store": None, "engines": {}, "unreachable_warned": set(), "not_ready_warned": set(), "activity": {},
+}
 
 
 def configure(profile_store: ProfileStore) -> None:
@@ -54,6 +59,16 @@ def configure(profile_store: ProfileStore) -> None:
     _state["engines"] = {}
     _state["unreachable_warned"] = set()
     _state["not_ready_warned"] = set()
+    _state["activity"] = {}
+
+
+def _activity(profile_id: str) -> dict:
+    """When this profile's device last talked to us, and how many items it has
+    asked about since its run started. A sweep where everything is already backed
+    up writes no file and no log line for many minutes, so the GUI's "stalled"
+    notice and its progress line need this instead (PLAN.md W9). Memory only:
+    after a restart the open run is closed anyway."""
+    return _state["activity"].setdefault(profile_id, {"last_request_at": None, "checked": 0})
 
 
 def is_configured() -> bool:
@@ -156,7 +171,11 @@ def close_open_runs() -> None:
 
 def get_status_for_profile(profile: Profile) -> dict:
     """Used directly by the GUI (same process, no HTTP round-trip needed)."""
-    return _engine_for(profile).db.get_status()
+    status = _engine_for(profile).db.get_status()
+    activity = _activity(profile.id)
+    status["last_request_at"] = activity["last_request_at"]
+    status["checked_this_run"] = activity["checked"]
+    return status
 
 
 def get_aggregate_status() -> dict:
@@ -189,6 +208,7 @@ async def verify_token(request: Request, x_backup_token: Optional[str] = Header(
     if not profile.enabled:
         _warn_profile_not_ready(profile)
         raise HTTPException(403, "This profile is paused on the PC.")
+    _activity(profile.id)["last_request_at"] = datetime.now(timezone.utc).isoformat()
     return profile
 
 
@@ -201,7 +221,9 @@ async def health():
 @app.post("/run/start")
 async def run_start(profile: Profile = Depends(verify_token)):
     engine = _engine_for(profile)
-    run_id = engine.db.start_run()
+    # A commit is a real wait on the drive; never on the thread serving every request.
+    run_id = await run_in_threadpool(engine.db.start_run)
+    _activity(profile.id)["checked"] = 0
     engine.logger.info("=== Backup run started — run_id %s ===", run_id)
     return {"run_id": run_id, "profile": profile.name}
 
@@ -209,7 +231,7 @@ async def run_start(profile: Profile = Depends(verify_token)):
 @app.post("/run/finish")
 async def run_finish(run_id: str = Form(...), profile: Profile = Depends(verify_token)):
     engine = _engine_for(profile)
-    result = engine.db.finish_run(run_id)
+    result = await run_in_threadpool(engine.db.finish_run, run_id)
     engine.logger.info(
         "=== Backup run finished — run_id %s — %s new, %s already had, %s conflicts,"
         " %s errors ===",
@@ -239,6 +261,7 @@ async def check(
     so the API meets the client where it is instead of fighting it."""
     engine = _engine_for(profile)
     already = await run_in_threadpool(engine.check_exists, filename, taken_at)
+    _activity(profile.id)["checked"] += 1
     return {} if already else {"missing": True}
 
 
@@ -266,14 +289,23 @@ async def upload(
     size = 0
     try:
         with open(staging_path, "wb") as out:
+            # Written in blocks from a worker thread: a write to a USB drive can
+            # stall, and on this thread it stalled every other request with it,
+            # up to half a second during a 200 MB video (PLAN.md W9).
+            pending = bytearray()
             async for chunk in request.stream():
                 hasher.update(chunk)
-                out.write(chunk)
+                pending += chunk
                 size += len(chunk)
+                if len(pending) >= WRITE_BLOCK:
+                    await run_in_threadpool(out.write, bytes(pending))
+                    pending.clear()
+            if pending:
+                await run_in_threadpool(out.write, bytes(pending))
             # Onto the drive before the file can get a row: otherwise a power cut or a
             # yanked USB could leave "backed up" over data still in Windows' cache
             # (PLAN.md W5). Measured on the real USB: 9-62 ms per file.
-            out.flush()
+            await run_in_threadpool(out.flush)
             await run_in_threadpool(os.fsync, out.fileno())
     except OSError as exc:
         # Most common real cause: the destination drive filled up mid-write
@@ -285,7 +317,7 @@ async def upload(
         # as backed up, so /check still reports it missing and a later run
         # (once space is freed) retries it automatically.
         staging_path.unlink(missing_ok=True)
-        engine.db.bump_run(run_id, "files_error")
+        await run_in_threadpool(engine.db.bump_run, run_id, "files_error")
         engine.logger.error("x %s: could not write to disk (%s), requesting the file again", filename, exc)
         return {"detail": f'"{filename}" could not be saved (disk write failed: {exc}) — will retry on the next run.'}
     except asyncio.CancelledError:
@@ -296,7 +328,7 @@ async def upload(
         raise
     except Exception:
         staging_path.unlink(missing_ok=True)
-        engine.db.bump_run(run_id, "files_error")
+        await run_in_threadpool(engine.db.bump_run, run_id, "files_error")
         raise
 
     if size == 0:
@@ -339,4 +371,4 @@ async def upload(
 
 @app.get("/status")
 async def status_endpoint(profile: Profile = Depends(verify_token)):
-    return _engine_for(profile).db.get_status()
+    return await run_in_threadpool(_engine_for(profile).db.get_status)

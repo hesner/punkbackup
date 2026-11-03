@@ -206,6 +206,30 @@ def _compute_status_snapshot(
     return {"per_profile": per_profile, "aggregate": aggregate}
 
 
+def _idle_tick(tracking: dict, status: dict, now: datetime, timeout_seconds: float) -> bool:
+    """One poll of the "backup seems stalled" notice for one profile. True means
+    log it now: a run is open and its device hasn't sent anything for
+    `timeout_seconds`. Once per quiet stretch; any activity resets it.
+
+    Any request counts, not just a saved file: a sweep where everything is already
+    backed up saves nothing for many minutes while working. Watching saved files
+    alone warned "stalled" 17 minutes before a real finish (PLAN.md W9)."""
+    if status["state"] != "running":
+        tracking["last_backup_at"] = None
+        tracking["notified"] = False
+        return False
+    marker = (status.get("last_backup_at"), status.get("last_request_at"))
+    if marker != tracking["last_backup_at"]:
+        tracking["last_backup_at"] = marker
+        tracking["seen_at"] = now
+        tracking["notified"] = False
+        return False
+    if (now - tracking["seen_at"]).total_seconds() >= timeout_seconds and not tracking["notified"]:
+        tracking["notified"] = True
+        return True
+    return False
+
+
 def _profile_stats_text(
     profile: Profile, lang: str, status: Optional[dict] = None, destination_unreachable: bool = False,
 ) -> str:
@@ -240,7 +264,10 @@ def _profile_stats_text(
             stats_line = _t("stats_line", lang, last=last, count=status["total_files_backed_up"])
             last_run = status.get("last_run")
             if last_run:
-                running = _t("stats_last_run_in_progress", lang) if last_run.get("finished_at") is None else ""
+                running = ""
+                if last_run.get("finished_at") is None:
+                    # Items asked about, so a sweep that saves nothing still shows it's moving.
+                    running = _t("stats_last_run_in_progress", lang, checked=status.get("checked_this_run") or 0)
                 last_run_line = _t(
                     "stats_last_run",
                     lang,
@@ -2374,21 +2401,7 @@ class MainWindow(ctk.CTk):
                 continue
             tracking["error_logged"] = False
 
-            if st["state"] != "running":
-                tracking["last_backup_at"] = None
-                tracking["notified"] = False
-                continue
-
-            current_backup_at = st.get("last_backup_at")
-            if current_backup_at != tracking["last_backup_at"]:
-                tracking["last_backup_at"] = current_backup_at
-                tracking["seen_at"] = now
-                tracking["notified"] = False
-                continue
-
-            idle_seconds = (now - tracking["seen_at"]).total_seconds()
-            if idle_seconds >= self.cfg.idle_timeout_minutes * 60 and not tracking["notified"]:
-                tracking["notified"] = True
+            if _idle_tick(tracking, st, now, self.cfg.idle_timeout_minutes * 60):
                 self._log_local(
                     self.t("log_backup_idle", name=profile.name, minutes=self.cfg.idle_timeout_minutes),
                     profile=profile.name,

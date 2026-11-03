@@ -125,7 +125,10 @@ One card per profile you've created, showing:
   date of the last backup.
 - **Last run**: how many files were saved specifically in the Shortcut's
   most recent run (new vs. already had) — if that run is still going,
-  it's marked "(in progress...)".
+  it's marked "(in progress: N checked)", where N is how many photos and
+  videos it has checked so far. That number grows even when nothing gets
+  saved, because items already backed up are checked without being sent
+  or leaving a log line.
 - **Folder**: where it's saving its files.
 - **USB**: if its folder is on a removable drive, that drive's label and
   free space.
@@ -169,12 +172,15 @@ one, not just guess from the message text. A log that spans several days
 (if you leave the app open) still reads clearly either way — you can tell
 exactly when each backup ran, not just their order.
 
-If a run stays "in progress" without receiving any new file for a while
+If a run stays "in progress" without the iPhone talking to the PC for a while
 (e.g. WiFi dropped, or you closed the Shortcut on the phone mid-backup),
 the log shows a notice like `⏸ "[profile]": no activity for 5+ minutes —
 the backup looks like it stopped` — once per stretch of inactivity, not
 repeated while it stays idle. How many minutes of inactivity count as
-"stopped" is configurable — see "⚙ Settings" → Preferences below.
+"stopped" is configurable — see "⚙ Settings" → Preferences below. Since
+v1.8.7 any request from the iPhone counts, not just a saved file: before, a
+sweep where everything was already backed up could show this notice while
+the Shortcut was still working.
 
 Next to that button is a smaller **"⤢ Expand"** button, which opens the
 same log in a separate, larger, resizable window — handy when a long run

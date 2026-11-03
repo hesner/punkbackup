@@ -218,8 +218,8 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "en": "Last run: {new} saved, {skipped} already had{running}",
     },
     "stats_last_run_in_progress": {
-        "es": " (en curso...)",
-        "en": " (in progress...)",
+        "es": " (en curso: {checked} revisados)",
+        "en": " (in progress: {checked} checked)",
     },
     "no_label": {"es": "Sin etiqueta", "en": "Unlabeled"},
     "free_of_total": {

@@ -129,8 +129,9 @@ Una tarjeta por cada perfil que hayas creado, con:
 
 - **Nombre** del perfil.
 - **Total en destino**: cuántos archivos hay en total en la carpeta de ese
-  perfil (todo lo respaldado hasta ahora, de todas las corridas), y la
-  fecha de la última copia.
+  perfil (todo lo respaldado hasta ahora, de todas las corridas), cuánto
+  ocupan (por ejemplo "50.364 archivos, 188,9 GB", desde v1.8.8) y la fecha
+  de la última copia.
 - **Última corrida**: cuántos archivos se guardaron específicamente en la
   corrida más reciente del Atajo (nuevos vs. los que ya existían) — si el
   Atajo sigue corriendo en ese momento, se marca "(en curso: N revisados)",

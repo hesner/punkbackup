@@ -351,11 +351,11 @@ class BackupEngine:
             # mid-write (ENOSPC) — see app.py's /upload for why this must
             # never be recorded as backed up (so /check keeps reporting it
             # missing and a later run retries once space is freed).
-            self.db.bump_run(run_id, "files_error")
+            self.db.mark_error(run_id, Path(filename).name)
             self.logger.error("x %s: could not write to disk (%s), requesting the file again", filename, exc)
             raise ValueError(f'"{filename}" could not be saved (disk write failed: {exc}) — will retry on the next run.') from exc
         except Exception as exc:
-            self.db.bump_run(run_id, "files_error")
+            self.db.mark_error(run_id, Path(filename).name)
             self.logger.error("ERROR receiving %s: %s", filename, exc)
             raise
         return self.finalize_upload(filename, staging_path, sha256, size, taken_at, run_id)
@@ -465,18 +465,6 @@ class BackupEngine:
                         self.db.backfill_original_filename(str(candidate_path), original_name, commit=commit)
                     self._resolve_error_both(run_id, safe_name, original_name)
                     self.db.bump_run(run_id, "files_skipped", commit=commit)
-                    # TEMP DIAGNOSTIC (PLAN.md §17.7) — files_skipped has
-                    # essentially never incremented across this project's
-                    # whole run history (1 of 153 real runs, ever) despite
-                    # thousands of real skip events, even though an
-                    # isolated /upload test with a known-good run_id
-                    # proved bump_run() itself works correctly, and the
-                    # Shortcut's own run_id= wiring was visually confirmed
-                    # correct in both the direct and retry upload actions.
-                    # Logging the ACTUAL received run_id here, every time,
-                    # until the next real occurrence is caught -- remove
-                    # once the cause is found.
-                    self.logger.info("DIAG skip: run_id received = %r", run_id)
                     self._remember_name(safe_name, original_name, sent_taken_at, str(candidate_path), commit)
                     self.logger.info("= %s already backed up, skipped", safe_name)
                     return {"status": "skipped_duplicate", "dest_path": str(candidate_path), "taken_at": taken_at}
@@ -503,8 +491,6 @@ class BackupEngine:
                             self.db.backfill_original_filename(str(candidate_path), original_name, commit=commit)
                         self._resolve_error_both(run_id, safe_name, original_name)
                         self.db.bump_run(run_id, "files_skipped", commit=commit)
-                        # TEMP DIAGNOSTIC — see the other skip branch above.
-                        self.logger.info("DIAG skip: run_id received = %r", run_id)
                         self._remember_name(safe_name, original_name, sent_taken_at, str(candidate_path), commit)
                         self.logger.info("= %s already backed up (re-encoded copy, content unchanged), skipped", safe_name)
                         return {"status": "skipped_duplicate", "dest_path": str(candidate_path)}

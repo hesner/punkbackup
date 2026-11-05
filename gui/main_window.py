@@ -206,6 +206,16 @@ def _compute_status_snapshot(
     return {"per_profile": per_profile, "aggregate": aggregate}
 
 
+def _size_text(size_bytes: int, lang: str) -> str:
+    """How much the destination's backup takes up (PLAN.md roadmap 11). GB with one
+    decimal, MB below 1 GB; Spanish uses a decimal comma."""
+    if size_bytes >= 1e9:
+        text = f"{size_bytes / 1e9:.1f} GB"
+    else:
+        text = f"{size_bytes / 1e6:.0f} MB"
+    return text.replace(".", ",") if lang == "es" else text
+
+
 def _idle_tick(tracking: dict, status: dict, now: datetime, timeout_seconds: float) -> bool:
     """One poll of the "backup seems stalled" notice for one profile. True means
     log it now: a run is open and its device hasn't sent anything for
@@ -256,12 +266,15 @@ def _profile_stats_text(
     if volume:
         lines.append(_t("stats_usb", lang, info=volume))
 
-    stats_line = _t("stats_line", lang, last=_t("never", lang), count=0)
+    stats_line = _t("stats_line", lang, last=_t("never", lang), count=0, size=_size_text(0, lang))
     last_run_line = None
     if status is not None:
         try:
             last = _format_local(status["last_backup_at"]) or _t("never", lang)
-            stats_line = _t("stats_line", lang, last=last, count=status["total_files_backed_up"])
+            stats_line = _t(
+                "stats_line", lang, last=last, count=status["total_files_backed_up"],
+                size=_size_text(status.get("total_bytes") or 0, lang),
+            )
             last_run = status.get("last_run")
             if last_run:
                 running = ""

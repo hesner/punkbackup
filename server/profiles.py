@@ -12,6 +12,7 @@ Stored at config/profiles.json (gitignored — it holds per-profile secrets).
 """
 from __future__ import annotations
 
+import hmac
 import json
 import re
 import secrets
@@ -185,10 +186,14 @@ class ProfileStore:
         self.save()
 
     def find_by_token(self, token: str) -> Optional[Profile]:
+        """Compares in constant time and against every profile, so how long a wrong
+        token takes says nothing about how close it was (PLAN.md W12)."""
+        found = None
+        sent = token.encode("utf-8")
         for p in self._profiles.values():
-            if p.token == token:
-                return p
-        return None
+            if hmac.compare_digest(p.token.encode("utf-8"), sent):
+                found = p
+        return found
 
     def get(self, profile_id: str) -> Optional[Profile]:
         return self._profiles.get(profile_id)

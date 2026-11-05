@@ -210,8 +210,8 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
     },
     "stats_usb": {"es": "USB: {info}", "en": "USB: {info}"},
     "stats_line": {
-        "es": "Total en destino: {count} archivos   |   Última copia: {last}",
-        "en": "Total in destination: {count} files   |   Last backup: {last}",
+        "es": "Total en destino: {count} archivos, {size}   |   Última copia: {last}",
+        "en": "Total in destination: {count} files, {size}   |   Last backup: {last}",
     },
     "stats_last_run": {
         "es": "Última corrida: {new} guardados, {skipped} ya existían{running}",

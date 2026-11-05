@@ -391,12 +391,28 @@ class ManifestDB:
     # -- runs -------------------------------------------------------------
 
     def start_run(self, source: str = "wifi") -> str:
+        """Also closes any run this destination still has open. A run is left open
+        when the Shortcut never reached /run/finish (stopped, cut off, an error), and
+        until the app was reopened the card kept saying "in progress" and the
+        "last run" numbers stayed those of the dead run. A destination belongs to one
+        profile and each device has its own, so an open run here can only be an
+        abandoned one (PLAN.md W10). Same commit as the new run."""
         run_id = uuid.uuid4().hex
+        now = _now()
         with self._lock:
+            abandoned = self._conn.execute("SELECT id FROM runs WHERE finished_at IS NULL").fetchall()
+            if abandoned:
+                self._conn.execute("UPDATE runs SET finished_at = ? WHERE finished_at IS NULL", (now,))
             self._conn.execute(
-                "INSERT INTO runs (id, started_at, source) VALUES (?, ?, ?)", (run_id, _now(), source)
+                "INSERT INTO runs (id, started_at, source) VALUES (?, ?, ?)", (run_id, now, source)
             )
             self._conn.commit()
+        for row in abandoned:
+            self.logger.warning(
+                "!! Run %s never got its finish from the Shortcut (stopped or cut off) — closed "
+                "because a new run started. Its tally may be incomplete; nothing was lost.",
+                row["id"],
+            )
         return run_id
 
     def bump_run(self, run_id: Optional[str], field: str, commit: bool = True) -> None:
@@ -454,7 +470,11 @@ class ManifestDB:
             row = self._conn.execute(
                 "SELECT * FROM runs WHERE id = ?", (run_id,)
             ).fetchone()
-        return dict(row) if row else {}
+            failed = sorted(self._pending_errors.pop(run_id, set()))
+        result = dict(row) if row else {}
+        if failed:
+            result["error_files"] = failed  # extra key: the Shortcut only reads the counters
+        return result
 
     def finish_open_runs(self) -> None:
         """Closes every run still open. For when the PC itself ends the WiFi
@@ -471,7 +491,7 @@ class ManifestDB:
     def get_status(self) -> dict:
         with self._lock:
             total = self._conn.execute(
-                "SELECT COUNT(*) AS c, MAX(received_at) AS last FROM backed_up_files"
+                "SELECT COUNT(*) AS c, MAX(received_at) AS last, SUM(size_bytes) AS bytes FROM backed_up_files"
             ).fetchone()
             last_run = self._conn.execute(
                 "SELECT * FROM runs ORDER BY started_at DESC LIMIT 1"
@@ -484,6 +504,7 @@ class ManifestDB:
         return {
             "state": state,
             "total_files_backed_up": total["c"] or 0,
+            "total_bytes": total["bytes"] or 0,
             "last_backup_at": total["last"],
             "last_run": dict(last_run) if last_run else None,
         }

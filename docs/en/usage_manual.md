@@ -121,7 +121,8 @@ One card per profile you've created, showing:
 
 - **Name** of the profile.
 - **Total in destination**: how many files are in that profile's folder
-  in total (everything backed up so far, across every run), plus the
+  in total (everything backed up so far, across every run), how much space
+  they take up (e.g. "50364 files, 188.9 GB", since v1.8.8), plus the
   date of the last backup.
 - **Last run**: how many files were saved specifically in the Shortcut's
   most recent run (new vs. already had) — if that run is still going,

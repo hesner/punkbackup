@@ -27,6 +27,7 @@ import asyncio
 import hashlib
 import logging
 import os
+import time
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
@@ -50,7 +51,15 @@ WRITE_BLOCK = 1024 * 1024  # /upload hands the drive 1 MB at a time from a worke
 
 _state: dict = {
     "profile_store": None, "engines": {}, "unreachable_warned": set(), "not_ready_warned": set(), "activity": {},
+    "bad_tokens": {},
 }
+
+# A device that keeps sending a wrong token gets a short pause (PLAN.md W12). Tokens
+# are 192 random bits, so this isn't what stops guessing; it keeps a misconfigured or
+# stray device from hammering the server and the log. The phone with the right token
+# never counts, and a fixed token works again within the minute.
+BAD_TOKEN_LIMIT = 20
+BAD_TOKEN_WINDOW = 60.0  # seconds
 
 
 def configure(profile_store: ProfileStore) -> None:
@@ -60,6 +69,7 @@ def configure(profile_store: ProfileStore) -> None:
     _state["unreachable_warned"] = set()
     _state["not_ready_warned"] = set()
     _state["activity"] = {}
+    _state["bad_tokens"] = {}
 
 
 def _activity(profile_id: str) -> dict:
@@ -197,13 +207,38 @@ def get_aggregate_status() -> dict:
     return {"total_files_backed_up": total, "last_backup_at": last}
 
 
+def _blocked_for_bad_tokens(source: str) -> bool:
+    entry = _state["bad_tokens"].get(source)
+    if entry is None or entry["blocked_until"] is None:
+        return False
+    if time.monotonic() < entry["blocked_until"]:
+        return True
+    _state["bad_tokens"].pop(source, None)  # the pause is over: start counting again
+    return False
+
+
+def _count_bad_token(source: str) -> None:
+    now = time.monotonic()
+    entry = _state["bad_tokens"].setdefault(source, {"times": [], "blocked_until": None})
+    entry["times"] = [t for t in entry["times"] if now - t < BAD_TOKEN_WINDOW] + [now]
+    if len(entry["times"]) >= BAD_TOKEN_LIMIT:
+        entry["blocked_until"] = now + BAD_TOKEN_WINDOW
+        logging.LoggerAdapter(logger, {"profile": "-"}).warning(
+            "%s sent %s wrong tokens in a minute; ignoring it for a minute.", source, BAD_TOKEN_LIMIT
+        )
+
+
 async def verify_token(request: Request, x_backup_token: Optional[str] = Header(None)) -> Profile:
     if not is_configured():
         raise HTTPException(503, "Server has no profiles configured yet.")
     store: ProfileStore = _state["profile_store"]
+    source = request.client.host if request.client else "?"
+    if _blocked_for_bad_tokens(source):
+        raise HTTPException(429, "Too many requests with a wrong token; wait a minute.")
     profile = store.find_by_token(x_backup_token) if x_backup_token else None
     if profile is None:
-        _warn_unknown_request(request.client.host if request.client else "?")
+        _warn_unknown_request(source)
+        _count_bad_token(source)
         raise HTTPException(401, "Missing or invalid X-Backup-Token header.")
     if not profile.enabled:
         _warn_profile_not_ready(profile)
@@ -232,14 +267,17 @@ async def run_start(profile: Profile = Depends(verify_token)):
 async def run_finish(run_id: str = Form(...), profile: Profile = Depends(verify_token)):
     engine = _engine_for(profile)
     result = await run_in_threadpool(engine.db.finish_run, run_id)
+    failed = result.pop("error_files", [])
     engine.logger.info(
         "=== Backup run finished — run_id %s — %s new, %s already had, %s conflicts,"
-        " %s errors ===",
+        " %s errors%s ===",
         run_id,
         result.get("files_new", 0),
         result.get("files_skipped", 0),
         result.get("files_conflict", 0),
         result.get("files_error", 0),
+        # Which ones, so nobody has to dig back through the run's lines (PLAN.md W11).
+        f" ({', '.join(failed)}; they'll be asked for again next run)" if failed else "",
     )
     return result
 
@@ -317,7 +355,7 @@ async def upload(
         # as backed up, so /check still reports it missing and a later run
         # (once space is freed) retries it automatically.
         staging_path.unlink(missing_ok=True)
-        await run_in_threadpool(engine.db.bump_run, run_id, "files_error")
+        await run_in_threadpool(engine.db.mark_error, run_id, Path(filename).name)
         engine.logger.error("x %s: could not write to disk (%s), requesting the file again", filename, exc)
         return {"detail": f'"{filename}" could not be saved (disk write failed: {exc}) — will retry on the next run.'}
     except asyncio.CancelledError:
@@ -328,7 +366,7 @@ async def upload(
         raise
     except Exception:
         staging_path.unlink(missing_ok=True)
-        await run_in_threadpool(engine.db.bump_run, run_id, "files_error")
+        await run_in_threadpool(engine.db.mark_error, run_id, Path(filename).name)
         raise
 
     if size == 0:

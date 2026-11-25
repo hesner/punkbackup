@@ -1193,6 +1193,17 @@ reintroduces these problems.
       Anything that changes a file's bytes before it's recorded must happen in
       staging, before the move, so a cut never leaves a half-finished final file.
 
+30. **Only one PunkBackup at a time, and its own PyInstaller bootloader (v1.8.10).**
+    `main.py` takes the mutex in `gui/single_instance.py` before loading the GUI; a
+    second launch brings the open window forward and waits up to 8 s before quitting,
+    so a copy that closes meanwhile (Avast's sandbox copy after an install) never leaves
+    the user with no app. Avast's sandbox seems to have its own namespace: on the first
+    launch of a new build the real copy still found the port taken for 3 s, and the
+    existing port retry handled it. The bootloader in `.venv` is compiled from source
+    (`docs/BUILD_BOOTLOADER.md`) and `PunkBackup.spec`, now tracked despite `*.spec` in
+    `.gitignore`, refuses to build with the stock one. Packaged tests must save and
+    restore the HKCU Run entry: the app rewrites it on every start.
+
 - Unit tests against `BackupEngine`/`ManifestDB` directly (no HTTP) for the
   dedup/conflict/incremental rules — fast, exhaustive.
 - `fastapi.testclient.TestClient` end-to-end tests for the real ASGI app,

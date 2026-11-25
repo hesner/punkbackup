@@ -11,14 +11,16 @@ cable** button. Profiles, folders and rules are the same. The background tells y
 which one you're in: dark for WiFi, light for cable. The app always opens in WiFi
 mode. See the "Backup by cable" section.
 
-## The window has 2 screens
+## The window has 3 screens
 
 - **"Main"**: turn the backup server on/off, see the address your devices
   should connect to, and each profile's status.
+- **"📊 Reports"** (since v1.8.10): what each profile has saved, by year and by
+  month, and its latest runs. See below.
 - **"⚙ Settings"**: switch the app's language, and create/manage each
   person or device (profiles).
 
-Switch between them with the two buttons at the top, right under the app name.
+Switch between them with the three buttons at the top, right under the app name.
 
 The window opens **maximized** by default every time — resize/un-maximize it as usual if you'd rather have it smaller; that's a normal Windows window control, not something PunkBackup remembers between launches.
 
@@ -192,6 +194,29 @@ Every line is also saved to a file on disk
 checked after closing the app — not just what's currently visible on
 screen. It rotates daily and automatically deletes anything older than
 about 6 months, so it never grows forever.
+
+---
+
+## "📊 Reports" screen
+
+Pick a profile at the top and the app reads its destination folder's index (it only
+reads it, never changes it). With about 50,000 files it takes under a second. It's
+calculated when you open the screen, when you change profile and with the
+**Refresh** button; it doesn't refresh by itself while you look. Only profiles with
+a destination folder are listed.
+
+- **Summary**: how many files and how much space, how many are photos and how many
+  videos, the oldest and newest capture dates, how many have no date, when the last
+  file arrived, free space at the destination and whether the second copy is up to
+  date.
+- **Timeline**: one bar per year with its count and size, by capture date. Tap a year
+  to see its months. Useful to spot gaps: an empty month among full ones stands out.
+- **Latest runs**: the 20 most recent, with date, cable or WiFi, duration, new files,
+  errors and whether it finished, is still in progress or was never closed. Files
+  copied before this log existed (for example, old photos added by hand) don't appear
+  here, but they do count in the summary and the timeline.
+
+If the destination's USB isn't connected, the screen says so instead of showing zeros.
 
 ---
 

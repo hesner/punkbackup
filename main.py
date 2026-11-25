@@ -12,7 +12,14 @@ if sys.stdout is None:
 if sys.stderr is None:
     sys.stderr = io.StringIO()
 
-from gui.main_window import main
-
 if __name__ == "__main__":
+    # One copy at a time, checked before loading the GUI (gui/single_instance.py).
+    from gui.single_instance import acquire, show_existing_window
+
+    _instance_lock = acquire(on_busy=show_existing_window)
+    if _instance_lock is None:
+        sys.exit(0)
+
+    from gui.main_window import main
+
     main()

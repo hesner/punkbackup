@@ -19,7 +19,7 @@
 ; Keep in sync with APP_VERSION in server/version.py (shown in the app's
 ; own window title + Settings screen) -- Inno Setup's preprocessor can't
 ; read that Python file directly, so this has to be bumped by hand too.
-#define MyAppVersion "1.8.8"
+#define MyAppVersion "1.8.11"
 #define MyAppPublisher "PunkBackup"
 #define MyAppURL "https://github.com/hesner/punkbackup"
 #define MyAppExeName "PunkBackup.exe"
@@ -37,12 +37,20 @@ DefaultDirName={autopf}\{#MyAppName}
 DefaultGroupName={#MyAppName}
 DisableProgramGroupPage=yes
 PrivilegesRequired=admin
+; Same name as gui/single_instance.py: setup asks to close PunkBackup before replacing it.
+AppMutex=PunkBackup.SingleInstance
 OutputDir=output
 OutputBaseFilename=PunkBackupSetup
 SetupIconFile=..\assets\punkbackup.ico
 UninstallDisplayIcon={app}\{#MyAppExeName}
 Compression=lzma2/max
 SolidCompression=yes
+; Version resource on the installer itself, like the app's (antivirus heuristics, v1.8.10).
+VersionInfoVersion={#MyAppVersion}.0
+VersionInfoProductVersion={#MyAppVersion}
+VersionInfoCompany={#MyAppPublisher}
+VersionInfoDescription={#MyAppName} installer
+VersionInfoProductName={#MyAppName}
 WizardStyle=modern
 ArchitecturesInstallIn64BitMode=x64compatible
 LicenseFile=..\LICENSE

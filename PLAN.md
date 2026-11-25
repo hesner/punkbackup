@@ -2639,7 +2639,8 @@ sin desarrollar, a la espera de que el usuario quiera continuar.
 
 ## 25. Roadmap
 
-Última versión: **v1.8.7**, la del release de GitHub. La regla de versiones (un número,
+Última versión: **v1.8.8**, la del release de GitHub. Compilada y sin publicar: **v1.8.10**
+(la v1.8.9 nunca se publicó; lo suyo va en la v1.8.10). La regla de versiones (un número,
 una sola compilación) está en `AGENTS.md`, sección 3.
 
 Lista viva de mejoras deseables en el tiempo. El orden indica prioridad, no
@@ -2652,12 +2653,14 @@ una fecha comprometida. Estados: 🔵 en curso · ⚪ pendiente · ✅ hecho.
 | 3 | **Reparar en WiFi los archivos sin registro.** Tras un corte, un archivo puede quedar completo en disco sin su fila en el índice: el Atajo lo da por respaldado y la segunda copia nunca lo copia. El cable ya lo repara. Sección 26.1. Ver W6. | ✅ v1.8.5 |
 | 4 | **Forzar la escritura a disco en WiFi antes de registrar cada archivo.** Tras un corte de luz o una USB desconectada de golpe, una fila podría quedar sobre datos que seguían en la caché de Windows. El cable ya lo hace. Ver W5. | ✅ v1.8.4 |
 | 5 | **Videos que llegan por WiFi con extensión de foto.** `IMG_2105.jpeg` (169 MB) era en realidad un video QuickTime: la extensión la pone el Atajo. Algunos visores no lo abrirían bien y no recibía el parche de fecha. Desde v1.8.3 el servidor guarda estos archivos con la extensión de su contenido, sin tocar el Atajo. Por qué el Atajo la envía mal sigue sin saberse. | ✅ v1.8.3 |
-| 6 | **Reportes de backups.** Qué se ha copiado, qué falta, dónde hay más información, líneas de tiempo y cantidades, y cualquier dato relevante para el usuario; por ejemplo, que pueda borrar a mano fotos y videos ya respaldados con tranquilidad. | ⚪ Pendiente |
-| 7 | **Averiguar por qué un archivo tarda en aparecer por cable.** `IMG_2106.MOV` (grabado el 2026-10-31 a las 09:09) no estaba entre los 6.204 archivos que el iPhone listó por USB a las 16:32, y sí apareció después de que el Atajo lo pidiera y de abrirlo en Fotos. No fue un error de lectura ni de filtrado del código. Causa sin confirmar: el punto 6 no puede basarse solo en lo que muestra el cable. | 🔵 Abierto, se retoma si hay otro caso |
+| 6 | **Reportes de backups.** Qué se ha copiado, qué falta, dónde hay más información, líneas de tiempo y cantidades, y cualquier dato relevante para el usuario; por ejemplo, que pueda borrar a mano fotos y videos ya respaldados con tranquilidad. | 🔵 Fase 1 hecha en v1.8.10 (pantalla 📊 Reportes: resumen, línea de tiempo, últimas corridas). Fases 2 y 3 pendientes. Sección 27 |
+| 7 | **Averiguar por qué un archivo tarda en aparecer por cable.** `IMG_2106.MOV` (grabado el 2026-10-31 a las 09:09) no estaba entre los 6.204 archivos que el iPhone listó por USB a las 16:32, y sí apareció después de que el Atajo lo pidiera y de abrirlo en Fotos. No fue un error de lectura ni de filtrado del código. Causa sin confirmar: el punto 6 no puede basarse solo en lo que muestra el cable. | ⚪ Descartado por ahora por el usuario (2026-11-05) |
 | 8 | **Detectar copias dañadas.** Caso real: en 2015/03, `VIDEO0044.mp4` (copiado el 2026-10-29) se congela al final y `VIDEO0044__dup_407800d6.mp4` se reproduce bien, confirmado por el usuario el 2026-10-31; la copia dañada se borró con aprobación. Ver W4. | 🟡 En W4 |
-| 9 | **Limpiar duplicados que ya existen en el destino.** La regla nueva evita duplicados nuevos, pero no limpia los antiguos: los logs muestran copias previas con nombres distintos. | ⚪ Propuesto |
+| 9 | **Limpiar duplicados que ya existen en el destino.** La regla nueva evita duplicados nuevos, pero no limpia los antiguos: los logs muestran copias previas con nombres distintos. | ⚪ Descartado por ahora por el usuario (2026-11-05) |
 | 10 | **Atajo más rápido cuando casi todo ya está respaldado.** Pedido por el usuario el 2026-11-02. Analizar cómo hacer más eficiente y rápido el Atajo en ese caso: cada "ya respaldado" tardaba una mediana de unos 20 segundos (sección 5.12), así que repasar una biblioteca casi completa cuesta más que subir lo nuevo. Punto de partida: W7 (consulta por lotes y modo rápido), medir dónde se va el tiempo antes de elegir, y recordar que cambiar el Atajo es lo último que se quiere. **Medido el 2026-11-03 (ver W7):** una pasada completa con todo respaldado tarda ~48 min para 3.208 elementos, casi todo en el iPhone. Propuesta, que queda aquí por decisión del usuario (2026-11-03): un modo rápido en que el Atajo pare tras 2 bloques seguidos de 50 ya respaldados, con una pasada completa periódica que decida la PC (p. ej. semanal) para las fotos que entran con fecha antigua. | 🔵 Medido; modo rápido en espera |
 | 11 | **Tamaño del backup en la tarjeta del perfil.** Pedido por el usuario el 2026-11-04. En la pantalla principal, cuando el destino del perfil está conectado y es válido, la tarjeta dice cuántos archivos tiene; agregar cuánto ocupan, en GB (p. ej. "Total en destino: 50.322 archivos, 412,6 GB"). Punto de partida: `size_bytes` ya está en cada fila de `backed_up_files`, así que basta un `SUM` en `ManifestDB.get_status`, sin recorrer la carpeta; el sondeo de la GUI ya corre fuera del hilo de la ventana (lección 22). Medir cuánto tarda ese `SUM` sobre ~50.000 filas en la USB antes de decidir si hay que guardarlo en caché. **Hecho en v1.8.8:** medido sobre las 50.364 filas reales en la USB, el `SUM` agrega unos 2 ms (de 13-16 ms a 14-19 ms), así que va directo en `get_status`, sin caché. La tarjeta dice "Total en destino: 50.364 archivos, 188,9 GB" (MB por debajo de 1 GB). | ✅ v1.8.8 |
+| 12 | **Una sola copia de la app abierta.** Abrir PunkBackup cuando ya está abierto trae la ventana existente al frente en vez de abrir otra que choque por el puerto. Si la otra copia se cierra en unos segundos (la copia de revisión de Avast tras instalar), la nueva abre normal. Una copia que se cayó nunca bloquea la siguiente. El instalador pide cerrar la app antes de reemplazarla. | ✅ v1.8.10 (`gui/single_instance.py`) |
+| 13 | **Menos alertas del antivirus.** La pieza de arranque de PyInstaller se compila en esta PC en vez de usar la de serie, que comparten miles de programas, incluido malware; la app y el instalador llevan ficha de versión; UPX queda apagado. La compilación se niega a usar la pieza de serie (`docs/BUILD_BOOTLOADER.md`). No vuelve "confiable" un programa nuevo sin firma: la revisión de Avast al primer arranque puede seguir; solo un certificado de firma de código la quita. | ✅ v1.8.10 |
 
 ### Mejoras del WiFi (análisis del 2026-10-31)
 
@@ -2669,10 +2672,10 @@ empezarla, y cada cambio de código recibe una versión nueva. Solo W7 requiere 
 | W1 | **Hora interna de los videos corrida 5 horas.** `fix_creation_time` guarda la hora local como si fuera UTC, y además modifica los videos del cable, que ya traen la fecha correcta. Incluye decidir qué hacer con los videos ya guardados. | Medida | No | ✅ Código corregido en v1.8.1 y 2.005 videos reparados (2026-10-31). Sin cambios: 705 sin fecha interna y 144 sin datos legibles |
 | W2 | **Fecha poco confiable enviada por el Atajo.** En 150 fotos, 39 difieren más de 1 hora del EXIF (máximo 13 h). Preferir el EXIF en fotos. | Medida | No | ✅ Corregido en v1.8.2 para fotos nuevas. Explicado: las diferencias de 1 a 3 horas son fotos de viaje (el Atajo da la hora en la zona actual del teléfono y el EXIF la del lugar). Sin explicar: el error de exactamente 12 horas (32 % de las fotos tomadas en Colombia de una muestra de 900), que podía afectar a los videos con fecha del Atajo. **Revisado el 2026-11-03: no los afecta.** De los 2.006 videos con fecha del Atajo, 1.332 conservan su propia fecha de captura con zona (`com.apple.quicktime.creationdate`, que W1 no tocó): 772 coinciden al minuto, 525 difieren 1 hora exacta (grabados en zona -04:00, 514 de ellos en 2026-10) y 35 difieren -1 hora (zona -06:00, 2026-07). Ninguno de 12 horas, y ninguno en una carpeta de otro mes. Las diferencias de 1 hora son el mismo instante expresado en la hora de Colombia, así que la hora interna que dejó W1 es correcta y no hay nada que reparar. Los otros 674 no traen fecha propia (504 con nombre UUID, 154 `IMG_*.mov` en minúsculas) y no se pueden verificar. Las ~183 fotos en otro mes no se movieron, por decisión del usuario |
 | W3 | **Videos con extensión de foto** (punto 5). Corregir la extensión según el contenido. Existentes: 283 renombrados el 2026-11-02, verificados por hash; 281 llegaron el día de la integración de fotos antiguas; 11 copias idénticas de `IMG_0184-0194.heic` borradas con aprobación. Archivos nuevos: v1.8.3 los guarda con la extensión de su contenido cuando la firma no deja duda. Sin fecha enviada, `/check` no puede recordar el nombre y el archivo se reenvía, pero no se duplica. | 294 en el destino, 1 por WiFi | No | ✅ v1.8.3 |
-| W4 | **Archivos dañados dados por respaldados** (punto 8). Verificación contra el hash guardado. Primera verificación completa el 2026-11-02, con un script de solo lectura: los 50.310 archivos del índice (188,8 GB) coinciden con su hash, sin faltantes ni errores de lectura, a 33 MB/s (unos 95 minutos). No detecta una copia que ya estaba mal al registrarse. `014.MOV`, vacío desde su origen, se borró con aprobación; el inventario de la integración tenía 132 archivos vacíos en las copias de 2025-12-15, que no están en el índice. Un botón "Verificar backup" en Configuración se propuso y el usuario no lo vio necesario por ahora (2026-11-02); queda aquí por si cambia de idea o la USB da señales de fallar. | Caso `VIDEO0044` | No | 🔵 Verificado; botón pospuesto |
+| W4 | **Archivos dañados dados por respaldados** (punto 8). Verificación contra el hash guardado. Primera verificación completa el 2026-11-02, con un script de solo lectura: los 50.310 archivos del índice (188,8 GB) coinciden con su hash, sin faltantes ni errores de lectura, a 33 MB/s (unos 95 minutos). No detecta una copia que ya estaba mal al registrarse. `014.MOV`, vacío desde su origen, se borró con aprobación; el inventario de la integración tenía 132 archivos vacíos en las copias de 2025-12-15, que no están en el índice. Un botón "Verificar backup" en Configuración se propuso y el usuario no lo vio necesario por ahora (2026-11-02); queda aquí por si cambia de idea o la USB da señales de fallar. | Caso `VIDEO0044` | No | 🔵 Verificado; botón pospuesto El botón (W4) y el modo rápido (W7) quedan descartados por ahora por el usuario (2026-11-05). |
 | W5 | **Forzar la escritura a disco antes de registrar** (punto 4). v1.8.4 hace `fsync` del archivo recibido antes de procesarlo y registrarlo, y del video tras corregir su fecha. Medido en la USB real (NTFS, TOSHIBA EXT): 9 ms en 0,3 MB, 23 ms en 2 MB, 59-62 ms en 50-200 MB; la subida típica es de 0,2 MB cada 3 segundos, así que cuesta menos del 1%. La USB ya escribía a unos 20 MB/s sin forzar, señal de que Windows casi no la retenía en caché, pero eso depende de la configuración del disco. No cubre el paso de la carpeta temporal a la definitiva: si un corte lo interrumpe, el archivo falta en su sitio y el Atajo lo reenvía. | Código | No | ✅ v1.8.4 |
 | W6 | **Reparar archivos sin registro** (punto 3). v1.8.5: `/check` solo da por respaldado un archivo que además tiene su fila (`ManifestDB.has_file_at`, por `path_key`, sin depender de la letra de unidad ni de mayúsculas). Si falta, el Atajo lo reenvía y `/upload`, al encontrar el mismo contenido ya en su sitio (fotos por hash, videos por `same_video`), escribe la fila del archivo que ya estaba, sin tocar sus bytes. Un archivo distinto puesto a mano con ese nombre se conserva junto al nuevo, y el alias de nombre evita que se pida para siempre. Además, la fecha de los videos se corrige en la carpeta temporal, antes de moverlos: un corte ya no puede dejar un video en su carpeta con la fecha de Encode Media. El 2026-11-03, E: tenía 50.310 archivos y 50.310 filas, sin huérfanos (revisión de 12 s, solo lectura). La consulta nueva cuesta 16-30 ms por archivo en el índice real. No cubre un archivo sin fila cuyo original ya se borró del iPhone: sigue en E:, pero el mirror no lo ve; lo cubriría una revisión del disco como el botón de W4. | Pruebas de corte | No | ✅ v1.8.5 |
-| W7 | **Consulta por lotes y modo rápido.** Una petición por cada 50 archivos, y revisar solo lo reciente en el día a día. La mejora de velocidad más visible. **Medido el 2026-11-03** con el servidor v1.8.5 sin cambios y un script que anotaba la hora de cada petición (sin instalar nada): una pasada completa del iPhone con todo ya respaldado revisó 3.208 elementos (hasta 2018-03) en 47,6 min. El servidor responde `/check` en 0,5 ms; entre una consulta y la siguiente el Atajo tarda una mediana de 0,33 s (17,3 min en total). Los otros 30,2 min son 92 pausas de más de 2 s en el iPhone, sin subida de por medio, que no caen cada 50 elementos (18 de más de 30 s suman 19,4 min); causa sin confirmar. Los ~20 s por "ya respaldado" de la sección 5.12 medían otra cosa: subidas completas descartadas por duplicado. Consultar por lotes ahorraría como mucho parte de esos 17 min; parar al llegar a lo ya respaldado evita casi todo. El Atajo terminó sin llamar a `/run/finish`: ni resumen en el iPhone ni cierre de la corrida. Causa: al llegar a un bloque vacío, el "Si Count es 0" ejecutaba "Stop This Shortcut" antes de la sección 5, que solo corría si se acababan las Repeticiones. **Corregido en el Atajo el 2026-11-03**: ese "Si" ahora llama a `/run/finish` y muestra la notificación antes de detenerse. Probado en el iPhone con el inicio movido a 2019 (cierre en el log de la PC y "Nuevos: 0" en pantalla); el camino de Repeticiones agotadas también se probó (Repeticiones 1, "3 new"). | Medida | **Sí** | 🟡 Medido |
+| W7 | **Consulta por lotes y modo rápido.** Una petición por cada 50 archivos, y revisar solo lo reciente en el día a día. La mejora de velocidad más visible. **Medido el 2026-11-03** con el servidor v1.8.5 sin cambios y un script que anotaba la hora de cada petición (sin instalar nada): una pasada completa del iPhone con todo ya respaldado revisó 3.208 elementos (hasta 2018-03) en 47,6 min. El servidor responde `/check` en 0,5 ms; entre una consulta y la siguiente el Atajo tarda una mediana de 0,33 s (17,3 min en total). Los otros 30,2 min son 92 pausas de más de 2 s en el iPhone, sin subida de por medio, que no caen cada 50 elementos (18 de más de 30 s suman 19,4 min); causa sin confirmar. Los ~20 s por "ya respaldado" de la sección 5.12 medían otra cosa: subidas completas descartadas por duplicado. Consultar por lotes ahorraría como mucho parte de esos 17 min; parar al llegar a lo ya respaldado evita casi todo. El Atajo terminó sin llamar a `/run/finish`: ni resumen en el iPhone ni cierre de la corrida. Causa: al llegar a un bloque vacío, el "Si Count es 0" ejecutaba "Stop This Shortcut" antes de la sección 5, que solo corría si se acababan las Repeticiones. **Corregido en el Atajo el 2026-11-03**: ese "Si" ahora llama a `/run/finish` y muestra la notificación antes de detenerse. Probado en el iPhone con el inicio movido a 2019 (cierre en el log de la PC y "Nuevos: 0" en pantalla); el camino de Repeticiones agotadas también se probó (Repeticiones 1, "3 new"). | Medida | **Sí** | 🟡 Medido El botón (W4) y el modo rápido (W7) quedan descartados por ahora por el usuario (2026-11-05). |
 | W8 | **Unir las dos escrituras confirmadas por archivo.** Cada archivo por WiFi hacía 2 o 3 commits (registro, alias, contador de la corrida), y cada uno espera a la USB. Desde v1.8.6 `finalize_upload` hace uno solo al final, con todo junto; el cable sigue con sus lotes. Medido en la USB real con 40 fotos: la PC pasó de 23-29 ms a 14-15 ms por archivo. Es poco al lado de los ~330 ms por elemento que tarda el Atajo (W7), así que casi no se nota en el iPhone. 4 pruebas nuevas (`tests/test_one_commit.py`), 3 fallan sin el cambio. | Código y lección 23 | No | ✅ v1.8.6 |
 | W9 | **Escritura a disco que bloquea el servidor, y aviso de "detenido" falso.** (1) `/upload` escribía cada trozo del archivo, y `/run/start`/`/run/finish` hacían su commit, en el hilo que atiende todas las peticiones. Medido en la USB real con una subida de 200 MB y otra petición cada 20 ms: antes 3-4 esperas de más de 100 ms (máximo 497 ms, p99 ~135 ms); desde v1.8.7 escribe en bloques de 1 MB desde otro hilo: p99 33-44 ms, máximo 63 ms en 4 de 5 corridas. La quinta tuvo una pausa de 1,1 s al abrir el índice la primera vez (`_engine_for`; confirmado el 2026-11-04 con v1.8.8: en 3 de 3 corridas la única pausa, de 0,5 a 1,2 s, cae a los 0,6 s de la primera petición del perfil, una vez por perfil cada vez que se inicia el servidor; que se queda en el hilo principal a propósito: dos hilos creándolo a la vez abrirían dos índices, lección 16). (2) El aviso "sin actividad, el backup parece haberse detenido" solo miraba el último archivo guardado; un barrido con todo ya respaldado no guarda nada y el 2026-11-03 avisó 17 min antes del cierre real. Ahora cuenta cualquier petición del perfil (`_idle_tick`), y la tarjeta muestra "(en curso: N revisados)" con las consultas desde `/run/start`. 5 pruebas nuevas (`tests/test_activity.py`); la del aviso falla con la regla vieja. | Código | No | ✅ v1.8.7 |
 | W10 | **Corridas que no se cierran.** Cerrar la anterior al iniciar una nueva. Desde v1.8.8 `ManifestDB.start_run` cierra en el mismo commit cualquier corrida que el destino tenga abierta y escribe una línea por cada una ("never got its finish from the Shortcut… closed because a new run started"). Antes quedaba "en curso" hasta reabrir la app, y la tarjeta mostraba los números de la corrida muerta. Un destino es de un solo perfil y cada dispositivo tiene el suyo, así que una corrida abierta ahí solo puede ser una abandonada. | 101 avisos en el log | No | ✅ v1.8.8 |
@@ -2777,3 +2780,86 @@ Preguntado por el usuario. Medido matando un proceso real mientras escribía
 `stop(force=True)` necesitó cortar las conexiones a mano: desde Python 3.12,
 `wait_closed()` espera a cada conexión abierta, y el servidor seguía vivo 8 s
 después de pedirle salir con `force_exit`.
+
+## 27. Propuesta: reportes de backup (roadmap 6, 2026-11-05)
+
+Pedido: saber qué se ha copiado, qué falta y dónde, con líneas de tiempo y cantidades,
+y poder borrar a mano del iPhone lo ya respaldado con tranquilidad. Es una propuesta
+para aprobar; no hay código todavía. No cambia el Atajo.
+
+### Lo que se puede saber hoy y lo que no
+
+- El índice de cada destino ya sabe, por archivo, nombre, fecha de captura, tamaño,
+  hash y cuándo llegó. Ejemplo real (E:): 50.369 archivos, 188,9 GB, de 1999 a 2026,
+  con 46 sin fecha. Eso basta para resumen, línea de tiempo y búsqueda.
+- Las corridas (`runs`) guardan fuente, inicio, fin y contadores, pero no cuántos
+  archivos revisó el Atajo ni hasta qué fecha llegó: ese dato vive solo en memoria
+  (W9, "revisados"). Tampoco qué archivos fallaron: W11 los nombra en el registro, no
+  en el índice.
+- Los archivos no guardan por qué camino llegaron (cable o WiFi) ni en qué corrida.
+- **Lo que falta en el iPhone no se puede saber desde la PC sin preguntarle al
+  iPhone.** El Atajo solo pregunta por lo que recorre; el cable sí lista todo lo que el
+  iPhone muestra por USB (con la salvedad del punto 7 del roadmap).
+
+### Propuesta: una pantalla "Reportes" por perfil
+
+Tercera pestaña junto a Principal y Configuración. Todo se calcula en un hilo aparte
+(lección 22) y solo cuando la pestaña está abierta; con 50.000 filas las consultas
+agrupadas tardan milisegundos.
+
+1. **Resumen.** Archivos y GB, fotos frente a videos, la foto más antigua y la más
+   reciente, la última copia, el estado de la segunda copia (al día o cuántos le
+   faltan) y cuánto espacio libre queda en cada disco.
+2. **Línea de tiempo.** Barras por año (y por mes al tocar un año) con cantidad y GB.
+   Sirve para ver huecos: un mes sin nada en medio de meses llenos salta a la vista.
+3. **Historial de corridas.** Fecha, cable o WiFi, duración, nuevos, revisados, hasta
+   qué fecha llegó la revisión, errores, y si terminó o quedó cortada (W10).
+4. **Pendientes.** Los archivos que fallaron y todavía no llegaron, con el motivo y
+   cuántas veces se intentó. Desaparecen solos cuando llegan.
+5. **"¿Qué puedo borrar del iPhone?"** La parte delicada. La app solo afirma lo que
+   puede probar, con un criterio explícito y visible:
+   - Un rango de fechas está "respaldado" si la última corrida que lo recorrió entero
+     (Atajo hasta la foto más antigua, o una pasada por cable) terminó sin pendientes
+     en ese rango.
+   - Se dice cuándo se comprobó ("revisado el 5 de noviembre"): lo que entró al iPhone
+     después con una fecha vieja (lección 5, fotos de WhatsApp o Google Fotos) no está
+     cubierto hasta la siguiente corrida.
+   - Se indica si además existe la segunda copia al día. La recomendación es borrar
+     solo lo que está en los dos discos.
+   - Nunca borra nada: el iPhone se toca solo a mano (invariante del proyecto).
+6. **Exportar.** Un CSV con la lista de archivos (fecha, nombre, tamaño, carpeta) y
+   el resumen, para guardarlo o revisarlo en Excel.
+
+### Cambios de datos que haría falta
+
+- `runs`: columnas `checked` (lo que hoy cuenta W9), `oldest_checked_at` y
+  `newest_checked_at` (las fechas extremas que preguntó `/check`), y `reached_end`
+  (en cable, sí siempre; en WiFi, cuando la revisión llegó a la foto más antigua del
+  índice; aproximado, porque el Atajo no avisa por qué terminó).
+- Tabla nueva `run_issues` (corrida, nombre, fecha, motivo, intentos), que hoy existe
+  solo en memoria para W11.
+- `backed_up_files.source` (`cable`, `wifi` o vacío para lo anterior).
+- Todo con `ALTER TABLE` al abrir, como `original_filename` (lección 20). Lo anterior
+  queda sin esos datos y se llena con las corridas nuevas.
+
+### Por fases, cada una con su versión
+
+1. Resumen, línea de tiempo e historial con lo que ya existe (sin cambiar el índice).
+2. Los datos nuevos en `runs` y `run_issues`, y la sección Pendientes.
+3. "¿Qué puedo borrar?" y exportar CSV, cuando la fase 2 lleve unas semanas
+   juntando corridas reales.
+
+### Decidido por el usuario (2026-11-06)
+
+- Pantalla dentro de la app.
+- "¿Qué puedo borrar?" por rangos de fechas, con cantidades y tamaño; sin lista de
+  archivos concretos.
+
+### Fase 1, hecha en v1.8.10
+
+`gui/reports.py`: `compute_report()` lee el índice en solo lectura en un hilo aparte y
+`ReportsScreen` lo muestra (resumen, línea de tiempo por año y mes, 20 últimas
+corridas). Medido en E: real: 341 ms para 50.369 archivos. Pruebas en
+`tests/test_reports.py` y un recorrido de la interfaz con el índice real de E: en
+ambos idiomas y en modo cable.
+

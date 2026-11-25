@@ -217,19 +217,36 @@ def video_fingerprint(path: Path) -> Optional[str]:
 
 
 def _track_samples(f: BinaryIO, stbl: tuple[int, int]) -> tuple[tuple[int, ...], list[int]]:
-    """(sample sizes, sample offsets), from a track's sample tables."""
-    f.seek(_box(f, *stbl, "stsz")[0] + 4)
-    _, count = struct.unpack(">II", f.read(8))
-    sizes = struct.unpack(f">{count}I", f.read(4 * count))
+    """(sample sizes, sample offsets), from a track's sample tables.
 
-    f.seek(_box(f, *stbl, "stsc")[0] + 4)
+    Raises ValueError when a table doesn't fit its box or points outside the file.
+    Reading past a box once meant taking the next box's bytes as sample sizes of up
+    to 4 GB, and a cable backup spent hours hashing them (v1.8.11)."""
+    file_size = f.seek(0, 2)
+
+    stsz_start, stsz_end = _box(f, *stbl, "stsz")
+    f.seek(stsz_start + 4)
+    sample_size, count = struct.unpack(">II", f.read(8))
+    if sample_size != 0:
+        # Every sample the same size, and then there's no table at all: AAC audio
+        # from apps other than the camera comes like this (a real 29.6 MB MP4).
+        sizes = (sample_size,) * count
+    else:
+        _fits(stsz_start + 12, 4 * count, stsz_end)
+        sizes = struct.unpack(f">{count}I", f.read(4 * count))
+
+    stsc_start, stsc_end = _box(f, *stbl, "stsc")
+    f.seek(stsc_start + 4)
     entries = struct.unpack(">I", f.read(4))[0]
+    _fits(stsc_start + 8, 12 * entries, stsc_end)
     stsc = [struct.unpack(">III", f.read(12)) for _ in range(entries)]
 
     stco = _box(f, *stbl, "stco")
-    f.seek((stco or _box(f, *stbl, "co64"))[0] + 4)
+    chunk_start, chunk_end = stco or _box(f, *stbl, "co64")
+    f.seek(chunk_start + 4)
     chunks_count = struct.unpack(">I", f.read(4))[0]
     fmt, width = ("I", 4) if stco else ("Q", 8)
+    _fits(chunk_start + 8, width * chunks_count, chunk_end)
     chunks = struct.unpack(f">{chunks_count}{fmt}", f.read(width * chunks_count))
 
     offsets: list[int] = []
@@ -240,9 +257,16 @@ def _track_samples(f: BinaryIO, stbl: tuple[int, int]) -> tuple[tuple[int, ...],
             if len(offsets) == count:
                 break
             sample_size = sizes[len(offsets)]
+            if position + sample_size > file_size:
+                raise ValueError(f"sample at {position} of {sample_size} bytes is past the end of the file")
             offsets.append(position)
             position += sample_size
     return sizes, offsets
+
+
+def _fits(start: int, length: int, end: int) -> None:
+    if start + length > end:
+        raise ValueError(f"sample table of {length} bytes doesn't fit its box")
 
 
 def _audio_sample_hashes(f: BinaryIO, stbl: tuple[int, int]) -> list[bytes]:

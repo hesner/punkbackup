@@ -50,6 +50,12 @@ consequences:
 > own. **The fix below (an Avast exception) makes this stop happening
 > entirely** — once PunkBackup is excluded from scanning, it just opens
 > normally like any other program, with no 10-second window at all.
+>
+> **Since v1.8.10** PunkBackup gives Avast fewer reasons to flag it (see PLAN.md,
+> roadmap 13), but the check on the first launch of each new version can still
+> happen: it's how Avast treats any new program without a digital signature. And
+> opening PunkBackup while it's already open shows the window you already have
+> instead of opening another one.
 
 You can read the full source code yourself (this is an open-source project)
 if you want to verify exactly what it does before trusting it.

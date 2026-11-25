@@ -11,14 +11,16 @@ cable**. Los perfiles, las carpetas y las reglas son los mismos. El fondo te dic
 cuál estás: oscuro en WiFi y claro en cable. La app siempre abre en WiFi. Ver la
 sección «Backup por cable».
 
-## La ventana tiene 2 pantallas
+## La ventana tiene 3 pantallas
 
 - **Principal**: encender/apagar el backup, ver a qué dirección deben
   conectarse tus dispositivos, y el estado de cada perfil.
+- **📊 Reportes** (desde v1.8.10): qué tiene guardado cada perfil, por año y
+  por mes, y sus últimas corridas. Ver más abajo.
 - **⚙ Configuración**: cambiar el idioma de la app, y crear/administrar
   cada persona o dispositivo (perfiles).
 
-Se cambia entre ellas con los dos botones de arriba, justo debajo del
+Se cambia entre ellas con los tres botones de arriba, justo debajo del
 nombre de la app.
 
 La ventana se abre **maximizada** por defecto cada vez — puedes
@@ -204,6 +206,30 @@ actividad pasada incluso después de cerrar la app — no solo lo que está
 visible en pantalla en ese momento. Rota diariamente y borra
 automáticamente lo más viejo de unos 6 meses, para que nunca crezca sin
 límite.
+
+---
+
+## Pantalla "📊 Reportes"
+
+Elige un perfil arriba y la app lee el índice de su carpeta destino (solo lo lee,
+nunca lo cambia). Con unos 50.000 archivos tarda menos de un segundo. Se calcula al
+abrir la pantalla, al cambiar de perfil y con el botón **Actualizar**; no se refresca
+sola mientras miras. Solo aparecen los perfiles con carpeta destino.
+
+- **Resumen**: cuántos archivos y cuánto ocupan, cuántos son fotos y cuántos videos,
+  las fechas de captura más antigua y más reciente, cuántos no tienen fecha, cuándo
+  llegó el último archivo, el espacio libre en el destino y si la segunda copia está
+  al día.
+- **Línea de tiempo**: una barra por año con su cantidad y tamaño, por fecha de
+  captura. Toca un año para ver sus meses. Sirve para ver huecos: un mes vacío entre
+  meses llenos salta a la vista.
+- **Últimas corridas**: las 20 más recientes, con fecha, cable o WiFi, duración,
+  archivos nuevos, errores y si terminó, sigue en curso o quedó sin cerrar. Lo que
+  se copió antes de que existiera este registro (por ejemplo, fotos antiguas
+  integradas a mano) no aparece aquí, pero sí cuenta en el resumen y la línea de
+  tiempo.
+
+Si la USB del destino no está conectada, la pantalla lo dice en vez de mostrar ceros.
 
 ---
 

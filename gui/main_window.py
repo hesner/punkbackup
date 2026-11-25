@@ -56,6 +56,7 @@ from .autostart import set_start_with_windows
 from . import dialogs
 from .dialogs import ask_input, ask_yes_no, show_error, show_info, show_warning
 from .i18n import LANGUAGES, LANGUAGE_NAMES, t as _t
+from .reports import ReportsScreen, size_text as _size_text
 from .theme import (
     DARK, LOG_BG, MODE_CHIP_BG, MODE_CHIP_INK, NAV_SELECTED, NAV_SELECTED_HOVER, NAV_SELECTED_INK, TERMINAL_GREEN, XEROX,
 )
@@ -204,16 +205,6 @@ def _compute_status_snapshot(
         except Exception:
             pass
     return {"per_profile": per_profile, "aggregate": aggregate}
-
-
-def _size_text(size_bytes: int, lang: str) -> str:
-    """How much the destination's backup takes up (PLAN.md roadmap 11). GB with one
-    decimal, MB below 1 GB; Spanish uses a decimal comma."""
-    if size_bytes >= 1e9:
-        text = f"{size_bytes / 1e9:.1f} GB"
-    else:
-        text = f"{size_bytes / 1e6:.0f} MB"
-    return text.replace(".", ",") if lang == "es" else text
 
 
 def _idle_tick(tracking: dict, status: dict, now: datetime, timeout_seconds: float) -> bool:
@@ -963,6 +954,9 @@ class MainWindow(ctk.CTk):
         self.content_area.pack(fill="both", expand=True, padx=12, pady=(0, 12))
         self.tab_principal = ctk.CTkFrame(self.content_area, fg_color=BG)
         self.tab_settings = ctk.CTkFrame(self.content_area, fg_color=BG)
+        self.tab_reports = ReportsScreen(
+            self.content_area, XEROX if self.cable_mode else DARK, self.lang, self.profile_store.list,
+        )
 
         self._build_principal_tab()
         self._build_settings_tab()
@@ -989,6 +983,10 @@ class MainWindow(ctk.CTk):
             nav, text=self.t("nav_main"), corner_radius=8, command=lambda: self._show_screen("main"),
         )
         self.nav_main_btn.pack(side="left", padx=4, pady=4)
+        self.nav_reports_btn = ctk.CTkButton(
+            nav, text=self.t("nav_reports"), corner_radius=8, command=lambda: self._show_screen("reports"),
+        )
+        self.nav_reports_btn.pack(side="left", padx=4, pady=4)
         self.nav_settings_btn = ctk.CTkButton(
             nav, text=self.t("nav_settings"), corner_radius=8, command=lambda: self._show_screen("settings"),
         )
@@ -996,16 +994,21 @@ class MainWindow(ctk.CTk):
 
     def _show_screen(self, screen: str) -> None:
         self.current_screen = screen
-        self.tab_principal.pack_forget()
-        self.tab_settings.pack_forget()
-        if screen == "main":
-            self.tab_principal.pack(fill="both", expand=True)
-            self.nav_main_btn.configure(fg_color=NAV_SELECTED, text_color=NAV_SELECTED_INK, hover_color=NAV_SELECTED_HOVER)
-            self.nav_settings_btn.configure(fg_color="transparent", text_color=NAV_TEXT, hover_color=NAV_HOVER)
-        else:
-            self.tab_settings.pack(fill="both", expand=True)
-            self.nav_settings_btn.configure(fg_color=NAV_SELECTED, text_color=NAV_SELECTED_INK, hover_color=NAV_SELECTED_HOVER)
-            self.nav_main_btn.configure(fg_color="transparent", text_color=NAV_TEXT, hover_color=NAV_HOVER)
+        screens = {
+            "main": (self.tab_principal, self.nav_main_btn),
+            "reports": (self.tab_reports, self.nav_reports_btn),
+            "settings": (self.tab_settings, self.nav_settings_btn),
+        }
+        for frame, _ in screens.values():
+            frame.pack_forget()
+        for name, (frame, button) in screens.items():
+            if name == screen:
+                frame.pack(fill="both", expand=True)
+                button.configure(fg_color=NAV_SELECTED, text_color=NAV_SELECTED_INK, hover_color=NAV_SELECTED_HOVER)
+            else:
+                button.configure(fg_color="transparent", text_color=NAV_TEXT, hover_color=NAV_HOVER)
+        if screen == "reports":
+            self.tab_reports.on_show()  # calculates only when it's looked at
 
     # ------------------------------------------------------------------
     # "Principal" screen
@@ -1216,6 +1219,8 @@ class MainWindow(ctk.CTk):
         self.tagline_label.configure(text=self.t("tagline"))
         self.nav_main_btn.configure(text=self.t("nav_main"))
         self.nav_settings_btn.configure(text=self.t("nav_settings"))
+        self.nav_reports_btn.configure(text=self.t("nav_reports"))
+        self.tab_reports.set_lang(self.lang)
 
         running = bool(self.controller and self.controller.running)
         self.start_btn.configure(text=self.t("btn_stop") if running else self.t("btn_start"))

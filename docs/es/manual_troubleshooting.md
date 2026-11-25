@@ -24,8 +24,9 @@ deje de pasar.
   ícono del Escritorio.
 - Si vuelve a pasar, ahora debería aparecerte una ventana con el error
   exacto (en vez de fallar en silencio) — mándanos ese texto.
-- Verifica que no haya quedado otra copia de la app abierta desde antes
-  (revisa la barra de tareas).
+- Desde la v1.8.11 solo puede haber una copia de la app abierta: si al abrirla
+  aparece una ventana que ya tenías, es esa. En versiones anteriores, revisa en la
+  barra de tareas que no haya quedado otra abierta desde antes.
 
 ## El iPhone no puede conectarse al servidor
 
@@ -438,3 +439,12 @@ correr los dos.
 
 **Los dos archivos parecen el mismo video pero se conservaron ambos.** Si hay dudas, la app
 conserva los dos: compara fotogramas y audio, y prefiere un duplicado a perder un video.
+
+**El backup por cable no avanza.** Si el registro de actividad lleva muchos minutos sin
+líneas nuevas mientras PunkBackup sigue usando el procesador (Administrador de tareas),
+la app está atascada en un archivo. Antes de la v1.8.11 pasaba con algunos videos que no
+vienen de la cámara (su audio guarda un solo tamaño para todas las muestras): la app los
+comparaba durante horas. Actualiza a la última versión. Si vuelve a pasar, cierra
+PunkBackup desde el Administrador de tareas (**Detener copia** solo actúa entre un archivo y el
+siguiente) y repórtalo. Cerrarla así es seguro: lo que ya se copió se reconoce en la
+siguiente pasada, y los archivos que quedaron sin registrar se completan solos.

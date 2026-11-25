@@ -26,8 +26,9 @@ from happening again.
   Desktop icon.
 - If it happens again, you should now get an error window with the exact
   detail (instead of failing silently) — send us that text.
-- Make sure there isn't another copy of the app already open (check the
-  taskbar).
+- Since v1.8.11 only one copy of the app can be open: if opening it shows a
+  window you already had, that's the one. In earlier versions, check the taskbar
+  for another copy left open from before.
 
 ## The iPhone can't reach the server
 
@@ -417,3 +418,12 @@ worth running both.
 
 **Two files look like the same video but both were kept.** When in doubt, the app keeps both:
 it compares frames and audio, and prefers a duplicate to losing a video.
+
+**The cable backup doesn't move.** If the activity log has had no new lines for many
+minutes while PunkBackup keeps using the processor (Task Manager), the app is stuck on one
+file. Before v1.8.11 this happened with some videos that don't come from the camera (their
+audio stores one size for every sample): the app spent hours comparing them. Update to the
+latest version. If it happens again, close PunkBackup from Task Manager (**Stop copy** only acts
+between one file and the next) and report it. Closing it that way is safe: what was already
+copied is recognized on the next pass, and files left without their record are completed
+on their own.

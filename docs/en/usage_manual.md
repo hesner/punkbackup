@@ -15,7 +15,7 @@ mode. See the "Backup by cable" section.
 
 - **"Main"**: turn the backup server on/off, see the address your devices
   should connect to, and each profile's status.
-- **"📊 Reports"** (since v1.8.10): what each profile has saved, by year and by
+- **"📊 Reports"** (since v1.8.11): what each profile has saved, by year and by
   month, and its latest runs. See below.
 - **"⚙ Settings"**: switch the app's language, and create/manage each
   person or device (profiles).

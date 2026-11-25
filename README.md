@@ -67,6 +67,8 @@ want the boring backup part, with nothing else to configure or maintain.
    Cable and WiFi recognize each other's files by content, even under different
    names, so you can use both. Run the Shortcut afterward: the cable only sees what
    the iPhone shows over USB.
+7. A **📊 Reports** screen shows what each profile has saved, by year and month,
+   with its size and its latest runs.
 
 See [`PLAN.md`](PLAN.md) for the full architecture and design decisions, and
 [`AGENTS.md`](AGENTS.md) if you're an AI agent (or a human) rebuilding or
@@ -103,6 +105,11 @@ py -m venv .venv
 
 To try the interface with a simulated iPhone and throwaway data, without touching
 real profiles or drives: `.venv\Scripts\python.exe tools\ui_preview.py`
+
+To package it, `PunkBackup.spec` needs a PyInstaller bootloader compiled from source and
+refuses the stock one: see [`docs/BUILD_BOOTLOADER.md`](docs/BUILD_BOOTLOADER.md).
+Then `.venv\Scripts\python.exe -m PyInstaller PunkBackup.spec --noconfirm --clean` and
+compile `installer\PunkBackup.iss` with Inno Setup 6.
 
 ## License
 

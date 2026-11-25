@@ -48,7 +48,7 @@ esperadas:
 > completo** — una vez que PunkBackup queda excluida del escaneo, abre
 > normal como cualquier otro programa, sin ninguna ventana de 10 segundos.
 >
-> **Desde la v1.8.10** PunkBackup trae menos motivos para que Avast lo marque (ver
+> **Desde la v1.8.11** PunkBackup trae menos motivos para que Avast lo marque (ver
 > PLAN.md, roadmap 13), pero la revisión del primer arranque de cada versión nueva
 > puede seguir pasando: es la forma en que Avast trata a cualquier programa nuevo sin
 > firma digital. Y si abres PunkBackup cuando ya está abierto, se muestra la ventana

@@ -1204,6 +1204,16 @@ reintroduces these problems.
     `.gitignore`, refuses to build with the stock one. Packaged tests must save and
     restore the HKCU Run entry: the app rewrites it on every start.
 
+31. **A sample table can be absent: `stsz` with a non-zero `sample_size` means every
+    sample has that size and no table follows (v1.8.11).** `_track_samples` ignored
+    that field and read the next boxes as a table, so a real 29.6 MB MP4 (not from the
+    camera, AAC audio of 768-byte samples) gave "samples" of up to 4 GB, and
+    `same_video` kept a cable backup at 100% of a core for over 20 minutes on one file
+    without moving on (cancel is only checked between files). Any parser over a
+    container must check that each table fits its box and that each sample lies inside
+    the file, and fail fast to "not the same" (both copies kept) instead of reading
+    whatever is there. `video_fingerprint` already refused a constant video size.
+
 - Unit tests against `BackupEngine`/`ManifestDB` directly (no HTTP) for the
   dedup/conflict/incremental rules — fast, exhaustive.
 - `fastapi.testclient.TestClient` end-to-end tests for the real ASGI app,
@@ -1238,7 +1248,7 @@ reintroduces these problems.
 
 ## 7. What "done" looks like
 
-- `pytest tests -q` passes (182 tests as of this writing, covering engine
+- `pytest tests -q` passes (256 tests as of v1.8.11, covering engine
   rules, profile isolation/pause/delete, destination-switch correctness,
   concurrent uploads, the `/check` contract, the 0-byte-upload rejection,
   its self-healing retry error-count behavior, a stale-run reap on

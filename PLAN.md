@@ -2639,8 +2639,8 @@ sin desarrollar, a la espera de que el usuario quiera continuar.
 
 ## 25. Roadmap
 
-Última versión: **v1.8.8**, la del release de GitHub. Compilada y sin publicar: **v1.8.10**
-(la v1.8.9 nunca se publicó; lo suyo va en la v1.8.10). La regla de versiones (un número,
+Última versión: **v1.8.11** (2026-11-24), la del release de GitHub. Las v1.8.9 y v1.8.10
+nunca se publicaron por separado: todo lo suyo salió en la v1.8.11. La regla de versiones (un número,
 una sola compilación) está en `AGENTS.md`, sección 3.
 
 Lista viva de mejoras deseables en el tiempo. El orden indica prioridad, no
@@ -2661,6 +2661,7 @@ una fecha comprometida. Estados: 🔵 en curso · ⚪ pendiente · ✅ hecho.
 | 11 | **Tamaño del backup en la tarjeta del perfil.** Pedido por el usuario el 2026-11-04. En la pantalla principal, cuando el destino del perfil está conectado y es válido, la tarjeta dice cuántos archivos tiene; agregar cuánto ocupan, en GB (p. ej. "Total en destino: 50.322 archivos, 412,6 GB"). Punto de partida: `size_bytes` ya está en cada fila de `backed_up_files`, así que basta un `SUM` en `ManifestDB.get_status`, sin recorrer la carpeta; el sondeo de la GUI ya corre fuera del hilo de la ventana (lección 22). Medir cuánto tarda ese `SUM` sobre ~50.000 filas en la USB antes de decidir si hay que guardarlo en caché. **Hecho en v1.8.8:** medido sobre las 50.364 filas reales en la USB, el `SUM` agrega unos 2 ms (de 13-16 ms a 14-19 ms), así que va directo en `get_status`, sin caché. La tarjeta dice "Total en destino: 50.364 archivos, 188,9 GB" (MB por debajo de 1 GB). | ✅ v1.8.8 |
 | 12 | **Una sola copia de la app abierta.** Abrir PunkBackup cuando ya está abierto trae la ventana existente al frente en vez de abrir otra que choque por el puerto. Si la otra copia se cierra en unos segundos (la copia de revisión de Avast tras instalar), la nueva abre normal. Una copia que se cayó nunca bloquea la siguiente. El instalador pide cerrar la app antes de reemplazarla. | ✅ v1.8.10 (`gui/single_instance.py`) |
 | 13 | **Menos alertas del antivirus.** La pieza de arranque de PyInstaller se compila en esta PC en vez de usar la de serie, que comparten miles de programas, incluido malware; la app y el instalador llevan ficha de versión; UPX queda apagado. La compilación se niega a usar la pieza de serie (`docs/BUILD_BOOTLOADER.md`). No vuelve "confiable" un programa nuevo sin firma: la revisión de Avast al primer arranque puede seguir; solo un certificado de firma de código la quita. | ✅ v1.8.10 |
+| 14 | **Backup por cable detenido horas en un video.** Caso real del 2026-11-24: un MP4 de 29,6 MB que no viene de la cámara (ya respaldado por WiFi) tiene audio con un solo tamaño para todas sus muestras, sin tabla en `stsz`. `_track_samples` ignoraba ese tamaño y leía como tabla los bytes de las cajas siguientes: "muestras" de hasta 4 GB, y `same_video` pasó más de 20 minutos al 100 % de un núcleo sin avanzar (probablemente también la sesión WiFi de esa tarde, sin confirmar). Ahora usa el tamaño único, y una tabla que no cabe en su caja o una muestra fuera del archivo hacen que `same_video` responda "distinto" al instante (se conservan ambos). El par real se reconoce en 0,47 s. 5 pruebas (`tests/test_constant_sample_size.py`), 4 fallan sin el cambio. | ✅ v1.8.11 |
 
 ### Mejoras del WiFi (análisis del 2026-10-31)
 
@@ -2855,7 +2856,7 @@ agrupadas tardan milisegundos.
 - "¿Qué puedo borrar?" por rangos de fechas, con cantidades y tamaño; sin lista de
   archivos concretos.
 
-### Fase 1, hecha en v1.8.10
+### Fase 1, hecha en v1.8.10 (publicada en v1.8.11)
 
 `gui/reports.py`: `compute_report()` lee el índice en solo lectura en un hilo aparte y
 `ReportsScreen` lo muestra (resumen, línea de tiempo por año y mes, 20 últimas

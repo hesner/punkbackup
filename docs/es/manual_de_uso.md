@@ -15,7 +15,7 @@ sección «Backup por cable».
 
 - **Principal**: encender/apagar el backup, ver a qué dirección deben
   conectarse tus dispositivos, y el estado de cada perfil.
-- **📊 Reportes** (desde v1.8.10): qué tiene guardado cada perfil, por año y
+- **📊 Reportes** (desde v1.8.11): qué tiene guardado cada perfil, por año y
   por mes, y sus últimas corridas. Ver más abajo.
 - **⚙ Configuración**: cambiar el idioma de la app, y crear/administrar
   cada persona o dispositivo (perfiles).

@@ -297,6 +297,12 @@ quien quiera tener sus fotos en más de una unidad física.
 Para un primer backup o un gran volumen de fotos, el cable es mucho más rápido
 que el WiFi. El WiFi sigue siendo el camino del día a día.
 
+**Requisito, una sola vez:** en el iPhone, Ajustes → Fotos → Transferir a Mac o PC →
+**Mantener originales**. Con «Automático», iOS convierte fotos y videos al copiarlos:
+llegan archivos distintos del original, la app no reconoce lo ya respaldado y algunas
+conversiones fallan. Visto en un iPhone real: 40 archivos «por revisar» y 5 fallidos
+con «Automático»; 6 por revisar y 0 fallidos con «Mantener originales».
+
 1. Conecta el iPhone con el cable, desbloquéalo y, si te lo pregunta, toca
    **Confiar**.
 2. En la pantalla Principal, pulsa **Backup por cable**, arriba a la derecha. La

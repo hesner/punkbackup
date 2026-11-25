@@ -425,8 +425,13 @@ copiado queda guardado: conéctalo, desbloquéalo y pulsa **Continuar**.
 **Faltan fotos respecto a la app Fotos.** Con «Optimizar almacenamiento» de iCloud,
 los originales que no están en el teléfono no se ven por cable. Corre el Atajo por WiFi.
 
-**Veo JPG donde esperaba HEIC.** Revisa Ajustes → Fotos → Transferir a Mac o PC y
-elige **Mantener originales**.
+**Veo JPG donde esperaba HEIC, o fallan siempre los mismos archivos.** Es un requisito
+del backup por cable: en el iPhone, Ajustes → Fotos → Transferir a Mac o PC →
+**Mantener originales**. Con «Automático», iOS convierte cada archivo al copiarlo. El
+registro muestra `got 0 bytes` o `could not read it from the phone` en fotos viejas
+que ya estaban respaldadas, y tras 5 fallos seguidos la copia se detiene sin revisar
+el resto. Cambia el ajuste y repite el backup por cable: esos archivos se reconocen
+como ya respaldados.
 
 **Después de un backup por cable, el Atajo vuelve a enviar archivos.** Es normal en la
 primera pasada: el servidor no puede comparar contenido hasta recibirlo. En el registro de

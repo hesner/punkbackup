@@ -1186,6 +1186,12 @@ reintroduces these problems.
     - "All backed up" by cable means "everything the iPhone shows over USB," not "the whole
       library": `IMG_2106.mov`, recorded that morning, never appeared by cable and arrived
       by WiFi. Cause not found yet (PLAN.md roadmap item 7).
+    - **"Keep Originals" is a system requirement for the cable** (iPhone Settings →
+      Photos → Transfer to Mac or PC). With "Automatic", iOS converts on the fly: old
+      photos already backed up as HEIC+MOV were listed as bigger JPG/MOV, failed with 0
+      bytes and `ERROR_READ_FAULT`, and after the first failure every later read failed
+      too, so the 5-in-a-row stop left 29 files unreviewed. The app can't read that
+      setting; the manuals state it as a requirement (PLAN.md §26, 2026-11-25).
     - A real kill mid-write (`tests/test_abrupt_stop.py`) never corrupted SQLite or
       left a row without a whole file, but can leave a whole file with no row. Both
       paths heal those: the cable on its next pass, and WiFi because `/check` only

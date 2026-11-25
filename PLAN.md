@@ -2729,6 +2729,16 @@ letras verdes. El usuario rechazó antes una primera propuesta gris.
 **Diseño aprobado el 2026-10-30.** Sigue el desarrollo; las reglas de calidad
 son las de `AGENTS.md` y la sección 10 de este plan.
 
+**Requisito del sistema (decidido por el usuario, 2026-11-25):** el iPhone debe tener
+Ajustes → Fotos → Transferir a Mac o PC en **Mantener originales**. Con «Automático» iOS
+convierte al vuelo (HEIC→JPG, video a otro formato y tamaño): el cable no reconoce lo
+ya respaldado y algunas conversiones fallan. Medido en el iPhone real: con «Automático»,
+40 por revisar, y `IMG_8467`/`8480`/`8487` (julio, ya en el destino como HEIC+MOV)
+fallaron con 0 bytes y `ERROR_READ_FAULT`; tras el primer fallo el iPhone rechazó todas
+las lecturas siguientes, y la regla de 5 fallos seguidos detuvo la corrida con 29 sin
+revisar. Con «Mantener originales»: 6 por revisar, 1 nuevo, 5 duplicados, 0 fallidos.
+La app no puede leer ese ajuste; queda documentado como requisito en los manuales.
+
 ### 26.0 Resultado con el iPhone real (2026-10-30)
 
 | Prueba | Resultado |

@@ -82,6 +82,8 @@ install folder.
   network** at backup time.
 - **Administrator** rights on the PC (asked once, during install — to
   copy the program and add the Firewall rule).
+- For backup by cable only: on the iPhone, Settings → Photos → Transfer to Mac or PC
+  set to **Keep Originals** (see "To use backup by cable").
 
 ## Step 1 — Download the installer
 
@@ -154,3 +156,8 @@ If something's not working, see the **Troubleshooting Manual**.
 You only need the iPhone's cable. If Windows doesn't recognize the phone, install **Apple
 Devices** from the Microsoft Store. The first time, unlock the iPhone and tap **Trust**. Backup
 by cable doesn't use the network or the Firewall rule. See the **Usage Manual**.
+
+**Requirement:** on the iPhone, go to Settings → Photos → Transfer to Mac or PC and choose
+**Keep Originals**. With "Automatic", iOS converts photos to JPG and videos to another
+format while copying: what arrives is no longer the original, the app doesn't recognize
+what you'd already backed up, and some conversions fail and stop the copy.

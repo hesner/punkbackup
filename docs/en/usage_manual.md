@@ -281,6 +281,12 @@ more than one physical drive.
 For a first backup or a large volume of photos, the cable is much faster than
 WiFi. WiFi remains the everyday path.
 
+**Requirement, once:** on the iPhone, Settings → Photos → Transfer to Mac or PC →
+**Keep Originals**. With "Automatic", iOS converts photos and videos while copying:
+files arrive different from the original, the app doesn't recognize what's already
+backed up, and some conversions fail. Seen on a real iPhone: 40 files "to review" and 5
+failed with "Automatic"; 6 to review and 0 failed with "Keep Originals".
+
 1. Connect the iPhone with the cable, unlock it and, if it asks, tap **Trust**.
 2. On the Main screen, press **Backup by cable**, top right. The app switches to a
    light background so you always know which mode you're in. This turns the WiFi

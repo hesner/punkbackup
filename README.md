@@ -66,7 +66,8 @@ want the boring backup part, with nothing else to configure or maintain.
    over USB with no network and no server, using the same destination and rules.
    Cable and WiFi recognize each other's files by content, even under different
    names, so you can use both. Run the Shortcut afterward: the cable only sees what
-   the iPhone shows over USB.
+   the iPhone shows over USB. **Requirement:** set the iPhone's Settings → Photos →
+   Transfer to Mac or PC to **Keep Originals**, or iOS converts files on the way out.
 7. A **📊 Reports** screen shows what each profile has saved, by year and month,
    with its size and its latest runs.
 

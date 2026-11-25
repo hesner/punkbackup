@@ -81,6 +81,8 @@ instalación de PunkBackup.
   momento de respaldar.
 - Permisos de **administrador** en la PC (se piden una sola vez, al
   instalar — para copiar el programa y agregar la regla de Firewall).
+- Solo para el backup por cable: en el iPhone, Ajustes → Fotos → Transferir a Mac o
+  PC en **Mantener originales** (ver «Para usar el backup por cable»).
 
 ## Paso 1 — Descargar el instalador
 
@@ -157,3 +159,8 @@ Si algo no funciona, consulta el **Manual de solución de problemas**.
 Solo necesitas el cable del iPhone. Si Windows no reconoce el teléfono, instala **Apple
 Devices** desde la Microsoft Store. La primera vez, desbloquea el iPhone y toca **Confiar**.
 El backup por cable no usa la red ni la regla de Firewall. Ver el **Manual de uso**.
+
+**Requisito:** en el iPhone, ve a Ajustes → Fotos → Transferir a Mac o PC y elige
+**Mantener originales**. Con «Automático», iOS convierte las fotos a JPG y los videos a
+otro formato mientras los copia: lo que llega ya no es el original, la app no reconoce
+lo que ya tenías respaldado y algunas conversiones fallan y detienen la copia.

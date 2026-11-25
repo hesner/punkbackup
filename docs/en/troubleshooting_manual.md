@@ -404,8 +404,13 @@ copied stays saved: connect it, unlock it and press **Resume**.
 **Photos missing compared to the Photos app.** With iCloud's "Optimize Storage",
 originals that aren't on the phone can't be seen by cable. Run the Shortcut over WiFi.
 
-**JPG where HEIC was expected.** Check Settings → Photos → Transfer to Mac or PC and
-choose **Keep Originals**.
+**JPG where HEIC was expected, or the same files always fail.** It's a requirement of
+backup by cable: on the iPhone, Settings → Photos → Transfer to Mac or PC → **Keep
+Originals**. With "Automatic", iOS converts each file while copying. The log shows `got 0
+bytes` or `could not read it from the phone` on old photos that were already backed up,
+and after 5 failures in a row the copy stops without reviewing the rest. Change the
+setting and run the backup by cable again: those files are recognized as already backed
+up.
 
 **The Shortcut sends files again after a cable backup.** That's normal on the first pass:
 the server can't compare content until it receives it. The activity log shows `already
